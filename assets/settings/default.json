@@ -1584,9 +1584,6 @@
     "openai": {
       "version": "1",
       "api_url": "https://api.openai.com/v1"
-    },
-    "mistral": {
-      "api_url": "https://api.mistral.ai/v1"
     }
   },
   // Zed's Prettier integration settings.

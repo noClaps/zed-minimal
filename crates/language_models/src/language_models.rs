@@ -11,7 +11,6 @@ pub mod ui;
 
 use crate::provider::cloud::CloudLanguageModelProvider;
 use crate::provider::copilot_chat::CopilotChatLanguageModelProvider;
-use crate::provider::mistral::MistralLanguageModelProvider;
 use crate::provider::open_ai::OpenAiLanguageModelProvider;
 pub use crate::settings::*;
 
@@ -35,10 +34,6 @@ fn register_language_model_providers(
     );
     registry.register_provider(
         OpenAiLanguageModelProvider::new(client.http_client(), cx),
-        cx,
-    );
-    registry.register_provider(
-        MistralLanguageModelProvider::new(client.http_client(), cx),
         cx,
     );
     registry.register_provider(CopilotChatLanguageModelProvider::new(cx), cx);

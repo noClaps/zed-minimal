@@ -11,7 +11,6 @@ use crate::provider::{
     self,
     cloud::{self, ZedDotDevSettings},
     copilot_chat::CopilotChatSettings,
-    mistral::MistralSettings,
     open_ai::OpenAiSettings,
 };
 
@@ -39,7 +38,6 @@ pub struct AllLanguageModelSettings {
     pub openai: OpenAiSettings,
     pub zed_dot_dev: ZedDotDevSettings,
     pub copilot_chat: CopilotChatSettings,
-    pub mistral: MistralSettings,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -48,13 +46,6 @@ pub struct AllLanguageModelSettingsContent {
     #[serde(rename = "zed.dev")]
     pub zed_dot_dev: Option<ZedDotDevSettingsContent>,
     pub copilot_chat: Option<CopilotChatSettingsContent>,
-    pub mistral: Option<MistralSettingsContent>,
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct MistralSettingsContent {
-    pub api_url: Option<String>,
-    pub available_models: Option<Vec<provider::mistral::AvailableModel>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -169,17 +160,6 @@ impl settings::Settings for AllLanguageModelSettings {
                     .zed_dot_dev
                     .as_ref()
                     .and_then(|s| s.available_models.clone()),
-            );
-
-            // Mistral
-            let mistral = value.mistral.clone();
-            merge(
-                &mut settings.mistral.api_url,
-                mistral.as_ref().and_then(|s| s.api_url.clone()),
-            );
-            merge(
-                &mut settings.mistral.available_models,
-                mistral.as_ref().and_then(|s| s.available_models.clone()),
             );
         }
 
