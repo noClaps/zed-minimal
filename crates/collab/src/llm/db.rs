@@ -1,6 +1,5 @@
 mod ids;
 mod queries;
-mod seed;
 mod tables;
 
 #[cfg(test)]
@@ -8,7 +7,6 @@ mod tests;
 
 use collections::HashMap;
 pub use ids::*;
-pub use seed::*;
 pub use tables::*;
 use zed_llm_client::LanguageModelProvider;
 

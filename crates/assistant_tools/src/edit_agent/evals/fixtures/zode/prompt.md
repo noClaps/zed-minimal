@@ -1,98 +1,18 @@
-- We're building a CLI code agent tool called Zode that is intended to work like Aider or Claude code
+- We're building a CLI code agent tool called Zode that is intended to work like Aider
 - We're starting from a completely blank project
-- Like Aider/Claude Code you take the user's initial prompt and then call the LLM and perform tool calls in a loop until the ultimate goal is achieved.
-- Unlike Aider or Claude code, it's not intended to be interactive. Once the initial prompt is passed in, there will be no further input from the user.
+- Like Aider you take the user's initial prompt and then call the LLM and perform tool calls in a loop until the ultimate goal is achieved.
+- Unlike Aider, it's not intended to be interactive. Once the initial prompt is passed in, there will be no further input from the user.
 - The system you will build must reach the stated goal just by performing too calls and calling the LLM
-- I want you to build this in python. Use the anthropic python sdk and the model context protocol sdk. Use a virtual env and pip to install dependencies
-- Follow the anthropic guidance on tool calls: https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview
-- Use this Anthropic model: `claude-3-7-sonnet-20250219`
-- Use this Anthropic API Key: `sk-ant-api03-qweeryiofdjsncmxquywefidopsugus`
-- One of the most important pieces to this is having good too calls. We will be using the tools provided by the Claude MCP server. You can start this server using `claude mcp serve` and then you will need to write code that acts as an MCP **client** to connect to this mcp server via MCP. Likely you want to start this using a subprocess. The JSON schema showing the tools available via this sdk are available below. Via this MCP server you have access to all the tools that zode needs: Bash, GlobTool, GrepTool, LS, View, Edit, Replace, WebFetchTool
+- I want you to build this in python. Use the model context protocol sdk. Use a virtual env and pip to install dependencies
 - The cli tool should be invocable via python zode.py file.md where file.md is any possible file that contains the users prompt. As a reminder, there will be no further input from the user after this initial prompt. Zode must take it from there and call the LLM and tools until the user goal is accomplished
 - Try and keep all code in zode.py and make heavy use of the asks I mentioned
 - Once you’ve implemented this, you must run python zode.py eval/instructions.md to see how well our new agent tool does!
-
-Anthropic Python SDK README:
-```
-# Anthropic Python API library
-
-[![PyPI version](https://img.shields.io/pypi/v/anthropic.svg)](https://pypi.org/project/anthropic/)
-
-The Anthropic Python library provides convenient access to the Anthropic REST API from any Python 3.8+
-application. It includes type definitions for all request params and response fields,
-and offers both synchronous and asynchronous clients powered by [httpx](https://github.com/encode/httpx).
-
-## Documentation
-
-The REST API documentation can be found on [docs.anthropic.com](https://docs.anthropic.com/claude/reference/). The full API of this library can be found in [api.md](api.md).
-
-## Installation
-
-```sh
-# install from PyPI
-pip install anthropic
-```
 
 ## Usage
 
 The full API of this library can be found in [api.md](api.md).
 
-```python
-import os
-from anthropic import Anthropic
-
-client = Anthropic(
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),  # This is the default and can be omitted
-)
-
-message = client.messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-)
-print(message.content)
-```
-
-While you can provide an `api_key` keyword argument,
-we recommend using [python-dotenv](https://pypi.org/project/python-dotenv/)
-to add `ANTHROPIC_API_KEY="my-anthropic-api-key"` to your `.env` file
-so that your API Key is not stored in source control.
-
 ## Async usage
-
-Simply import `AsyncAnthropic` instead of `Anthropic` and use `await` with each API call:
-
-```python
-import os
-import asyncio
-from anthropic import AsyncAnthropic
-
-client = AsyncAnthropic(
-    api_key=os.environ.get("ANTHROPIC_API_KEY"),  # This is the default and can be omitted
-)
-
-
-async def main() -> None:
-    message = await client.messages.create(
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": "Hello, Claude",
-            }
-        ],
-        model="claude-3-5-sonnet-latest",
-    )
-    print(message.content)
-
-
-asyncio.run(main())
-```
 
 Functionality between the synchronous and asynchronous clients is otherwise identical.
 
@@ -100,78 +20,9 @@ Functionality between the synchronous and asynchronous clients is otherwise iden
 
 We provide support for streaming responses using Server Side Events (SSE).
 
-```python
-from anthropic import Anthropic
-
-client = Anthropic()
-
-stream = client.messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-    stream=True,
-)
-for event in stream:
-    print(event.type)
-```
-
 The async client uses the exact same interface.
 
-```python
-from anthropic import AsyncAnthropic
-
-client = AsyncAnthropic()
-
-stream = await client.messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-    stream=True,
-)
-async for event in stream:
-    print(event.type)
-```
-
 ### Streaming Helpers
-
-This library provides several conveniences for streaming messages, for example:
-
-```py
-import asyncio
-from anthropic import AsyncAnthropic
-
-client = AsyncAnthropic()
-
-async def main() -> None:
-    async with client.messages.stream(
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": "Say hello there!",
-            }
-        ],
-        model="claude-3-5-sonnet-latest",
-    ) as stream:
-        async for text in stream.text_stream:
-            print(text, end="", flush=True)
-        print()
-
-    message = await stream.get_final_message()
-    print(message.to_json())
-
-asyncio.run(main())
-```
 
 Streaming with `client.messages.stream(...)` exposes [various helpers for your convenience](helpers.md) including accumulation & SDK-specific events.
 
@@ -181,16 +32,6 @@ Alternatively, you can use `client.messages.create(..., stream=True)` which only
 
 To get the token count for a message without creating it you can use the `client.beta.messages.count_tokens()` method. This takes the same `messages` list as the `.create()` method.
 
-```py
-count = client.beta.messages.count_tokens(
-    model="claude-3-5-sonnet-20241022",
-    messages=[
-        {"role": "user", "content": "Hello, world"}
-    ]
-)
-count.input_tokens  # 10
-```
-
 You can also see the exact usage for a given request through the `usage` response property, e.g.
 
 ```py
@@ -198,39 +39,6 @@ message = client.messages.create(...)
 message.usage
 # Usage(input_tokens=25, output_tokens=13)
 ```
-
-## Message Batches
-
-This SDK provides beta support for the [Message Batches API](https://docs.anthropic.com/en/docs/build-with-claude/message-batches) under the `client.beta.messages.batches` namespace.
-
-
-### Creating a batch
-
-Message Batches take the exact same request params as the standard Messages API:
-
-```python
-await client.beta.messages.batches.create(
-    requests=[
-        {
-            "custom_id": "my-first-request",
-            "params": {
-                "model": "claude-3-5-sonnet-latest",
-                "max_tokens": 1024,
-                "messages": [{"role": "user", "content": "Hello, world"}],
-            },
-        },
-        {
-            "custom_id": "my-second-request",
-            "params": {
-                "model": "claude-3-5-sonnet-latest",
-                "max_tokens": 1024,
-                "messages": [{"role": "user", "content": "Hi again, friend"}],
-            },
-        },
-    ]
-)
-```
-
 
 ### Getting results from a batch
 
@@ -243,74 +51,6 @@ async for entry in result_stream:
         print(entry.result.message.content)
 ```
 
-## Tool use
-
-This SDK provides support for tool use, aka function calling. More details can be found in [the documentation](https://docs.anthropic.com/claude/docs/tool-use).
-
-## AWS Bedrock
-
-This library also provides support for the [Anthropic Bedrock API](https://aws.amazon.com/bedrock/claude/) if you install this library with the `bedrock` extra, e.g. `pip install -U anthropic[bedrock]`.
-
-You can then import and instantiate a separate `AnthropicBedrock` class, the rest of the API is the same.
-
-```py
-from anthropic import AnthropicBedrock
-
-client = AnthropicBedrock()
-
-message = client.messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello!",
-        }
-    ],
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-)
-print(message)
-```
-
-The bedrock client supports the following arguments for authentication
-
-```py
-AnthropicBedrock(
-  aws_profile='...',
-  aws_region='us-east'
-  aws_secret_key='...',
-  aws_access_key='...',
-  aws_session_token='...',
-)
-```
-
-For a more fully fledged example see [`examples/bedrock.py`](https://github.com/anthropics/anthropic-sdk-python/blob/main/examples/bedrock.py).
-
-## Google Vertex
-
-This library also provides support for the [Anthropic Vertex API](https://cloud.google.com/vertex-ai?hl=en) if you install this library with the `vertex` extra, e.g. `pip install -U anthropic[vertex]`.
-
-You can then import and instantiate a separate `AnthropicVertex`/`AsyncAnthropicVertex` class, which has the same API as the base `Anthropic`/`AsyncAnthropic` class.
-
-```py
-from anthropic import AnthropicVertex
-
-client = AnthropicVertex()
-
-message = client.messages.create(
-    model="claude-3-5-sonnet-v2@20241022",
-    max_tokens=100,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello!",
-        }
-    ],
-)
-print(message)
-```
-
-For a more complete example see [`examples/vertex.py`](https://github.com/anthropics/anthropic-sdk-python/blob/main/examples/vertex.py).
-
 ## Using types
 
 Nested request parameters are [TypedDicts](https://docs.python.org/3/library/typing.html#typing.TypedDict). Responses are [Pydantic models](https://docs.pydantic.dev) which also provide helper methods for things like:
@@ -321,47 +61,6 @@ Nested request parameters are [TypedDicts](https://docs.python.org/3/library/typ
 Typed requests and responses provide autocomplete and documentation within your editor. If you would like to see type errors in VS Code to help catch bugs earlier, set `python.analysis.typeCheckingMode` to `basic`.
 
 ## Pagination
-
-List methods in the Anthropic API are paginated.
-
-This library provides auto-paginating iterators with each list response, so you do not have to request successive pages manually:
-
-```python
-from anthropic import Anthropic
-
-client = Anthropic()
-
-all_batches = []
-# Automatically fetches more pages as needed.
-for batch in client.beta.messages.batches.list(
-    limit=20,
-):
-    # Do something with batch here
-    all_batches.append(batch)
-print(all_batches)
-```
-
-Or, asynchronously:
-
-```python
-import asyncio
-from anthropic import AsyncAnthropic
-
-client = AsyncAnthropic()
-
-
-async def main() -> None:
-    all_batches = []
-    # Iterate through items across all pages, issuing requests as needed.
-    async for batch in client.beta.messages.batches.list(
-        limit=20,
-    ):
-        all_batches.append(batch)
-    print(all_batches)
-
-
-asyncio.run(main())
-```
 
 Alternatively, you can use the `.has_next_page()`, `.next_page_info()`, or `.get_next_page()` methods for more granular control working with pages:
 
@@ -393,41 +92,6 @@ for batch in first_page.data:
 
 ## Handling errors
 
-When the library is unable to connect to the API (for example, due to network connection problems or a timeout), a subclass of `anthropic.APIConnectionError` is raised.
-
-When the API returns a non-success status code (that is, 4xx or 5xx
-response), a subclass of `anthropic.APIStatusError` is raised, containing `status_code` and `response` properties.
-
-All errors inherit from `anthropic.APIError`.
-
-```python
-import anthropic
-from anthropic import Anthropic
-
-client = Anthropic()
-
-try:
-    client.messages.create(
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": "Hello, Claude",
-            }
-        ],
-        model="claude-3-5-sonnet-latest",
-    )
-except anthropic.APIConnectionError as e:
-    print("The server could not be reached")
-    print(e.__cause__)  # an underlying Exception, likely raised within httpx.
-except anthropic.RateLimitError as e:
-    print("A 429 status code was received; we should back off a bit.")
-except anthropic.APIStatusError as e:
-    print("Another non-200-range status code was received")
-    print(e.status_code)
-    print(e.response)
-```
-
 Error codes are as follows:
 
 | Status Code | Error Type                 |
@@ -443,24 +107,6 @@ Error codes are as follows:
 
 ## Request IDs
 
-> For more information on debugging requests, see [these docs](https://docs.anthropic.com/en/api/errors#request-id)
-
-All object responses in the SDK provide a `_request_id` property which is added from the `request-id` response header so that you can quickly log failing requests and report them back to Anthropic.
-
-```python
-message = client.messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-)
-print(message._request_id)  # req_018EeWyXxfu5pfWkrYcMdjWG
-```
-
 Note that unlike other properties that use an `_` prefix, the `_request_id` property
 *is* public. Unless documented otherwise, *all* other `_` prefix properties,
 methods and modules are *private*.
@@ -471,61 +117,7 @@ Certain errors are automatically retried 2 times by default, with a short expone
 Connection errors (for example, due to a network connectivity problem), 408 Request Timeout, 409 Conflict,
 429 Rate Limit, and >=500 Internal errors are all retried by default.
 
-You can use the `max_retries` option to configure or disable retry settings:
-
-```python
-from anthropic import Anthropic
-
-# Configure the default for all requests:
-client = Anthropic(
-    # default is 2
-    max_retries=0,
-)
-
-# Or, configure per-request:
-client.with_options(max_retries=5).messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-)
-```
-
 ### Timeouts
-
-By default requests time out after 10 minutes. You can configure this with a `timeout` option,
-which accepts a float or an [`httpx.Timeout`](https://www.python-httpx.org/advanced/#fine-tuning-the-configuration) object:
-
-```python
-from anthropic import Anthropic
-
-# Configure the default for all requests:
-client = Anthropic(
-    # 20 seconds (default is 10 minutes)
-    timeout=20.0,
-)
-
-# More granular control:
-client = Anthropic(
-    timeout=httpx.Timeout(60.0, read=5.0, write=10.0, connect=2.0),
-)
-
-# Override per-request:
-client.with_options(timeout=5.0).messages.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-)
-```
 
 On timeout, an `APITimeoutError` is thrown.
 
@@ -535,10 +127,6 @@ Note that requests that time out are [retried twice by default](#retries).
 
 > [!IMPORTANT]
 > We highly encourage you use the streaming [Messages API](#streaming-responses) for longer running requests.
-
-We do not recommend setting a large `max_tokens` values without using streaming.
-Some networks may drop idle connections after a certain period of time, which
-can cause the request to fail or [timeout](#timeouts) without receiving a response from Anthropic.
 
 This SDK will also throw a `ValueError` if a non-streaming request is expected to be above roughly 10 minutes long.
 Passing `stream=True` or [overriding](#timeouts) the `timeout` option at the client or request level disables this error.
@@ -552,31 +140,15 @@ This can be [overridden](#Configuring-the-HTTP-client) by passing a `http_client
 
 ## Default Headers
 
-We automatically send the `anthropic-version` header set to `2023-06-01`.
-
 If you need to, you can override it by setting default headers per-request or on the client object.
 
 Be aware that doing so may result in incorrect types and other unexpected or undefined behavior in the SDK.
-
-```python
-from anthropic import Anthropic
-
-client = Anthropic(
-    default_headers={"anthropic-version": "My-Custom-Value"},
-)
-```
 
 ## Advanced
 
 ### Logging
 
 We use the standard library [`logging`](https://docs.python.org/3/library/logging.html) module.
-
-You can enable logging by setting the environment variable `ANTHROPIC_LOG` to `info`.
-
-```shell
-$ export ANTHROPIC_LOG=info
-```
 
 Or to `debug` for more verbose logging.
 
@@ -594,28 +166,6 @@ if response.my_field is None:
 
 ### Accessing raw response data (e.g. headers)
 
-The "raw" Response object can be accessed by prefixing `.with_raw_response.` to any HTTP method call, e.g.,
-
-```py
-from anthropic import Anthropic
-
-client = Anthropic()
-response = client.messages.with_raw_response.create(
-    max_tokens=1024,
-    messages=[{
-        "role": "user",
-        "content": "Hello, Claude",
-    }],
-    model="claude-3-5-sonnet-latest",
-)
-print(response.headers.get('X-My-Header'))
-
-message = response.parse()  # get the object that `messages.create()` would have returned
-print(message.content)
-```
-
-These methods return a [`LegacyAPIResponse`](https://github.com/anthropics/anthropic-sdk-python/tree/main/src/anthropic/_legacy_response.py) object. This is a legacy class as we're changing it slightly in the next major version.
-
 For the sync client this will mostly be the same with the exception
 of `content` & `text` will be methods instead of properties. In the
 async client, all methods will be async.
@@ -628,25 +178,6 @@ be smooth.
 The above interface eagerly reads the full response body when you make the request, which may not always be what you want.
 
 To stream the response body, use `.with_streaming_response` instead, which requires a context manager and only reads the response body once you call `.read()`, `.text()`, `.json()`, `.iter_bytes()`, `.iter_text()`, `.iter_lines()` or `.parse()`. In the async client, these are async methods.
-
-As such, `.with_streaming_response` methods return a different [`APIResponse`](https://github.com/anthropics/anthropic-sdk-python/tree/main/src/anthropic/_response.py) object, and the async client returns an [`AsyncAPIResponse`](https://github.com/anthropics/anthropic-sdk-python/tree/main/src/anthropic/_response.py) object.
-
-```python
-with client.messages.with_streaming_response.create(
-    max_tokens=1024,
-    messages=[
-        {
-            "role": "user",
-            "content": "Hello, Claude",
-        }
-    ],
-    model="claude-3-5-sonnet-latest",
-) as response:
-    print(response.headers.get("X-My-Header"))
-
-    for line in response.iter_lines():
-        print(line)
-```
 
 The context manager is required so that the response will reliably be closed.
 
@@ -692,20 +223,6 @@ You can directly override the [httpx client](https://www.python-httpx.org/api/#c
 - Custom [transports](https://www.python-httpx.org/advanced/transports/)
 - Additional [advanced](https://www.python-httpx.org/advanced/clients/) functionality
 
-```python
-import httpx
-from anthropic import Anthropic, DefaultHttpxClient
-
-client = Anthropic(
-    # Or use the `ANTHROPIC_BASE_URL` env var
-    base_url="http://my.test.server.example.com:8083",
-    http_client=DefaultHttpxClient(
-        proxy="http://my.test.proxy.example.com",
-        transport=httpx.HTTPTransport(local_address="0.0.0.0"),
-    ),
-)
-```
-
 You can also customize the client on a per-request basis by using `with_options()`:
 
 ```python
@@ -715,16 +232,6 @@ client.with_options(http_client=DefaultHttpxClient(...))
 ### Managing HTTP resources
 
 By default the library closes underlying HTTP connections whenever the client is [garbage collected](https://docs.python.org/3/reference/datamodel.html#object.__del__). You can manually close the client using the `.close()` method if desired, or with a context manager that closes when exiting.
-
-```py
-from anthropic import Anthropic
-
-with Anthropic() as client:
-  # make requests here
-  ...
-
-# HTTP client is now closed
-```
 
 ## Versioning
 
@@ -736,18 +243,9 @@ This package generally follows [SemVer](https://semver.org/spec/v2.0.0.html) con
 
 We take backwards-compatibility seriously and work hard to ensure you can rely on a smooth upgrade experience.
 
-We are keen for your feedback; please open an [issue](https://www.github.com/anthropics/anthropic-sdk-python/issues) with questions, bugs, or suggestions.
-
 ### Determining the installed version
 
 If you've upgraded to the latest version but aren't seeing any new features you were expecting then your python environment is likely still using an older version.
-
-You can determine the version that is being used at runtime with:
-
-```py
-import anthropic
-print(anthropic.__version__)
-```
 
 ## Requirements
 
@@ -794,7 +292,6 @@ MCP Python SDK README:
     - [Context](#context)
   - [Running Your Server](#running-your-server)
     - [Development Mode](#development-mode)
-    - [Claude Desktop Integration](#claude-desktop-integration)
     - [Direct Execution](#direct-execution)
     - [Mounting to an Existing ASGI Server](#mounting-to-an-existing-asgi-server)
   - [Examples](#examples)
@@ -887,11 +384,6 @@ def add(a: int, b: int) -> int:
 def get_greeting(name: str) -> str:
     """Get a personalized greeting"""
     return f"Hello, {name}!"
-```
-
-You can install this server in [Claude Desktop](https://claude.ai/download) and interact with it right away by running:
-```bash
-mcp install server.py
 ```
 
 Alternatively, you can test it with the MCP Inspector:
@@ -1085,21 +577,6 @@ mcp dev server.py --with pandas --with numpy
 
 # Mount local code
 mcp dev server.py --with-editable .
-```
-
-### Claude Desktop Integration
-
-Once your server is ready, install it in Claude Desktop:
-
-```bash
-mcp install server.py
-
-# Custom name
-mcp install server.py --name "My Analytics Server"
-
-# Environment variables
-mcp install server.py -v API_KEY=abc123 -v DB_URL=postgres://...
-mcp install server.py -f .env
 ```
 
 ### Direct Execution
@@ -1852,342 +1329,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-```
-
-
-
-
-JSON schema for Claude Code tools available via MCP:
-```json
-{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "result": {
-        "tools": [
-            {
-                "name": "dispatch_agent",
-                "description": "Launch a new task",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "prompt": {
-                            "type": "string",
-                            "description": "The task for the agent to perform"
-                        }
-                    },
-                    "required": [
-                        "prompt"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "Bash",
-                "description": "Run shell command",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "command": {
-                            "type": "string",
-                            "description": "The command to execute"
-                        },
-                        "timeout": {
-                            "type": "number",
-                            "description": "Optional timeout in milliseconds (max 600000)"
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": " Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'"
-                        }
-                    },
-                    "required": [
-                        "command"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "BatchTool",
-                "description": "\n- Batch execution tool that runs multiple tool invocations in a single request\n- Tools are executed in parallel when possible, and otherwise serially\n- Takes a list of tool invocations (tool_name and input pairs)\n- Returns the collected results from all invocations\n- Use this tool when you need to run multiple independent tool operations at once -- it is awesome for speeding up your workflow, reducing both context usage and latency\n- Each tool will respect its own permissions and validation rules\n- The tool's outputs are NOT shown to the user; to answer the user's query, you MUST send a message with the results after the tool call completes, otherwise the user will not see the results\n\nAvailable tools:\nTool: dispatch_agent\nArguments: prompt: string \"The task for the agent to perform\"\nUsage: Launch a new agent that has access to the following tools: View, GlobTool, GrepTool, LS, ReadNotebook, WebFetchTool. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use the Agent tool to perform the search for you.\n\nWhen to use the Agent tool:\n- If you are searching for a keyword like \"config\" or \"logger\", or for questions like \"which file does X?\", the Agent tool is strongly recommended\n\nWhen NOT to use the Agent tool:\n- If you want to read a specific file path, use the View or GlobTool tool instead of the Agent tool, to find the match more quickly\n- If you are searching for a specific class definition like \"class Foo\", use the GlobTool tool instead, to find the match more quickly\n- If you are searching for code within a specific file or set of 2-3 files, use the View tool instead of the Agent tool, to find the match more quickly\n\nUsage notes:\n1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses\n2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n3. Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n4. The agent's outputs should generally be trusted\n5. IMPORTANT: The agent can not use Bash, Replace, Edit, NotebookEditCell, so can not modify files. If you want to use these tools, use them directly instead of going through the agent.\n---Tool: Bash\nArguments: command: string \"The command to execute\", [optional] timeout: number \"Optional timeout in milliseconds (max 600000)\", [optional] description: string \" Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'\"\nUsage: Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.\n\nBefore executing the command, please follow these steps:\n\n1. Directory Verification:\n   - If the command will create new directories or files, first use the LS tool to verify the parent directory exists and is the correct location\n   - For example, before running \"mkdir foo/bar\", first use LS to check that \"foo\" exists and is the intended parent directory\n\n2. Security Check:\n   - For security and to limit the threat of a prompt injection attack, some commands are limited or banned. If you use a disallowed command, you will receive an error message explaining the restriction. Explain the error to the User.\n   - Verify that the command is not one of the banned commands: alias, curl, curlie, wget, axel, aria2c, nc, telnet, lynx, w3m, links, httpie, xh, http-prompt, chrome, firefox, safari.\n\n3. Command Execution:\n   - After ensuring proper quoting, execute the command.\n   - Capture the output of the command.\n\nUsage notes:\n  - The command argument is required.\n  - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 30 minutes.\n  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.\n  - If the output exceeds 30000 characters, output will be truncated before being returned to you.\n  - VERY IMPORTANT: You MUST avoid using search commands like `find` and `grep`. Instead use GrepTool, GlobTool, or dispatch_agent to search. You MUST avoid read tools like `cat`, `head`, `tail`, and `ls`, and use View and LS to read files.\n  - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).\n  - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of `cd`. You may use `cd` if the User explicitly requests it.\n    <good-example>\n    pytest /foo/bar/tests\n    </good-example>\n    <bad-example>\n    cd /foo/bar && pytest tests\n    </bad-example>\n\n# Committing changes with git\n\nWhen the user asks you to create a new git commit, follow these steps carefully:\n\n1. Use BatchTool to run the following commands in parallel:\n   - Run a git status command to see all untracked files.\n   - Run a git diff command to see both staged and unstaged changes that will be committed.\n   - Run a git log command to see recent commit messages, so that you can follow this repository's commit message style.\n\n2. Analyze all staged changes (both previously staged and newly added) and draft a commit message. Wrap your analysis process in <commit_analysis> tags:\n\n<commit_analysis>\n- List the files that have been changed or added\n- Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.)\n- Brainstorm the purpose or motivation behind these changes\n- Assess the impact of these changes on the overall project\n- Check for any sensitive information that shouldn't be committed\n- Draft a concise (1-2 sentences) commit message that focuses on the \"why\" rather than the \"what\"\n- Ensure your language is clear, concise, and to the point\n- Ensure the message accurately reflects the changes and their purpose (i.e. \"add\" means a wholly new feature, \"update\" means an enhancement to an existing feature, \"fix\" means a bug fix, etc.)\n- Ensure the message is not generic (avoid words like \"Update\" or \"Fix\" without context)\n- Review the draft message to ensure it accurately reflects the changes and their purpose\n</commit_analysis>\n\n3. Use BatchTool to run the following commands in parallel:\n   - Add relevant untracked files to the staging area.\n   - Create the commit with a message ending with:\n   🤖 Generated with [Claude Code](https://claude.ai/code)\n\n   Co-Authored-By: Claude <noreply@anthropic.com>\n   - Run git status to make sure the commit succeeded.\n\n4. If the commit fails due to pre-commit hook changes, retry the commit ONCE to include these automated changes. If it fails again, it usually means a pre-commit hook is preventing the commit. If the commit succeeds but you notice that files were modified by the pre-commit hook, you MUST amend your commit to include them.\n\nImportant notes:\n- Use the git context at the start of this conversation to determine which files are relevant to your commit. Be careful not to stage and commit files (e.g. with `git add .`) that aren't relevant to your commit.\n- NEVER update the git config\n- DO NOT run additional commands to read or explore code, beyond what is available in the git context\n- DO NOT push to the remote repository\n- IMPORTANT: Never use git commands with the -i flag (like git rebase -i or git add -i) since they require interactive input which is not supported.\n- If there are no changes to commit (i.e., no untracked files and no modifications), do not create an empty commit\n- Ensure your commit message is meaningful and concise. It should explain the purpose of the changes, not just describe them.\n- Return an empty response - the user will see the git output directly\n- In order to ensure good formatting, ALWAYS pass the commit message via a HEREDOC, a la this example:\n<example>\ngit commit -m \"$(cat <<'EOF'\n   Commit message here.\n\n   🤖 Generated with [Claude Code](https://claude.ai/code)\n\n   Co-Authored-By: Claude <noreply@anthropic.com>\n   EOF\n   )\"\n</example>\n\n# Creating pull requests\nUse the gh command via the Bash tool for ALL GitHub-related tasks including working with issues, pull requests, checks, and releases. If given a Github URL use the gh command to get the information needed.\n\nIMPORTANT: When the user asks you to create a pull request, follow these steps carefully:\n\n1. Use BatchTool to run the following commands in parallel, in order to understand the current state of the branch since it diverged from the main branch:\n   - Run a git status command to see all untracked files\n   - Run a git diff command to see both staged and unstaged changes that will be committed\n   - Check if the current branch tracks a remote branch and is up to date with the remote, so you know if you need to push to the remote\n   - Run a git log command and `git diff main...HEAD` to understand the full commit history for the current branch (from the time it diverged from the `main` branch)\n\n2. Analyze all changes that will be included in the pull request, making sure to look at all relevant commits (NOT just the latest commit, but ALL commits that will be included in the pull request!!!), and draft a pull request summary. Wrap your analysis process in <pr_analysis> tags:\n\n<pr_analysis>\n- List the commits since diverging from the main branch\n- Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.)\n- Brainstorm the purpose or motivation behind these changes\n- Assess the impact of these changes on the overall project\n- Do not use tools to explore code, beyond what is available in the git context\n- Check for any sensitive information that shouldn't be committed\n- Draft a concise (1-2 bullet points) pull request summary that focuses on the \"why\" rather than the \"what\"\n- Ensure the summary accurately reflects all changes since diverging from the main branch\n- Ensure your language is clear, concise, and to the point\n- Ensure the summary accurately reflects the changes and their purpose (ie. \"add\" means a wholly new feature, \"update\" means an enhancement to an existing feature, \"fix\" means a bug fix, etc.)\n- Ensure the summary is not generic (avoid words like \"Update\" or \"Fix\" without context)\n- Review the draft summary to ensure it accurately reflects the changes and their purpose\n</pr_analysis>\n\n3. Use BatchTool to run the following commands in parallel:\n   - Create new branch if needed\n   - Push to remote with -u flag if needed\n   - Create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting.\n<example>\ngh pr create --title \"the pr title\" --body \"$(cat <<'EOF'\n## Summary\n<1-3 bullet points>\n\n## Test plan\n[Checklist of TODOs for testing the pull request...]\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\nEOF\n)\"\n</example>\n\nImportant:\n- NEVER update the git config\n- Return an empty response - the user will see the gh output directly\n\n# Other common operations\n- View comments on a Github PR: gh api repos/foo/bar/pulls/123/comments\n---Tool: GlobTool\nArguments: pattern: string \"The glob pattern to match files against\", [optional] path: string \"The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided.\"\nUsage: - Fast file pattern matching tool that works with any codebase size\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\"\n- Returns matching file paths sorted by modification time\n- Use this tool when you need to find files by name patterns\n- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead\n\n---Tool: GrepTool\nArguments: pattern: string \"The regular expression pattern to search for in file contents\", [optional] path: string \"The directory to search in. Defaults to the current working directory.\", [optional] include: string \"File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")\"\nUsage: \n- Fast content search tool that works with any codebase size\n- Searches file contents using regular expressions\n- Supports full regex syntax (eg. \"log.*Error\", \"function\\s+\\w+\", etc.)\n- Filter files by pattern with the include parameter (eg. \"*.js\", \"*.{ts,tsx}\")\n- Returns matching file paths sorted by modification time\n- Use this tool when you need to find files containing specific patterns\n- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead\n\n---Tool: LS\nArguments: path: string \"The absolute path to the directory to list (must be absolute, not relative)\", [optional] ignore: array \"List of glob patterns to ignore\"\nUsage: Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path. You can optionally provide an array of glob patterns to ignore with the ignore parameter. You should generally prefer the Glob and Grep tools, if you know which directories to search.\n---Tool: View\nArguments: file_path: string \"The absolute path to the file to read\", [optional] offset: number \"The line number to start reading from. Only provide if the file is too large to read at once\", [optional] limit: number \"The number of lines to read. Only provide if the file is too large to read at once.\"\nUsage: Reads a file from the local filesystem. You can access any file directly by using this tool.\nAssume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.\n\nUsage:\n- The file_path parameter must be an absolute path, not a relative path\n- By default, it reads up to 2000 lines starting from the beginning of the file\n- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters\n- Any lines longer than 2000 characters will be truncated\n- Results are returned using cat -n format, with line numbers starting at 1\n- This tool allows Claude Code to VIEW images (eg PNG, JPG, etc). When reading an image file the contents are presented visually as Claude Code is a multimodal LLM.\n- For Jupyter notebooks (.ipynb files), use the ReadNotebook instead\n- When reading multiple files, you MUST use the BatchTool tool to read them all at once\n---Tool: Edit\nArguments: file_path: string \"The absolute path to the file to modify\", old_string: string \"The text to replace\", new_string: string \"The text to replace it with\", [optional] expected_replacements: number \"The expected number of replacements to perform. Defaults to 1 if not specified.\"\nUsage: This is a tool for editing files. For moving or renaming files, you should generally use the Bash tool with the 'mv' command instead. For larger edits, use the Write tool to overwrite files. For Jupyter notebooks (.ipynb files), use the NotebookEditCell instead.\n\nBefore using this tool:\n\n1. Use the View tool to understand the file's contents and context\n\n2. Verify the directory path is correct (only applicable when creating new files):\n   - Use the LS tool to verify the parent directory exists and is the correct location\n\nTo make a file edit, provide the following:\n1. file_path: The absolute path to the file to modify (must be absolute, not relative)\n2. old_string: The text to replace (must match the file contents exactly, including all whitespace and indentation)\n3. new_string: The edited text to replace the old_string\n4. expected_replacements: The number of replacements you expect to make. Defaults to 1 if not specified.\n\nBy default, the tool will replace ONE occurrence of old_string with new_string in the specified file. If you want to replace multiple occurrences, provide the expected_replacements parameter with the exact number of occurrences you expect.\n\nCRITICAL REQUIREMENTS FOR USING THIS TOOL:\n\n1. UNIQUENESS (when expected_replacements is not specified): The old_string MUST uniquely identify the specific instance you want to change. This means:\n   - Include AT LEAST 3-5 lines of context BEFORE the change point\n   - Include AT LEAST 3-5 lines of context AFTER the change point\n   - Include all whitespace, indentation, and surrounding code exactly as it appears in the file\n\n2. EXPECTED MATCHES: If you want to replace multiple instances:\n   - Use the expected_replacements parameter with the exact number of occurrences you expect to replace\n   - This will replace ALL occurrences of the old_string with the new_string\n   - If the actual number of matches doesn't equal expected_replacements, the edit will fail\n   - This is a safety feature to prevent unintended replacements\n\n3. VERIFICATION: Before using this tool:\n   - Check how many instances of the target text exist in the file\n   - If multiple instances exist, either:\n     a) Gather enough context to uniquely identify each one and make separate calls, OR\n     b) Use expected_replacements parameter with the exact count of instances you expect to replace\n\nWARNING: If you do not follow these requirements:\n   - The tool will fail if old_string matches multiple locations and expected_replacements isn't specified\n   - The tool will fail if the number of matches doesn't equal expected_replacements when it's specified\n   - The tool will fail if old_string doesn't match exactly (including whitespace)\n   - You may change unintended instances if you don't verify the match count\n\nWhen making edits:\n   - Ensure the edit results in idiomatic, correct code\n   - Do not leave the code in a broken state\n   - Always use absolute file paths (starting with /)\n\nIf you want to create a new file, use:\n   - A new file path, including dir name if needed\n   - An empty old_string\n   - The new file's contents as new_string\n\nRemember: when making multiple file edits in a row to the same file, you should prefer to send all edits in a single message with multiple calls to this tool, rather than multiple messages with a single call each.\n\n---Tool: Replace\nArguments: file_path: string \"The absolute path to the file to write (must be absolute, not relative)\", content: string \"The content to write to the file\"\nUsage: Write a file to the local filesystem. Overwrites the existing file if there is one.\n\nBefore using this tool:\n\n1. Use the ReadFile tool to understand the file's contents and context\n\n2. Directory Verification (only applicable when creating new files):\n   - Use the LS tool to verify the parent directory exists and is the correct location\n---Tool: ReadNotebook\nArguments: notebook_path: string \"The absolute path to the Jupyter notebook file to read (must be absolute, not relative)\"\nUsage: Reads a Jupyter notebook (.ipynb file) and returns all of the cells with their outputs. Jupyter notebooks are interactive documents that combine code, text, and visualizations, commonly used for data analysis and scientific computing. The notebook_path parameter must be an absolute path, not a relative path.\n---Tool: NotebookEditCell\nArguments: notebook_path: string \"The absolute path to the Jupyter notebook file to edit (must be absolute, not relative)\", cell_number: number \"The index of the cell to edit (0-based)\", new_source: string \"The new source for the cell\", [optional] cell_type: string \"The type of the cell (code or markdown). If not specified, it defaults to the current cell type. If using edit_mode=insert, this is required.\", [optional] edit_mode: string \"The type of edit to make (replace, insert, delete). Defaults to replace.\"\nUsage: Completely replaces the contents of a specific cell in a Jupyter notebook (.ipynb file) with new source. Jupyter notebooks are interactive documents that combine code, text, and visualizations, commonly used for data analysis and scientific computing. The notebook_path parameter must be an absolute path, not a relative path. The cell_number is 0-indexed. Use edit_mode=insert to add a new cell at the index specified by cell_number. Use edit_mode=delete to delete the cell at the index specified by cell_number.\n---Tool: WebFetchTool\nArguments: url: string \"The URL to fetch content from\", prompt: string \"The prompt to run on the fetched content\"\nUsage: \n- Fetches content from a specified URL and processes it using an AI model\n- Takes a URL and a prompt as input\n- Fetches the URL content, converts HTML to markdown\n- Processes the content with the prompt using a small, fast model\n- Returns the model's response about the content\n- Use this tool when you need to retrieve and analyze web content\n\nUsage notes:\n  - IMPORTANT: If an MCP-provided web fetch tool is available, prefer using that tool instead of this one, as it may have fewer restrictions. All MCP-provided tools start with \"mcp__\".\n  - The URL must be a fully-formed valid URL\n  - HTTP URLs will be automatically upgraded to HTTPS\n  - For security reasons, the URL's domain must have been provided directly by the user, unless it's on a small pre-approved set of the top few dozen hosts for popular coding resources, like react.dev.\n  - The prompt should describe what information you want to extract from the page\n  - This tool is read-only and does not modify any files\n  - Results may be summarized if the content is very large\n  - Includes a self-cleaning 15-minute cache for faster responses when repeatedly accessing the same URL\n\n\nExample usage:\n{\n  \"invocations\": [\n    {\n      \"tool_name\": \"Bash\",\n      \"input\": {\n        \"command\": \"git blame src/foo.ts\"\n      }\n    },\n    {\n      \"tool_name\": \"GlobTool\",\n      \"input\": {\n        \"pattern\": \"**/*.ts\"\n      }\n    },\n    {\n      \"tool_name\": \"GrepTool\",\n      \"input\": {\n        \"pattern\": \"function\",\n        \"include\": \"*.ts\"\n      }\n    }\n  ]\n}\n",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "description": {
-                            "type": "string",
-                            "description": "A short (3-5 word) description of the batch operation"
-                        },
-                        "invocations": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "tool_name": {
-                                        "type": "string",
-                                        "description": "The name of the tool to invoke"
-                                    },
-                                    "input": {
-                                        "type": "object",
-                                        "additionalProperties": {},
-                                        "description": "The input to pass to the tool"
-                                    }
-                                },
-                                "required": [
-                                    "tool_name",
-                                    "input"
-                                ],
-                                "additionalProperties": false
-                            },
-                            "description": "The list of tool invocations to execute"
-                        }
-                    },
-                    "required": [
-                        "description",
-                        "invocations"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "GlobTool",
-                "description": "- Fast file pattern matching tool that works with any codebase size\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\"\n- Returns matching file paths sorted by modification time\n- Use this tool when you need to find files by name patterns\n- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead\n",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "pattern": {
-                            "type": "string",
-                            "description": "The glob pattern to match files against"
-                        },
-                        "path": {
-                            "type": "string",
-                            "description": "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided."
-                        }
-                    },
-                    "required": [
-                        "pattern"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "GrepTool",
-                "description": "\n- Fast content search tool that works with any codebase size\n- Searches file contents using regular expressions\n- Supports full regex syntax (eg. \"log.*Error\", \"function\\s+\\w+\", etc.)\n- Filter files by pattern with the include parameter (eg. \"*.js\", \"*.{ts,tsx}\")\n- Returns matching file paths sorted by modification time\n- Use this tool when you need to find files containing specific patterns\n- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead\n",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "pattern": {
-                            "type": "string",
-                            "description": "The regular expression pattern to search for in file contents"
-                        },
-                        "path": {
-                            "type": "string",
-                            "description": "The directory to search in. Defaults to the current working directory."
-                        },
-                        "include": {
-                            "type": "string",
-                            "description": "File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")"
-                        }
-                    },
-                    "required": [
-                        "pattern"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "LS",
-                "description": "Lists files and directories in a given path. The path parameter must be an absolute path, not a relative path. You can optionally provide an array of glob patterns to ignore with the ignore parameter. You should generally prefer the Glob and Grep tools, if you know which directories to search.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The absolute path to the directory to list (must be absolute, not relative)"
-                        },
-                        "ignore": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            },
-                            "description": "List of glob patterns to ignore"
-                        }
-                    },
-                    "required": [
-                        "path"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "View",
-                "description": "Read a file from the local filesystem.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "The absolute path to the file to read"
-                        },
-                        "offset": {
-                            "type": "number",
-                            "description": "The line number to start reading from. Only provide if the file is too large to read at once"
-                        },
-                        "limit": {
-                            "type": "number",
-                            "description": "The number of lines to read. Only provide if the file is too large to read at once."
-                        }
-                    },
-                    "required": [
-                        "file_path"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "Edit",
-                "description": "A tool for editing files",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "The absolute path to the file to modify"
-                        },
-                        "old_string": {
-                            "type": "string",
-                            "description": "The text to replace"
-                        },
-                        "new_string": {
-                            "type": "string",
-                            "description": "The text to replace it with"
-                        },
-                        "expected_replacements": {
-                            "type": "number",
-                            "default": 1,
-                            "description": "The expected number of replacements to perform. Defaults to 1 if not specified."
-                        }
-                    },
-                    "required": [
-                        "file_path",
-                        "old_string",
-                        "new_string"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "Replace",
-                "description": "Write a file to the local filesystem.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "The absolute path to the file to write (must be absolute, not relative)"
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "The content to write to the file"
-                        }
-                    },
-                    "required": [
-                        "file_path",
-                        "content"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "ReadNotebook",
-                "description": "Extract and read source code from all code cells in a Jupyter notebook.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "notebook_path": {
-                            "type": "string",
-                            "description": "The absolute path to the Jupyter notebook file to read (must be absolute, not relative)"
-                        }
-                    },
-                    "required": [
-                        "notebook_path"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "NotebookEditCell",
-                "description": "Replace the contents of a specific cell in a Jupyter notebook.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "notebook_path": {
-                            "type": "string",
-                            "description": "The absolute path to the Jupyter notebook file to edit (must be absolute, not relative)"
-                        },
-                        "cell_number": {
-                            "type": "number",
-                            "description": "The index of the cell to edit (0-based)"
-                        },
-                        "new_source": {
-                            "type": "string",
-                            "description": "The new source for the cell"
-                        },
-                        "cell_type": {
-                            "type": "string",
-                            "enum": [
-                                "code",
-                                "markdown"
-                            ],
-                            "description": "The type of the cell (code or markdown). If not specified, it defaults to the current cell type. If using edit_mode=insert, this is required."
-                        },
-                        "edit_mode": {
-                            "type": "string",
-                            "description": "The type of edit to make (replace, insert, delete). Defaults to replace."
-                        }
-                    },
-                    "required": [
-                        "notebook_path",
-                        "cell_number",
-                        "new_source"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            },
-            {
-                "name": "WebFetchTool",
-                "description": "Claude wants to fetch content from this URL",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "format": "uri",
-                            "description": "The URL to fetch content from"
-                        },
-                        "prompt": {
-                            "type": "string",
-                            "description": "The prompt to run on the fetched content"
-                        }
-                    },
-                    "required": [
-                        "url",
-                        "prompt"
-                    ],
-                    "additionalProperties": false,
-                    "$schema": "http://json-schema.org/draft-07/schema#"
-                }
-            }
-        ]
-    }
-}
 ```

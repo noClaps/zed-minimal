@@ -1045,9 +1045,6 @@ impl InlineAssistant {
                         language_name: language_name.map(|name| name.to_proto()),
                     },
                     Some(self.telemetry.clone()),
-                    cx.http_client(),
-                    model.model.api_key(cx),
-                    cx.background_executor(),
                 );
             }
 

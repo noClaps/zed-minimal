@@ -139,7 +139,6 @@ dependencies = [
 name = "agent_settings"
 version = "0.1.0"
 dependencies = [
- "anthropic",
  "anyhow",
  "collections",
  "deepseek",
@@ -348,22 +347,6 @@ dependencies = [
  "anstyle",
  "once_cell",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "anthropic"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "futures 0.3.31",
- "http_client",
- "schemars",
- "serde",
- "serde_json",
- "strum 0.27.1",
- "thiserror 2.0.12",
- "workspace-hack",
 ]
 
 [[package]]
@@ -8809,7 +8792,6 @@ dependencies = [
 name = "language_model"
 version = "0.1.0"
 dependencies = [
- "anthropic",
  "anyhow",
  "base64 0.22.1",
  "client",
@@ -8836,7 +8818,6 @@ dependencies = [
 name = "language_models"
 version = "0.1.0"
 dependencies = [
- "anthropic",
  "anyhow",
  "aws-config",
  "aws-credential-types",
@@ -11140,14 +11121,6 @@ name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
-
-[[package]]
-name = "perplexity"
-version = "0.1.0"
-dependencies = [
- "serde",
- "zed_extension_api 0.6.0",
-]
 
 [[package]]
 name = "pest"
@@ -14587,13 +14560,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "slash_commands_example"
-version = "0.1.0"
-dependencies = [
- "zed_extension_api 0.1.0",
 ]
 
 [[package]]

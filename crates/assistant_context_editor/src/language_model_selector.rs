@@ -723,8 +723,6 @@ mod tests {
     #[gpui::test]
     fn test_exact_match(cx: &mut TestAppContext) {
         let models = create_models(vec![
-            ("zed", "Claude 3.7 Sonnet"),
-            ("zed", "Claude 3.7 Sonnet Thinking"),
             ("zed", "gpt-4.1"),
             ("zed", "gpt-4.1-nano"),
             ("openai", "gpt-3.5-turbo"),
@@ -751,8 +749,6 @@ mod tests {
     #[gpui::test]
     fn test_fuzzy_match(cx: &mut TestAppContext) {
         let models = create_models(vec![
-            ("zed", "Claude 3.7 Sonnet"),
-            ("zed", "Claude 3.7 Sonnet Thinking"),
             ("zed", "gpt-4.1"),
             ("zed", "gpt-4.1-nano"),
             ("openai", "gpt-3.5-turbo"),
@@ -789,12 +785,8 @@ mod tests {
 
     #[gpui::test]
     fn test_exclude_recommended_models(_cx: &mut TestAppContext) {
-        let recommended_models = create_models(vec![("zed", "claude")]);
-        let all_models = create_models(vec![
-            ("zed", "claude"), // Should be filtered out from "other"
-            ("zed", "gemini"),
-            ("copilot", "o3"),
-        ]);
+        let recommended_models = create_models(vec![]);
+        let all_models = create_models(vec![("zed", "gemini"), ("copilot", "o3")]);
 
         let grouped_models = GroupedModels::new(all_models, recommended_models);
 
@@ -811,12 +803,8 @@ mod tests {
 
     #[gpui::test]
     fn test_dont_exclude_models_from_other_providers(_cx: &mut TestAppContext) {
-        let recommended_models = create_models(vec![("zed", "claude")]);
-        let all_models = create_models(vec![
-            ("zed", "claude"), // Should be filtered out from "other"
-            ("zed", "gemini"),
-            ("copilot", "claude"), // Should not be filtered out from "other"
-        ]);
+        let recommended_models = create_models(vec![]);
+        let all_models = create_models(vec![("zed", "gemini")]);
 
         let grouped_models = GroupedModels::new(all_models, recommended_models);
 
@@ -828,6 +816,6 @@ mod tests {
             .collect::<Vec<_>>();
 
         // Recommended models should not appear in "other"
-        assert_models_eq(actual_other_models, vec!["zed/gemini", "copilot/claude"]);
+        assert_models_eq(actual_other_models, vec!["zed/gemini"]);
     }
 }

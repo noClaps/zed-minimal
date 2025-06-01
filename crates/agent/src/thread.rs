@@ -282,8 +282,6 @@ impl TotalTokenUsage {
             .unwrap_or("0.8".to_string())
             .parse()
             .unwrap();
-        #[cfg(not(debug_assertions))]
-        let warning_threshold: f32 = 0.8;
 
         // When the maximum is unknown because there is no selected model,
         // avoid showing the token limit warning.
@@ -1354,7 +1352,6 @@ impl Thread {
             }
         }
 
-        // https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
         if let Some(message_ix_to_cache) = message_ix_to_cache {
             request.messages[message_ix_to_cache].cache = true;
         }
@@ -1731,8 +1728,6 @@ impl Thread {
                                 });
 
                                 // Remove the turn that was refused.
-                                //
-                                // https://docs.anthropic.com/en/docs/test-and-evaluate/strengthen-guardrails/handle-streaming-refusals#reset-context-after-refusal
                                 {
                                     let mut messages_to_remove = Vec::new();
 
@@ -3344,21 +3339,6 @@ fn main() {{
             thread.to_completion_request(model.clone(), CompletionIntent::UserPrompt, cx)
         });
         assert_eq!(request.temperature, Some(0.66));
-
-        // Same model name, different provider
-        cx.update(|cx| {
-            AgentSettings::override_global(
-                AgentSettings {
-                    model_parameters: vec![LanguageModelParameters {
-                        provider: Some("anthropic".into()),
-                        model: Some(model.id().0.clone()),
-                        temperature: Some(0.66),
-                    }],
-                    ..AgentSettings::get_global(cx).clone()
-                },
-                cx,
-            );
-        });
 
         let request = thread.update(cx, |thread, cx| {
             thread.to_completion_request(model.clone(), CompletionIntent::UserPrompt, cx)

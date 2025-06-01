@@ -1,4 +1,4 @@
-//! This code was generated using Zed Agent with Claude Opus 4.
+//! This code was generated using Zed Agent.
 
 use gpui_macros::derive_inspector_reflection;
 

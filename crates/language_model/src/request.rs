@@ -6,8 +6,7 @@ use crate::{LanguageModelToolUse, LanguageModelToolUseId};
 use anyhow::Result;
 use base64::write::EncoderWriter;
 use gpui::{
-    App, AppContext as _, DevicePixels, Image, ImageFormat, ObjectFit, SharedString, Size, Task,
-    point, px, size,
+    App, AppContext as _, DevicePixels, Image, ImageFormat, SharedString, Size, Task, size,
 };
 use image::codecs::png::PngEncoder;
 use serde::{Deserialize, Serialize};
@@ -75,9 +74,6 @@ impl std::fmt::Debug for LanguageModelImage {
     }
 }
 
-/// Anthropic wants uploaded images to be smaller than this in both dimensions.
-const ANTHROPIC_SIZE_LIMT: f32 = 1568.;
-
 impl LanguageModelImage {
     pub fn empty() -> Self {
         Self {
@@ -106,29 +102,7 @@ impl LanguageModelImage {
             let height = dynamic_image.height();
             let image_size = size(DevicePixels(width as i32), DevicePixels(height as i32));
 
-            let base64_image = {
-                if image_size.width.0 > ANTHROPIC_SIZE_LIMT as i32
-                    || image_size.height.0 > ANTHROPIC_SIZE_LIMT as i32
-                {
-                    let new_bounds = ObjectFit::ScaleDown.get_bounds(
-                        gpui::Bounds {
-                            origin: point(px(0.0), px(0.0)),
-                            size: size(px(ANTHROPIC_SIZE_LIMT), px(ANTHROPIC_SIZE_LIMT)),
-                        },
-                        image_size,
-                    );
-                    let resized_image = dynamic_image.resize(
-                        new_bounds.size.width.0 as u32,
-                        new_bounds.size.height.0 as u32,
-                        image::imageops::FilterType::Triangle,
-                    );
-
-                    encode_as_base64(data, resized_image)
-                } else {
-                    encode_as_base64(data, dynamic_image)
-                }
-            }
-            .log_err()?;
+            let base64_image = encode_as_base64(data, dynamic_image).log_err()?;
 
             // SAFETY: The base64 encoder should not produce non-UTF8.
             let source = unsafe { String::from_utf8_unchecked(base64_image) };
@@ -144,9 +118,6 @@ impl LanguageModelImage {
         let width = self.size.width.0.unsigned_abs() as usize;
         let height = self.size.height.0.unsigned_abs() as usize;
 
-        // From: https://docs.anthropic.com/en/docs/build-with-claude/vision#calculate-image-costs
-        // Note that are a lot of conditions on Anthropic's API, and OpenAI doesn't use this,
-        // so this method is more of a rough guess.
         (width * height) / 750
     }
 

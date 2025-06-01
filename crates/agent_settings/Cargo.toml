@@ -12,7 +12,6 @@ workspace = true
 path = "src/agent_settings.rs"
 
 [dependencies]
-anthropic = { workspace = true, features = ["schemars"] }
 anyhow.workspace = true
 collections.workspace = true
 gpui.workspace = true

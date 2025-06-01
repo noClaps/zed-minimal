@@ -39,8 +39,6 @@ impl TerminalCodegen {
             return;
         };
 
-        let model_api_key = model.api_key(cx);
-        let http_client = cx.http_client();
         let telemetry = self.telemetry.clone();
         self.status = CodegenStatus::Pending;
         self.transaction = Some(TerminalTransaction::start(self.terminal.clone()));
@@ -59,7 +57,6 @@ impl TerminalCodegen {
 
                 let task = cx.background_spawn({
                     let message_id = message_id.clone();
-                    let executor = cx.background_executor().clone();
                     async move {
                         let mut response_latency = None;
                         let request_start = Instant::now();
@@ -92,9 +89,6 @@ impl TerminalCodegen {
                                 language_name: None,
                             },
                             telemetry,
-                            http_client,
-                            model_api_key,
-                            &executor,
                         );
 
                         result?;
@@ -162,8 +156,6 @@ pub enum CodegenEvent {
 
 #[cfg(not(target_os = "windows"))]
 pub const CLEAR_INPUT: &str = "\x15";
-#[cfg(target_os = "windows")]
-pub const CLEAR_INPUT: &str = "\x03";
 const CARRIAGE_RETURN: &str = "\x0d";
 
 struct TerminalTransaction {

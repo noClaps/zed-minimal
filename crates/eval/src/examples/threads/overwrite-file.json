@@ -52,7 +52,7 @@
       "role": "assistant",
       "segments": [
         {
-          "text": "I'll help you write unit tests for the fuzzy search functionality in the language model selector. I see that you want to test the fuzzy search with the models shown in the images - both Claude models (3, 3.5, 3.7) and GPT models (GPT-3.5, GPT-4, GPT-4o, etc.).\n\nLet's start by examining the code structure to understand how the fuzzy search works.",
+          "text": "I'll help you write unit tests for the fuzzy search functionality in the language model selector. I see that you want to test the fuzzy search with the models shown in the images - GPT models (GPT-3.5, GPT-4, GPT-4o, etc.).\n\nLet's start by examining the code structure to understand how the fuzzy search works.",
           "type": "text"
         }
       ],
@@ -208,10 +208,6 @@
       "tool_uses": []
     }
   ],
-  "model": {
-    "model": "claude-3-7-sonnet-latest",
-    "provider": "zed.dev"
-  },
   "profile": "Write",
   "request_token_usage": [
     {

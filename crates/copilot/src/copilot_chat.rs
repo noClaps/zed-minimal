@@ -109,7 +109,6 @@ pub enum ModelVendor {
     #[serde(alias = "Azure OpenAI")]
     OpenAI,
     Google,
-    Anthropic,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -691,41 +690,6 @@ mod tests {
                 {
                     "some-unknown-field": 123
                 },
-                {
-                  "capabilities": {
-                    "family": "claude-3.7-sonnet",
-                    "limits": {
-                      "max_context_window_tokens": 200000,
-                      "max_output_tokens": 16384,
-                      "max_prompt_tokens": 90000,
-                      "vision": {
-                        "max_prompt_image_size": 3145728,
-                        "max_prompt_images": 1,
-                        "supported_media_types": ["image/jpeg", "image/png", "image/webp"]
-                      }
-                    },
-                    "object": "model_capabilities",
-                    "supports": {
-                      "parallel_tool_calls": true,
-                      "streaming": true,
-                      "tool_calls": true,
-                      "vision": true
-                    },
-                    "tokenizer": "o200k_base",
-                    "type": "chat"
-                  },
-                  "id": "claude-3.7-sonnet",
-                  "model_picker_enabled": true,
-                  "name": "Claude 3.7 Sonnet",
-                  "object": "model",
-                  "policy": {
-                    "state": "enabled",
-                    "terms": "Enable access to the latest Claude 3.7 Sonnet model from Anthropic. [Learn more about how GitHub Copilot serves Claude 3.7 Sonnet](https://docs.github.com/copilot/using-github-copilot/using-claude-sonnet-in-github-copilot)."
-                  },
-                  "preview": false,
-                  "vendor": "Anthropic",
-                  "version": "claude-3.7-sonnet"
-                }
               ],
               "object": "list"
             }"#;
@@ -734,6 +698,5 @@ mod tests {
 
         assert_eq!(schema.data.len(), 2);
         assert_eq!(schema.data[0].id, "gpt-4");
-        assert_eq!(schema.data[1].id, "claude-3.7-sonnet");
     }
 }
