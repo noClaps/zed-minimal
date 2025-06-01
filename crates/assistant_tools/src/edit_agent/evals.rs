@@ -38,7 +38,6 @@ fn eval_extract_handle_command_output() {
     //
     // Model                       | Pass rate
     // ----------------------------|----------
-    // claude-3.7-sonnet           |  0.98
     // gemini-2.5-pro              |  0.86
     // gemini-2.5-flash            |  0.11
     // gpt-4.1                     |  1.00
@@ -168,7 +167,6 @@ fn eval_translate_doc_comments() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |
     //  gemini-2.5-pro-preview-03-25   |  1.0
     //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
@@ -230,7 +228,6 @@ fn eval_use_wasi_sdk_in_compile_parser_to_wasm() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |  0.98
     //  gemini-2.5-pro-preview-03-25   |  0.99
     //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
@@ -355,7 +352,6 @@ fn eval_disable_cursor_blinking() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |
     //  gemini-2.5-pro-preview-03-25   |  1.0
     //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
@@ -438,7 +434,6 @@ fn eval_from_pixels_constructor() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |
     //  gemini-2.5-pro-preview-03-25   |  0.94
     //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
@@ -638,7 +633,6 @@ fn eval_zode() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |  1.0
     //  gemini-2.5-pro-preview-03-25   |  1.0
     //  gemini-2.5-flash-preview-04-17 |  1.0
     //  gpt-4.1                        |  1.0
@@ -744,7 +738,6 @@ fn eval_add_overwrite_test() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |  0.16
     //  gemini-2.5-pro-preview-03-25   |  0.35
     //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
@@ -979,7 +972,6 @@ fn eval_create_empty_file() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  claude-3.7-sonnet              |  1.00
     //  gemini-2.5-pro-preview-03-25   |  1.00
     //  gemini-2.5-flash-preview-04-17 |  1.00
     //  gpt-4.1                        |  1.00
@@ -1441,16 +1433,10 @@ impl EditAgentTest {
 
         fs.insert_tree("/root", json!({})).await;
         let project = Project::test(fs.clone(), [path!("/root").as_ref()], cx).await;
-        let agent_model = SelectedModel::from_str(
-            &std::env::var("ZED_AGENT_MODEL")
-                .unwrap_or("anthropic/claude-3-7-sonnet-latest".into()),
-        )
-        .unwrap();
-        let judge_model = SelectedModel::from_str(
-            &std::env::var("ZED_JUDGE_MODEL")
-                .unwrap_or("anthropic/claude-3-7-sonnet-latest".into()),
-        )
-        .unwrap();
+        let agent_model =
+            SelectedModel::from_str(&std::env::var("ZED_AGENT_MODEL").unwrap()).unwrap();
+        let judge_model =
+            SelectedModel::from_str(&std::env::var("ZED_JUDGE_MODEL").unwrap()).unwrap();
         let (agent_model, judge_model) = cx
             .update(|cx| {
                 cx.spawn(async move |cx| {

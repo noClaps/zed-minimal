@@ -47,10 +47,10 @@ struct Args {
     #[arg(value_name = "EXAMPLE_SUBSTRING")]
     filter: Vec<String>,
     /// provider/model to use for agent
-    #[arg(long, default_value = "anthropic/claude-3-7-sonnet-latest")]
+    #[arg(long)]
     model: String,
     /// provider/model to use for judges
-    #[arg(long, default_value = "anthropic/claude-3-7-sonnet-latest")]
+    #[arg(long)]
     judge_model: String,
     #[arg(long, value_delimiter = ',', default_value = "rs,ts,py")]
     languages: Vec<String>,

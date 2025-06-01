@@ -22,10 +22,6 @@ async fn test_initialize_providers(db: &mut LlmDatabase) {
 
     assert_eq!(
         providers,
-        &[
-            LanguageModelProvider::Anthropic,
-            LanguageModelProvider::Google,
-            LanguageModelProvider::OpenAi,
-        ]
+        &[LanguageModelProvider::Google, LanguageModelProvider::OpenAi,]
     )
 }

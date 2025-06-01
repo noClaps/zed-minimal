@@ -129,16 +129,6 @@ spec:
                 secretKeyRef:
                   name: openai
                   key: api_key
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: anthropic
-                  key: api_key
-            - name: ANTHROPIC_STAFF_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: anthropic
-                  key: staff_api_key
             - name: LLM_CLOSED_BETA_MODEL_NAME
               valueFrom:
                 secretKeyRef:

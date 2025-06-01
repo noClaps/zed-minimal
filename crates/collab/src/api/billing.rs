@@ -5,7 +5,6 @@ use axum::{
     routing::{get, post},
 };
 use chrono::{DateTime, SecondsFormat, Utc};
-use collections::HashSet;
 use reqwest::StatusCode;
 use sea_orm::ActiveValue;
 use serde::{Deserialize, Serialize};
@@ -26,6 +25,11 @@ use crate::api::events::SnowflakeRow;
 use crate::db::billing_subscription::{
     StripeCancellationReason, StripeSubscriptionStatus, SubscriptionKind,
 };
+use crate::db::{
+    BillingSubscriptionId, CreateBillingCustomerParams, CreateBillingSubscriptionParams,
+    CreateProcessedStripeEventParams, UpdateBillingCustomerParams, UpdateBillingPreferencesParams,
+    UpdateBillingSubscriptionParams, billing_customer,
+};
 use crate::llm::db::subscription_usage_meter::CompletionMode;
 use crate::llm::{AGENT_EXTENDED_TRIAL_FEATURE_FLAG, DEFAULT_MAX_MONTHLY_SPEND};
 use crate::rpc::{ResultExt as _, Server};
@@ -34,15 +38,6 @@ use crate::stripe_client::{
     StripeSubscriptionId,
 };
 use crate::{AppState, Error, Result};
-use crate::{db::UserId, llm::db::LlmDatabase};
-use crate::{
-    db::{
-        BillingSubscriptionId, CreateBillingCustomerParams, CreateBillingSubscriptionParams,
-        CreateProcessedStripeEventParams, UpdateBillingCustomerParams,
-        UpdateBillingPreferencesParams, UpdateBillingSubscriptionParams, billing_customer,
-    },
-    stripe_billing::StripeBilling,
-};
 
 pub fn router() -> Router {
     Router::new()
@@ -1342,141 +1337,4 @@ pub async fn find_or_create_billing_customer(
         .await?;
 
     Ok(Some(billing_customer))
-}
-
-const SYNC_LLM_REQUEST_USAGE_WITH_STRIPE_INTERVAL: Duration = Duration::from_secs(60);
-
-pub fn sync_llm_request_usage_with_stripe_periodically(app: Arc<AppState>) {
-    let Some(stripe_billing) = app.stripe_billing.clone() else {
-        log::warn!("failed to retrieve Stripe billing object");
-        return;
-    };
-    let Some(llm_db) = app.llm_db.clone() else {
-        log::warn!("failed to retrieve LLM database");
-        return;
-    };
-
-    let executor = app.executor.clone();
-    executor.spawn_detached({
-        let executor = executor.clone();
-        async move {
-            loop {
-                sync_model_request_usage_with_stripe(&app, &llm_db, &stripe_billing)
-                    .await
-                    .context("failed to sync LLM request usage to Stripe")
-                    .trace_err();
-                executor
-                    .sleep(SYNC_LLM_REQUEST_USAGE_WITH_STRIPE_INTERVAL)
-                    .await;
-            }
-        }
-    });
-}
-
-async fn sync_model_request_usage_with_stripe(
-    app: &Arc<AppState>,
-    llm_db: &Arc<LlmDatabase>,
-    stripe_billing: &Arc<StripeBilling>,
-) -> anyhow::Result<()> {
-    let staff_users = app.db.get_staff_users().await?;
-    let staff_user_ids = staff_users
-        .iter()
-        .map(|user| user.id)
-        .collect::<HashSet<UserId>>();
-
-    let usage_meters = llm_db
-        .get_current_subscription_usage_meters(Utc::now())
-        .await?;
-    let usage_meters = usage_meters
-        .into_iter()
-        .filter(|(_, usage)| !staff_user_ids.contains(&usage.user_id))
-        .collect::<Vec<_>>();
-    let user_ids = usage_meters
-        .iter()
-        .map(|(_, usage)| usage.user_id)
-        .collect::<HashSet<UserId>>();
-    let billing_subscriptions = app
-        .db
-        .get_active_zed_pro_billing_subscriptions(user_ids)
-        .await?;
-
-    let claude_sonnet_4 = stripe_billing
-        .find_price_by_lookup_key("claude-sonnet-4-requests")
-        .await?;
-    let claude_sonnet_4_max = stripe_billing
-        .find_price_by_lookup_key("claude-sonnet-4-requests-max")
-        .await?;
-    let claude_opus_4 = stripe_billing
-        .find_price_by_lookup_key("claude-opus-4-requests")
-        .await?;
-    let claude_opus_4_max = stripe_billing
-        .find_price_by_lookup_key("claude-opus-4-requests-max")
-        .await?;
-    let claude_3_5_sonnet = stripe_billing
-        .find_price_by_lookup_key("claude-3-5-sonnet-requests")
-        .await?;
-    let claude_3_7_sonnet = stripe_billing
-        .find_price_by_lookup_key("claude-3-7-sonnet-requests")
-        .await?;
-    let claude_3_7_sonnet_max = stripe_billing
-        .find_price_by_lookup_key("claude-3-7-sonnet-requests-max")
-        .await?;
-
-    for (usage_meter, usage) in usage_meters {
-        maybe!(async {
-            let Some((billing_customer, billing_subscription)) =
-                billing_subscriptions.get(&usage.user_id)
-            else {
-                bail!(
-                    "Attempted to sync usage meter for user who is not a Stripe customer: {}",
-                    usage.user_id
-                );
-            };
-
-            let stripe_customer_id =
-                StripeCustomerId(billing_customer.stripe_customer_id.clone().into());
-            let stripe_subscription_id =
-                StripeSubscriptionId(billing_subscription.stripe_subscription_id.clone().into());
-
-            let model = llm_db.model_by_id(usage_meter.model_id)?;
-
-            let (price, meter_event_name) = match model.name.as_str() {
-                "claude-opus-4" => match usage_meter.mode {
-                    CompletionMode::Normal => (&claude_opus_4, "claude_opus_4/requests"),
-                    CompletionMode::Max => (&claude_opus_4_max, "claude_opus_4/requests/max"),
-                },
-                "claude-sonnet-4" => match usage_meter.mode {
-                    CompletionMode::Normal => (&claude_sonnet_4, "claude_sonnet_4/requests"),
-                    CompletionMode::Max => (&claude_sonnet_4_max, "claude_sonnet_4/requests/max"),
-                },
-                "claude-3-5-sonnet" => (&claude_3_5_sonnet, "claude_3_5_sonnet/requests"),
-                "claude-3-7-sonnet" => match usage_meter.mode {
-                    CompletionMode::Normal => (&claude_3_7_sonnet, "claude_3_7_sonnet/requests"),
-                    CompletionMode::Max => {
-                        (&claude_3_7_sonnet_max, "claude_3_7_sonnet/requests/max")
-                    }
-                },
-                model_name => {
-                    bail!("Attempted to sync usage meter for unsupported model: {model_name:?}")
-                }
-            };
-
-            stripe_billing
-                .subscribe_to_price(&stripe_subscription_id, price)
-                .await?;
-            stripe_billing
-                .bill_model_request_usage(
-                    &stripe_customer_id,
-                    meter_event_name,
-                    usage_meter.requests,
-                )
-                .await?;
-
-            Ok(())
-        })
-        .await
-        .log_err();
-    }
-
-    Ok(())
 }
