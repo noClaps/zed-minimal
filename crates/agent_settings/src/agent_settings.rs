@@ -7,7 +7,6 @@ use anyhow::{Result, bail};
 use collections::IndexMap;
 use gpui::{App, Pixels, SharedString};
 use language_model::LanguageModel;
-use mistral::Model as MistralModel;
 use schemars::{JsonSchema, schema::Schema};
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsSources};
@@ -55,11 +54,6 @@ pub enum AgentProviderContentV1 {
         default_model: Option<OpenAiModel>,
         api_url: Option<String>,
         available_models: Option<Vec<OpenAiModel>>,
-    },
-    #[serde(rename = "mistral")]
-    Mistral {
-        default_model: Option<MistralModel>,
-        api_url: Option<String>,
     },
 }
 
@@ -211,11 +205,6 @@ impl AgentSettingsContent {
                             AgentProviderContentV1::OpenAi { default_model, .. } => default_model
                                 .map(|model| LanguageModelSelection {
                                     provider: "openai".into(),
-                                    model: model.id().to_string(),
-                                }),
-                            AgentProviderContentV1::Mistral { default_model, .. } => default_model
-                                .map(|model| LanguageModelSelection {
-                                    provider: "mistral".into(),
                                     model: model.id().to_string(),
                                 }),
                         }),
@@ -626,7 +615,6 @@ impl JsonSchema for LanguageModelProviderSetting {
                 "openai".into(),
                 "zed.dev".into(),
                 "copilot_chat".into(),
-                "mistral".into(),
             ]),
             ..Default::default()
         }
