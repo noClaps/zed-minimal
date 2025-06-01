@@ -11,7 +11,6 @@ use crate::provider::{
     self,
     cloud::{self, ZedDotDevSettings},
     copilot_chat::CopilotChatSettings,
-    google::GoogleSettings,
     mistral::MistralSettings,
     open_ai::OpenAiSettings,
 };
@@ -39,7 +38,6 @@ pub fn init(fs: Arc<dyn Fs>, cx: &mut App) {
 pub struct AllLanguageModelSettings {
     pub openai: OpenAiSettings,
     pub zed_dot_dev: ZedDotDevSettings,
-    pub google: GoogleSettings,
     pub copilot_chat: CopilotChatSettings,
     pub mistral: MistralSettings,
 }
@@ -49,7 +47,6 @@ pub struct AllLanguageModelSettingsContent {
     pub openai: Option<OpenAiSettingsContent>,
     #[serde(rename = "zed.dev")]
     pub zed_dot_dev: Option<ZedDotDevSettingsContent>,
-    pub google: Option<GoogleSettingsContent>,
     pub copilot_chat: Option<CopilotChatSettingsContent>,
     pub mistral: Option<MistralSettingsContent>,
 }
@@ -124,12 +121,6 @@ pub struct OpenAiSettingsContentV1 {
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct GoogleSettingsContent {
-    pub api_url: Option<String>,
-    pub available_models: Option<Vec<provider::google::AvailableModel>>,
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ZedDotDevSettingsContent {
     available_models: Option<Vec<cloud::AvailableModel>>,
 }
@@ -176,17 +167,6 @@ impl settings::Settings for AllLanguageModelSettings {
                 &mut settings.zed_dot_dev.available_models,
                 value
                     .zed_dot_dev
-                    .as_ref()
-                    .and_then(|s| s.available_models.clone()),
-            );
-            merge(
-                &mut settings.google.api_url,
-                value.google.as_ref().and_then(|s| s.api_url.clone()),
-            );
-            merge(
-                &mut settings.google.available_models,
-                value
-                    .google
                     .as_ref()
                     .and_then(|s| s.available_models.clone()),
             );

@@ -623,7 +623,6 @@ impl JsonSchema for LanguageModelProviderSetting {
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> Schema {
         schemars::schema::SchemaObject {
             enum_values: Some(vec![
-                "google".into(),
                 "openai".into(),
                 "zed.dev".into(),
                 "copilot_chat".into(),

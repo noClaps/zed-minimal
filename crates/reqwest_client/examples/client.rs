@@ -14,7 +14,6 @@ fn main() {
             let client = ReqwestClient::new();
             let start = Instant::now();
             let requests = [
-                client.get("https://www.google.com/", AsyncBody::empty(), true),
                 client.get("https://zed.dev/", AsyncBody::empty(), true),
                 client.get("https://docs.rs/", AsyncBody::empty(), true),
             ];

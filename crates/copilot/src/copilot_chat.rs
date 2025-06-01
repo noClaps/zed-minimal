@@ -108,7 +108,6 @@ pub enum ModelVendor {
     // Azure OpenAI should have no functional difference from OpenAI in Copilot Chat
     #[serde(alias = "Azure OpenAI")]
     OpenAI,
-    Google,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]

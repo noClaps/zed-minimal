@@ -90,7 +90,7 @@ pub enum LanguageModelCompletionError {
 pub enum LanguageModelToolSchemaFormat {
     /// A JSON schema, see https://json-schema.org
     JsonSchema,
-    /// A subset of an OpenAPI 3.0 schema object supported by Google AI, see https://ai.google.dev/api/caching#Schema
+    /// A subset of an OpenAPI 3.0 schema object supported
     JsonSchemaSubset,
 }
 

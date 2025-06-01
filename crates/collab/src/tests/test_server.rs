@@ -550,7 +550,6 @@ impl TestServer {
                 blob_store_secret_key: None,
                 blob_store_bucket: None,
                 openai_api_key: None,
-                google_ai_api_key: None,
                 llm_closed_beta_model_name: None,
                 prediction_api_url: None,
                 prediction_api_key: None,

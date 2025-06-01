@@ -34,13 +34,12 @@ use ui::{TintColor, prelude::*};
 use util::{ResultExt as _, maybe};
 use zed_llm_client::{
     CLIENT_SUPPORTS_STATUS_MESSAGES_HEADER_NAME, CURRENT_PLAN_HEADER_NAME, CompletionBody,
-    CompletionRequestStatus, CountTokensBody, CountTokensResponse, EXPIRED_LLM_TOKEN_HEADER_NAME,
-    ListModelsResponse, MODEL_REQUESTS_RESOURCE_HEADER_VALUE,
-    SERVER_SUPPORTS_STATUS_MESSAGES_HEADER_NAME, SUBSCRIPTION_LIMIT_RESOURCE_HEADER_NAME,
-    TOOL_USE_LIMIT_REACHED_HEADER_NAME, ZED_VERSION_HEADER_NAME,
+    CompletionRequestStatus, EXPIRED_LLM_TOKEN_HEADER_NAME, ListModelsResponse,
+    MODEL_REQUESTS_RESOURCE_HEADER_VALUE, SERVER_SUPPORTS_STATUS_MESSAGES_HEADER_NAME,
+    SUBSCRIPTION_LIMIT_RESOURCE_HEADER_NAME, TOOL_USE_LIMIT_REACHED_HEADER_NAME,
+    ZED_VERSION_HEADER_NAME,
 };
 
-use crate::provider::google::{GoogleEventMapper, into_google};
 use crate::provider::open_ai::{OpenAiEventMapper, count_open_ai_tokens, into_open_ai};
 
 pub const PROVIDER_NAME: &str = "Zed";
@@ -54,7 +53,6 @@ pub struct ZedDotDevSettings {
 #[serde(rename_all = "lowercase")]
 pub enum AvailableProvider {
     OpenAi,
-    Google,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -694,9 +692,6 @@ impl LanguageModel for CloudLanguageModel {
             zed_llm_client::LanguageModelProvider::OpenAi => {
                 LanguageModelToolSchemaFormat::JsonSchema
             }
-            zed_llm_client::LanguageModelProvider::Google => {
-                LanguageModelToolSchemaFormat::JsonSchemaSubset
-            }
             _ => unreachable!(),
         }
     }
@@ -707,8 +702,7 @@ impl LanguageModel for CloudLanguageModel {
 
     fn cache_configuration(&self) -> Option<LanguageModelCacheConfiguration> {
         match &self.model.provider {
-            zed_llm_client::LanguageModelProvider::OpenAi
-            | zed_llm_client::LanguageModelProvider::Google => None,
+            zed_llm_client::LanguageModelProvider::OpenAi => None,
             _ => unreachable!(),
         }
     }
@@ -725,54 +719,6 @@ impl LanguageModel for CloudLanguageModel {
                     Err(err) => return async move { Err(anyhow!(err)) }.boxed(),
                 };
                 count_open_ai_tokens(request, model, cx)
-            }
-            zed_llm_client::LanguageModelProvider::Google => {
-                let client = self.client.clone();
-                let llm_api_token = self.llm_api_token.clone();
-                let model_id = self.model.id.to_string();
-                let generate_content_request = into_google(request, model_id.clone());
-                async move {
-                    let http_client = &client.http_client();
-                    let token = llm_api_token.acquire(&client).await?;
-
-                    let request_body = CountTokensBody {
-                        provider: zed_llm_client::LanguageModelProvider::Google,
-                        model: model_id,
-                        provider_request: serde_json::to_value(&google_ai::CountTokensRequest {
-                            generate_content_request,
-                        })?,
-                    };
-                    let request = http_client::Request::builder()
-                        .method(Method::POST)
-                        .uri(
-                            http_client
-                                .build_zed_llm_url("/count_tokens", &[])?
-                                .as_ref(),
-                        )
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", format!("Bearer {token}"))
-                        .body(serde_json::to_string(&request_body)?.into())?;
-                    let mut response = http_client.send(request).await?;
-                    let status = response.status();
-                    let mut response_body = String::new();
-                    response
-                        .body_mut()
-                        .read_to_string(&mut response_body)
-                        .await?;
-
-                    if status.is_success() {
-                        let response_body: CountTokensResponse =
-                            serde_json::from_str(&response_body)?;
-
-                        Ok(response_body.tokens)
-                    } else {
-                        Err(anyhow!(ApiError {
-                            status,
-                            body: response_body
-                        }))
-                    }
-                }
-                .boxed()
             }
             _ => unreachable!(),
         }
@@ -825,44 +771,6 @@ impl LanguageModel for CloudLanguageModel {
                     .await?;
 
                     let mut mapper = OpenAiEventMapper::new();
-                    Ok(map_cloud_completion_events(
-                        Box::pin(
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
-                        ),
-                        move |event| mapper.map_event(event),
-                    ))
-                });
-                async move { Ok(future.await?.boxed()) }.boxed()
-            }
-            zed_llm_client::LanguageModelProvider::Google => {
-                let client = self.client.clone();
-                let request = into_google(request, self.model.id.to_string());
-                let llm_api_token = self.llm_api_token.clone();
-                let future = self.request_limiter.stream(async move {
-                    let PerformLlmCompletionResponse {
-                        response,
-                        usage,
-                        includes_status_messages,
-                        tool_use_limit_reached,
-                    } = Self::perform_llm_completion(
-                        client.clone(),
-                        llm_api_token,
-                        app_version,
-                        CompletionBody {
-                            thread_id,
-                            prompt_id,
-                            intent,
-                            mode,
-                            provider: zed_llm_client::LanguageModelProvider::Google,
-                            model: request.model.model_id.clone(),
-                            provider_request: serde_json::to_value(&request)?,
-                        },
-                    )
-                    .await?;
-
-                    let mut mapper = GoogleEventMapper::new();
                     Ok(map_cloud_completion_events(
                         Box::pin(
                             response_lines(response, includes_status_messages)

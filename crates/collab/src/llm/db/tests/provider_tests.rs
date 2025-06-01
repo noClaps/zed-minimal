@@ -20,8 +20,5 @@ async fn test_initialize_providers(db: &mut LlmDatabase) {
 
     let providers = db.list_providers().await.unwrap();
 
-    assert_eq!(
-        providers,
-        &[LanguageModelProvider::Google, LanguageModelProvider::OpenAi,]
-    )
+    assert_eq!(providers, &[LanguageModelProvider::OpenAi,])
 }

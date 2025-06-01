@@ -1581,9 +1581,6 @@
   },
   // Different settings for specific language models.
   "language_models": {
-    "google": {
-      "api_url": "https://generativelanguage.googleapis.com"
-    },
     "openai": {
       "version": "1",
       "api_url": "https://api.openai.com/v1"
