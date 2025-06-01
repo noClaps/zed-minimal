@@ -143,7 +143,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "collections",
- "deepseek",
  "fs",
  "gpui",
  "indexmap",
@@ -4240,19 +4239,6 @@ dependencies = [
  "workspace-hack",
  "zed_actions",
  "zlog",
-]
-
-[[package]]
-name = "deepseek"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.31",
- "http_client",
- "schemars",
- "serde",
- "serde_json",
- "workspace-hack",
 ]
 
 [[package]]
@@ -8828,7 +8814,6 @@ dependencies = [
  "collections",
  "copilot",
  "credentials_provider",
- "deepseek",
  "editor",
  "fs",
  "futures 0.3.31",
