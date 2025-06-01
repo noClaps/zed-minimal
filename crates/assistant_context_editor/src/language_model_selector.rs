@@ -183,8 +183,8 @@ impl LanguageModelPickerDelegate {
                         // that we know are safe to ignore here, like what we do
                         // with `CredentialsNotFound` above.
                         match provider_id.0.as_ref() {
-                            "lmstudio" | "ollama" => {
-                                // LM Studio and Ollama both make fetch requests to the local APIs to determine if they are "authenticated".
+                            "lmstudio" => {
+                                // LM Studio makes fetch requests to the local APIs to determine if it is "authenticated".
                                 //
                                 // These fail noisily, so we don't log them.
                             }
@@ -728,8 +728,6 @@ mod tests {
             ("openai", "gpt-3.5-turbo"),
             ("openai", "gpt-4.1"),
             ("openai", "gpt-4.1-nano"),
-            ("ollama", "mistral"),
-            ("ollama", "deepseek"),
         ]);
         let matcher = ModelMatcher::new(models, cx.background_executor.clone());
 
@@ -754,8 +752,6 @@ mod tests {
             ("openai", "gpt-3.5-turbo"),
             ("openai", "gpt-4.1"),
             ("openai", "gpt-4.1-nano"),
-            ("ollama", "mistral"),
-            ("ollama", "deepseek"),
         ]);
         let matcher = ModelMatcher::new(models, cx.background_executor.clone());
 
@@ -773,10 +769,6 @@ mod tests {
                 "openai/gpt-4.1-nano",
             ],
         );
-
-        // Model provider should be searchable as well
-        let results = matcher.fuzzy_search("ol"); // meaning "ollama"
-        assert_models_eq(results, vec!["ollama/mistral", "ollama/deepseek"]);
 
         // Fuzzy search
         let results = matcher.fuzzy_search("z4n");

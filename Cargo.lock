@@ -149,7 +149,6 @@ dependencies = [
  "lmstudio",
  "log",
  "mistral",
- "ollama",
  "open_ai",
  "paths",
  "schemars",
@@ -8840,7 +8839,6 @@ dependencies = [
  "log",
  "menu",
  "mistral",
- "ollama",
  "open_ai",
  "partial-json-fixer",
  "project",
@@ -10599,19 +10597,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8bb09a4a2b1d668170cfe0a7d5bc103f8999fb316c98099b6a9939c9f2e79d"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "ollama"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.31",
- "http_client",
- "schemars",
- "serde",
- "serde_json",
- "workspace-hack",
 ]
 
 [[package]]
