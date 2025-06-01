@@ -1312,32 +1312,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aws-sdk-bedrockruntime"
-version = "1.82.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cb95f77abd4321348dd2f52a25e1de199732f54d2a35860ad20f5df21c66b44"
-dependencies = [
- "aws-credential-types",
- "aws-runtime",
- "aws-sigv4",
- "aws-smithy-async",
- "aws-smithy-eventstream",
- "aws-smithy-http",
- "aws-smithy-json",
- "aws-smithy-runtime",
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "aws-types",
- "bytes 1.10.1",
- "fastrand 2.3.0",
- "http 0.2.12",
- "hyper 0.14.32",
- "once_cell",
- "regex-lite",
- "tracing",
-]
-
-[[package]]
 name = "aws-sdk-kinesis"
 version = "1.66.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1849,23 +1823,6 @@ name = "base64ct"
 version = "1.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89e25b6adfb930f02d1981565a6e5d9c547ac15a96606256d3b59040e5cd4ca3"
-
-[[package]]
-name = "bedrock"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "aws-sdk-bedrockruntime",
- "aws-smithy-types",
- "futures 0.3.31",
- "schemars",
- "serde",
- "serde_json",
- "strum 0.27.1",
- "thiserror 2.0.12",
- "tokio",
- "workspace-hack",
-]
 
 [[package]]
 name = "beef"
@@ -8809,7 +8766,6 @@ dependencies = [
  "aws-config",
  "aws-credential-types",
  "aws_http_client",
- "bedrock",
  "client",
  "collections",
  "copilot",
