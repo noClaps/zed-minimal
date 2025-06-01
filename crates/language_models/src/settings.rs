@@ -9,7 +9,6 @@ use settings::{Settings, SettingsSources, update_settings_file};
 
 use crate::provider::{
     self,
-    bedrock::AmazonBedrockSettings,
     cloud::{self, ZedDotDevSettings},
     copilot_chat::CopilotChatSettings,
     google::GoogleSettings,
@@ -39,7 +38,6 @@ pub fn init(fs: Arc<dyn Fs>, cx: &mut App) {
 
 #[derive(Default)]
 pub struct AllLanguageModelSettings {
-    pub bedrock: AmazonBedrockSettings,
     pub openai: OpenAiSettings,
     pub zed_dot_dev: ZedDotDevSettings,
     pub google: GoogleSettings,
@@ -50,7 +48,6 @@ pub struct AllLanguageModelSettings {
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct AllLanguageModelSettingsContent {
-    pub bedrock: Option<AmazonBedrockSettingsContent>,
     pub lmstudio: Option<LmStudioSettingsContent>,
     pub openai: Option<OpenAiSettingsContent>,
     #[serde(rename = "zed.dev")]
@@ -58,15 +55,6 @@ pub struct AllLanguageModelSettingsContent {
     pub google: Option<GoogleSettingsContent>,
     pub copilot_chat: Option<CopilotChatSettingsContent>,
     pub mistral: Option<MistralSettingsContent>,
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct AmazonBedrockSettingsContent {
-    available_models: Option<Vec<provider::bedrock::AvailableModel>>,
-    endpoint_url: Option<String>,
-    region: Option<String>,
-    profile: Option<String>,
-    authentication_method: Option<provider::bedrock::BedrockAuthMethod>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -175,25 +163,6 @@ impl settings::Settings for AllLanguageModelSettings {
         let mut settings = AllLanguageModelSettings::default();
 
         for value in sources.defaults_and_customizations() {
-            // Bedrock
-            let bedrock = value.bedrock.clone();
-            merge(
-                &mut settings.bedrock.profile_name,
-                bedrock.as_ref().map(|s| s.profile.clone()),
-            );
-            merge(
-                &mut settings.bedrock.authentication_method,
-                bedrock.as_ref().map(|s| s.authentication_method.clone()),
-            );
-            merge(
-                &mut settings.bedrock.region,
-                bedrock.as_ref().map(|s| s.region.clone()),
-            );
-            merge(
-                &mut settings.bedrock.endpoint,
-                bedrock.as_ref().map(|s| s.endpoint_url.clone()),
-            );
-
             // LM Studio
             let lmstudio = value.lmstudio.clone();
 

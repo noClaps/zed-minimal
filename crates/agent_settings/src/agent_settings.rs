@@ -646,7 +646,6 @@ impl JsonSchema for LanguageModelProviderSetting {
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> Schema {
         schemars::schema::SchemaObject {
             enum_values: Some(vec![
-                "amazon-bedrock".into(),
                 "google".into(),
                 "lmstudio".into(),
                 "openai".into(),
