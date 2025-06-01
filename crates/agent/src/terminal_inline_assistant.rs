@@ -325,7 +325,6 @@ impl TerminalInlineAssistant {
                 LanguageModelRegistry::read_global(cx).inline_assistant_model()
             {
                 let codegen = assist.codegen.read(cx);
-                let executor = cx.background_executor().clone();
                 report_assistant_event(
                     AssistantEventData {
                         conversation_id: None,
@@ -343,9 +342,6 @@ impl TerminalInlineAssistant {
                         language_name: None,
                     },
                     codegen.telemetry.clone(),
-                    cx.http_client(),
-                    model.api_key(cx),
-                    &executor,
                 );
             }
 

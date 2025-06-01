@@ -2205,9 +2205,6 @@ impl AssistantContext {
                             language_name: language_name.map(|name| name.to_proto()),
                         },
                         this.telemetry.clone(),
-                        cx.http_client(),
-                        model.api_key(cx),
-                        cx.background_executor(),
                     );
 
                     if let Ok(stop_reason) = result {

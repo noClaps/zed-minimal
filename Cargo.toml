@@ -4,7 +4,6 @@ members = [
     "crates/activity_indicator",
     "crates/agent",
     "crates/agent_settings",
-    "crates/anthropic",
     "crates/askpass",
     "crates/assets",
     "crates/assistant_context_editor",
@@ -182,10 +181,8 @@ members = [
     "extensions/emmet",
     "extensions/glsl",
     "extensions/html",
-    "extensions/perplexity",
     "extensions/proto",
     "extensions/ruff",
-    "extensions/slash-commands-example",
     "extensions/snippets",
     "extensions/test-extension",
     "extensions/toml",
@@ -213,7 +210,6 @@ activity_indicator = { path = "crates/activity_indicator" }
 agent = { path = "crates/agent" }
 agent_settings = { path = "crates/agent_settings" }
 ai = { path = "crates/ai" }
-anthropic = { path = "crates/anthropic" }
 askpass = { path = "crates/askpass" }
 assets = { path = "crates/assets" }
 assistant_context_editor = { path = "crates/assistant_context_editor" }

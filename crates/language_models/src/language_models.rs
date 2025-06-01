@@ -10,7 +10,6 @@ pub mod provider;
 mod settings;
 pub mod ui;
 
-use crate::provider::anthropic::AnthropicLanguageModelProvider;
 use crate::provider::bedrock::BedrockLanguageModelProvider;
 use crate::provider::cloud::CloudLanguageModelProvider;
 use crate::provider::copilot_chat::CopilotChatLanguageModelProvider;
@@ -37,11 +36,6 @@ fn register_language_model_providers(
 ) {
     registry.register_provider(
         CloudLanguageModelProvider::new(user_store.clone(), client.clone(), cx),
-        cx,
-    );
-
-    registry.register_provider(
-        AnthropicLanguageModelProvider::new(client.http_client(), cx),
         cx,
     );
     registry.register_provider(

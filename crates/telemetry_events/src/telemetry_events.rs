@@ -172,7 +172,7 @@ pub struct AssistantEventData {
     pub kind: AssistantKind,
     #[serde(default)]
     pub phase: AssistantPhase,
-    /// Name of the AI model used (gpt-4o, claude-3-5-sonnet, etc)
+    /// Name of the AI model used (gpt-4o, etc)
     pub model: String,
     pub model_provider: String,
     pub response_latency: Option<Duration>,

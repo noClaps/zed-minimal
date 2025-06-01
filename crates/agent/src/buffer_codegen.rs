@@ -378,7 +378,6 @@ impl CodegenAlternative {
 
         self.edit_position = Some(self.range.start.bias_right(&self.snapshot));
 
-        let api_key = model.api_key(cx);
         let telemetry_id = model.telemetry_id();
         let provider_id = model.provider_id();
         let stream: LocalBoxFuture<Result<LanguageModelTextStream>> =
@@ -389,7 +388,7 @@ impl CodegenAlternative {
                 cx.spawn(async move |_, cx| model.stream_completion_text(request.await, &cx).await)
                     .boxed_local()
             };
-        self.handle_stream(telemetry_id, provider_id.to_string(), api_key, stream, cx);
+        self.handle_stream(telemetry_id, provider_id.to_string(), stream, cx);
         Ok(())
     }
 
@@ -480,7 +479,6 @@ impl CodegenAlternative {
         &mut self,
         model_telemetry_id: String,
         model_provider_id: String,
-        model_api_key: Option<String>,
         stream: impl 'static + Future<Output = Result<LanguageModelTextStream>>,
         cx: &mut Context<Self>,
     ) {
@@ -511,7 +509,6 @@ impl CodegenAlternative {
             }
         }
 
-        let http_client = cx.http_client();
         let telemetry = self.telemetry.clone();
         let language_name = {
             let multibuffer = self.buffer.read(cx);
@@ -543,7 +540,6 @@ impl CodegenAlternative {
                 let model_telemetry_id = model_telemetry_id.clone();
                 let model_provider_id = model_provider_id.clone();
                 let (mut diff_tx, mut diff_rx) = mpsc::channel(1);
-                let executor = cx.background_executor().clone();
                 let message_id = message_id.clone();
                 let line_based_stream_diff: Task<anyhow::Result<()>> =
                     cx.background_spawn(async move {
@@ -659,9 +655,6 @@ impl CodegenAlternative {
                                 language_name: language_name.map(|name| name.to_proto()),
                             },
                             telemetry,
-                            http_client,
-                            model_api_key,
-                            &executor,
                         );
 
                         result?;
@@ -1487,7 +1480,6 @@ mod tests {
             codegen.handle_stream(
                 String::new(),
                 String::new(),
-                None,
                 future::ready(Ok(LanguageModelTextStream {
                     message_id: None,
                     stream: chunks_rx.map(Ok).boxed(),

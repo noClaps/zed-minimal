@@ -1,5 +1,5 @@
 use std::cell::{Ref, RefCell};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +19,7 @@ use gpui::{
 
 use language_model::{LanguageModelToolResultContent, LanguageModelToolUseId, Role, TokenUsage};
 use project::context_server_store::{ContextServerStatus, ContextServerStore};
-use project::{Project, ProjectItem, ProjectPath, Worktree};
+use project::{Project, Worktree};
 use prompt_store::{
     ProjectContext, PromptBuilder, PromptId, PromptStore, PromptsUpdatedEvent, RulesFileContext,
     UserRulesContext, WorktreeContext,
@@ -69,15 +69,6 @@ impl Column for DataType {
         Ok((data_type, next_index))
     }
 }
-
-const RULES_FILE_NAMES: [&'static str; 6] = [
-    ".rules",
-    ".cursorrules",
-    ".windsurfrules",
-    ".clinerules",
-    ".github/copilot-instructions.md",
-    "CLAUDE.md",
-];
 
 pub fn init(cx: &mut App) {
     ThreadsDatabase::init(cx);
@@ -214,15 +205,6 @@ impl ThreadStore {
             project::Event::WorktreeAdded(_) | project::Event::WorktreeRemoved(_) => {
                 self.enqueue_system_prompt_reload();
             }
-            project::Event::WorktreeUpdatedEntries(_, items) => {
-                if items.iter().any(|(path, _, _)| {
-                    RULES_FILE_NAMES
-                        .iter()
-                        .any(|name| path.as_ref() == Path::new(name))
-                }) {
-                    self.enqueue_system_prompt_reload();
-                }
-            }
             _ => {}
         }
     }
@@ -244,9 +226,7 @@ impl ThreadStore {
             .collect::<Vec<_>>();
         let worktree_tasks = worktrees
             .into_iter()
-            .map(|worktree| {
-                Self::load_worktree_info_for_system_prompt(worktree, self.project.clone(), cx)
-            })
+            .map(|worktree| Self::load_worktree_info_for_system_prompt(worktree, cx))
             .collect::<Vec<_>>();
         let default_user_rules_task = match prompt_store {
             None => Task::ready(vec![]),
@@ -307,12 +287,11 @@ impl ThreadStore {
 
     fn load_worktree_info_for_system_prompt(
         worktree: Entity<Worktree>,
-        project: Entity<Project>,
         cx: &mut App,
     ) -> Task<(WorktreeContext, Option<RulesLoadingError>)> {
         let root_name = worktree.read(cx).root_name().into();
 
-        let rules_task = Self::load_worktree_rules_file(worktree, project, cx);
+        let rules_task = Self::load_worktree_rules_file();
         let Some(rules_task) = rules_task else {
             return Task::ready((
                 WorktreeContext {
@@ -341,48 +320,8 @@ impl ThreadStore {
         })
     }
 
-    fn load_worktree_rules_file(
-        worktree: Entity<Worktree>,
-        project: Entity<Project>,
-        cx: &mut App,
-    ) -> Option<Task<Result<RulesFileContext>>> {
-        let worktree_ref = worktree.read(cx);
-        let worktree_id = worktree_ref.id();
-        let selected_rules_file = RULES_FILE_NAMES
-            .into_iter()
-            .filter_map(|name| {
-                worktree_ref
-                    .entry_for_path(name)
-                    .filter(|entry| entry.is_file())
-                    .map(|entry| entry.path.clone())
-            })
-            .next();
-
-        // Note that Cline supports `.clinerules` being a directory, but that is not currently
-        // supported. This doesn't seem to occur often in GitHub repositories.
-        selected_rules_file.map(|path_in_worktree| {
-            let project_path = ProjectPath {
-                worktree_id,
-                path: path_in_worktree.clone(),
-            };
-            let buffer_task =
-                project.update(cx, |project, cx| project.open_buffer(project_path, cx));
-            let rope_task = cx.spawn(async move |cx| {
-                buffer_task.await?.read_with(cx, |buffer, cx| {
-                    let project_entry_id = buffer.entry_id(cx).context("buffer has no file")?;
-                    anyhow::Ok((project_entry_id, buffer.as_rope().clone()))
-                })?
-            });
-            // Build a string from the rope on a background thread.
-            cx.background_spawn(async move {
-                let (project_entry_id, rope) = rope_task.await?;
-                anyhow::Ok(RulesFileContext {
-                    path_in_worktree,
-                    text: rope.to_string().trim().to_string(),
-                    project_entry_id: project_entry_id.to_usize(),
-                })
-            })
-        })
+    fn load_worktree_rules_file() -> Option<Task<Result<RulesFileContext>>> {
+        None
     }
 
     pub fn prompt_store(&self) -> &Option<Entity<PromptStore>> {

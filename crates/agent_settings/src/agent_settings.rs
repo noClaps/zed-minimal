@@ -3,7 +3,6 @@ mod agent_profile;
 use std::sync::Arc;
 
 use ::open_ai::Model as OpenAiModel;
-use anthropic::Model as AnthropicModel;
 use anyhow::{Result, bail};
 use collections::IndexMap;
 use deepseek::Model as DeepseekModel;
@@ -59,11 +58,6 @@ pub enum AgentProviderContentV1 {
         default_model: Option<OpenAiModel>,
         api_url: Option<String>,
         available_models: Option<Vec<OpenAiModel>>,
-    },
-    #[serde(rename = "anthropic")]
-    Anthropic {
-        default_model: Option<AnthropicModel>,
-        api_url: Option<String>,
     },
     #[serde(rename = "ollama")]
     Ollama {
@@ -237,12 +231,6 @@ impl AgentSettingsContent {
                                     provider: "openai".into(),
                                     model: model.id().to_string(),
                                 }),
-                            AgentProviderContentV1::Anthropic { default_model, .. } => {
-                                default_model.map(|model| LanguageModelSelection {
-                                    provider: "anthropic".into(),
-                                    model: model.id().to_string(),
-                                })
-                            }
                             AgentProviderContentV1::Ollama { default_model, .. } => default_model
                                 .map(|model| LanguageModelSelection {
                                     provider: "ollama".into(),
@@ -348,18 +336,6 @@ impl AgentSettingsContent {
                 VersionedAgentSettingsContent::V1(ref mut settings) => match provider.as_ref() {
                     "zed.dev" => {
                         log::warn!("attempted to set zed.dev model on outdated settings");
-                    }
-                    "anthropic" => {
-                        let api_url = match &settings.provider {
-                            Some(AgentProviderContentV1::Anthropic { api_url, .. }) => {
-                                api_url.clone()
-                            }
-                            _ => None,
-                        };
-                        settings.provider = Some(AgentProviderContentV1::Anthropic {
-                            default_model: AnthropicModel::from_id(&model).ok(),
-                            api_url,
-                        });
                     }
                     "ollama" => {
                         let api_url = match &settings.provider {
@@ -720,7 +696,6 @@ impl JsonSchema for LanguageModelProviderSetting {
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> Schema {
         schemars::schema::SchemaObject {
             enum_values: Some(vec![
-                "anthropic".into(),
                 "amazon-bedrock".into(),
                 "google".into(),
                 "lmstudio".into(),
@@ -799,7 +774,7 @@ pub struct AgentSettingsContentV1 {
     default_height: Option<f32>,
     /// The provider of the Agent service.
     ///
-    /// This can be "openai", "anthropic", "ollama", "lmstudio", "deepseek", "zed.dev"
+    /// This can be "openai", "ollama", "lmstudio", "deepseek", "zed.dev"
     /// each with their respective default models and configurations.
     provider: Option<AgentProviderContentV1>,
 }
@@ -995,13 +970,6 @@ mod tests {
 
         cx.update(|cx| {
             assert!(!AgentSettings::get_global(cx).using_outdated_settings_version);
-            assert_eq!(
-                AgentSettings::get_global(cx).default_model,
-                LanguageModelSelection {
-                    provider: "zed.dev".into(),
-                    model: "claude-sonnet-4".into(),
-                }
-            );
         });
 
         cx.update(|cx| {

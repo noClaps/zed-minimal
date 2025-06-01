@@ -8,7 +8,6 @@ use axum::{
 };
 
 use collab::api::CloudflareIpCountryHeader;
-use collab::api::billing::sync_llm_request_usage_with_stripe_periodically;
 use collab::llm::db::LlmDatabase;
 use collab::migrations::run_database_migrations;
 use collab::user_backfiller::spawn_user_backfiller;
@@ -68,7 +67,6 @@ async fn main() -> Result<()> {
                 let db_options = db::ConnectOptions::new(llm_database_url);
                 let mut db = LlmDatabase::new(db_options.clone(), Executor::Production).await?;
                 db.initialize().await?;
-                collab::llm::db::seed_database(&config, &mut db, true).await?;
             }
         }
         Some("serve") => {
@@ -153,7 +151,6 @@ async fn main() -> Result<()> {
 
                     if let Some(mut llm_db) = llm_db {
                         llm_db.initialize().await?;
-                        sync_llm_request_usage_with_stripe_periodically(state.clone());
                     }
 
                     app = app
@@ -256,8 +253,6 @@ async fn setup_app_database(config: &Config) -> Result<()> {
     let mut db = Database::new(db_options, Executor::Production).await?;
 
     let migrations_path = config.migrations_path.as_deref().unwrap_or_else(|| {
-        #[cfg(feature = "sqlite")]
-        let default_migrations = concat!(env!("CARGO_MANIFEST_DIR"), "/migrations.sqlite");
         #[cfg(not(feature = "sqlite"))]
         let default_migrations = concat!(env!("CARGO_MANIFEST_DIR"), "/migrations");
 
@@ -296,8 +291,6 @@ async fn setup_llm_database(config: &Config) -> Result<()> {
         .llm_database_migrations_path
         .as_deref()
         .unwrap_or_else(|| {
-            #[cfg(feature = "sqlite")]
-            let default_migrations = concat!(env!("CARGO_MANIFEST_DIR"), "/migrations_llm.sqlite");
             #[cfg(not(feature = "sqlite"))]
             let default_migrations = concat!(env!("CARGO_MANIFEST_DIR"), "/migrations_llm");
 

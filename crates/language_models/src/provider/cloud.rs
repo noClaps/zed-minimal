@@ -1,4 +1,3 @@
-use anthropic::{AnthropicModelMode, parse_prompt_too_long};
 use anyhow::{Context as _, Result, anyhow};
 use client::{Client, UserStore, zed_urls};
 use futures::{
@@ -10,11 +9,10 @@ use gpui::{
 use http_client::{AsyncBody, HttpClient, Method, Response, StatusCode};
 use language_model::{
     AuthenticateError, LanguageModel, LanguageModelCacheConfiguration,
-    LanguageModelCompletionError, LanguageModelId, LanguageModelKnownError, LanguageModelName,
-    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
-    LanguageModelProviderTosView, LanguageModelRequest, LanguageModelToolChoice,
-    LanguageModelToolSchemaFormat, ModelRequestLimitReachedError, RateLimiter, RequestUsage,
-    ZED_CLOUD_PROVIDER_ID,
+    LanguageModelCompletionError, LanguageModelId, LanguageModelName, LanguageModelProviderId,
+    LanguageModelProviderName, LanguageModelProviderState, LanguageModelProviderTosView,
+    LanguageModelRequest, LanguageModelToolChoice, LanguageModelToolSchemaFormat,
+    ModelRequestLimitReachedError, RateLimiter, RequestUsage, ZED_CLOUD_PROVIDER_ID,
 };
 use language_model::{
     LanguageModelCompletionEvent, LanguageModelProvider, LlmApiToken, PaymentRequiredError,
@@ -42,7 +40,6 @@ use zed_llm_client::{
     TOOL_USE_LIMIT_REACHED_HEADER_NAME, ZED_VERSION_HEADER_NAME,
 };
 
-use crate::provider::anthropic::{AnthropicEventMapper, count_anthropic_tokens, into_anthropic};
 use crate::provider::google::{GoogleEventMapper, into_google};
 use crate::provider::open_ai::{OpenAiEventMapper, count_open_ai_tokens, into_open_ai};
 
@@ -56,7 +53,6 @@ pub struct ZedDotDevSettings {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum AvailableProvider {
-    Anthropic,
     OpenAi,
     Google,
 }
@@ -65,7 +61,7 @@ pub enum AvailableProvider {
 pub struct AvailableModel {
     /// The provider of the language model.
     pub provider: AvailableProvider,
-    /// The model's name in the provider's API. e.g. claude-3-5-sonnet-20240620
+    /// The model's name in the provider's API.
     pub name: String,
     /// The name displayed in the UI, such as in the assistant panel model dropdown menu.
     pub display_name: Option<String>,
@@ -75,7 +71,7 @@ pub struct AvailableModel {
     pub max_output_tokens: Option<u32>,
     /// The maximum number of completion tokens allowed by the model (o1-* only)
     pub max_completion_tokens: Option<u32>,
-    /// Override this model with a different Anthropic model for tool calls.
+    /// Override this model with a different model for tool calls.
     pub tool_override: Option<String>,
     /// Indicates whether this custom model supports caching.
     pub cache_configuration: Option<LanguageModelCacheConfiguration>,
@@ -97,15 +93,6 @@ pub enum ModelMode {
         /// The maximum number of tokens to use for reasoning. Must be lower than the model's `max_output_tokens`.
         budget_tokens: Option<u32>,
     },
-}
-
-impl From<ModelMode> for AnthropicModelMode {
-    fn from(value: ModelMode) -> Self {
-        match value {
-            ModelMode::Default => AnthropicModelMode::Default,
-            ModelMode::Thinking { budget_tokens } => AnthropicModelMode::Thinking { budget_tokens },
-        }
-    }
 }
 
 pub struct CloudLanguageModelProvider {
@@ -704,13 +691,13 @@ impl LanguageModel for CloudLanguageModel {
 
     fn tool_input_format(&self) -> LanguageModelToolSchemaFormat {
         match self.model.provider {
-            zed_llm_client::LanguageModelProvider::Anthropic
-            | zed_llm_client::LanguageModelProvider::OpenAi => {
+            zed_llm_client::LanguageModelProvider::OpenAi => {
                 LanguageModelToolSchemaFormat::JsonSchema
             }
             zed_llm_client::LanguageModelProvider::Google => {
                 LanguageModelToolSchemaFormat::JsonSchemaSubset
             }
+            _ => unreachable!(),
         }
     }
 
@@ -720,15 +707,9 @@ impl LanguageModel for CloudLanguageModel {
 
     fn cache_configuration(&self) -> Option<LanguageModelCacheConfiguration> {
         match &self.model.provider {
-            zed_llm_client::LanguageModelProvider::Anthropic => {
-                Some(LanguageModelCacheConfiguration {
-                    min_total_token: 2_048,
-                    should_speculate: true,
-                    max_cache_anchors: 4,
-                })
-            }
             zed_llm_client::LanguageModelProvider::OpenAi
             | zed_llm_client::LanguageModelProvider::Google => None,
+            _ => unreachable!(),
         }
     }
 
@@ -738,7 +719,6 @@ impl LanguageModel for CloudLanguageModel {
         cx: &App,
     ) -> BoxFuture<'static, Result<usize>> {
         match self.model.provider {
-            zed_llm_client::LanguageModelProvider::Anthropic => count_anthropic_tokens(request, cx),
             zed_llm_client::LanguageModelProvider::OpenAi => {
                 let model = match open_ai::Model::from_id(&self.model.id.0) {
                     Ok(model) => model,
@@ -794,6 +774,7 @@ impl LanguageModel for CloudLanguageModel {
                 }
                 .boxed()
             }
+            _ => unreachable!(),
         }
     }
 
@@ -813,71 +794,6 @@ impl LanguageModel for CloudLanguageModel {
         let mode = request.mode;
         let app_version = cx.update(|cx| AppVersion::global(cx)).ok();
         match self.model.provider {
-            zed_llm_client::LanguageModelProvider::Anthropic => {
-                let request = into_anthropic(
-                    request,
-                    self.model.id.to_string(),
-                    1.0,
-                    self.model.max_output_tokens as u32,
-                    if self.model.id.0.ends_with("-thinking") {
-                        AnthropicModelMode::Thinking {
-                            budget_tokens: Some(4_096),
-                        }
-                    } else {
-                        AnthropicModelMode::Default
-                    },
-                );
-                let client = self.client.clone();
-                let llm_api_token = self.llm_api_token.clone();
-                let future = self.request_limiter.stream(async move {
-                    let PerformLlmCompletionResponse {
-                        response,
-                        usage,
-                        includes_status_messages,
-                        tool_use_limit_reached,
-                    } = Self::perform_llm_completion(
-                        client.clone(),
-                        llm_api_token,
-                        app_version,
-                        CompletionBody {
-                            thread_id,
-                            prompt_id,
-                            intent,
-                            mode,
-                            provider: zed_llm_client::LanguageModelProvider::Anthropic,
-                            model: request.model.clone(),
-                            provider_request: serde_json::to_value(&request)?,
-                        },
-                    )
-                    .await
-                    .map_err(|err| match err.downcast::<ApiError>() {
-                        Ok(api_err) => {
-                            if api_err.status == StatusCode::BAD_REQUEST {
-                                if let Some(tokens) = parse_prompt_too_long(&api_err.body) {
-                                    return anyhow!(
-                                        LanguageModelKnownError::ContextWindowLimitExceeded {
-                                            tokens
-                                        }
-                                    );
-                                }
-                            }
-                            anyhow!(api_err)
-                        }
-                        Err(err) => anyhow!(err),
-                    })?;
-
-                    let mut mapper = AnthropicEventMapper::new();
-                    Ok(map_cloud_completion_events(
-                        Box::pin(
-                            response_lines(response, includes_status_messages)
-                                .chain(usage_updated_event(usage))
-                                .chain(tool_use_limit_reached_event(tool_use_limit_reached)),
-                        ),
-                        move |event| mapper.map_event(event),
-                    ))
-                });
-                async move { Ok(future.await?.boxed()) }.boxed()
-            }
             zed_llm_client::LanguageModelProvider::OpenAi => {
                 let client = self.client.clone();
                 let model = match open_ai::Model::from_id(&self.model.id.0) {
@@ -958,6 +874,7 @@ impl LanguageModel for CloudLanguageModel {
                 });
                 async move { Ok(future.await?.boxed()) }.boxed()
             }
+            _ => unreachable!(),
         }
     }
 }
