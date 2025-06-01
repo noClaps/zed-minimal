@@ -30,7 +30,6 @@ use std::time::Duration;
 use ui::prelude::*;
 use util::debug_panic;
 
-use super::google::count_google_tokens;
 use super::open_ai::count_open_ai_tokens;
 
 const PROVIDER_ID: &str = "copilot_chat";
@@ -207,7 +206,6 @@ impl LanguageModel for CopilotChatLanguageModel {
     fn tool_input_format(&self) -> LanguageModelToolSchemaFormat {
         match self.model.vendor() {
             ModelVendor::OpenAI => LanguageModelToolSchemaFormat::JsonSchema,
-            ModelVendor::Google => LanguageModelToolSchemaFormat::JsonSchemaSubset,
         }
     }
 
@@ -233,7 +231,6 @@ impl LanguageModel for CopilotChatLanguageModel {
         cx: &App,
     ) -> BoxFuture<'static, Result<usize>> {
         match self.model.vendor() {
-            ModelVendor::Google => count_google_tokens(request, cx),
             ModelVendor::OpenAI => {
                 let model = open_ai::Model::from_id(self.model.id()).unwrap_or_default();
                 count_open_ai_tokens(request, model, cx)

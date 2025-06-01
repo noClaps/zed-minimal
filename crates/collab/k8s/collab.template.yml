@@ -134,11 +134,6 @@ spec:
                 secretKeyRef:
                   name: llm-closed-beta
                   key: model_name
-            - name: GOOGLE_AI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: google-ai
-                  key: api_key
             - name: PREDICTION_API_URL
               valueFrom:
                 secretKeyRef:
