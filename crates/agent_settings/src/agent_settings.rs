@@ -5,7 +5,6 @@ use std::sync::Arc;
 use ::open_ai::Model as OpenAiModel;
 use anyhow::{Result, bail};
 use collections::IndexMap;
-use deepseek::Model as DeepseekModel;
 use gpui::{App, Pixels, SharedString};
 use language_model::LanguageModel;
 use lmstudio::Model as LmStudioModel;
@@ -61,11 +60,6 @@ pub enum AgentProviderContentV1 {
     #[serde(rename = "lmstudio")]
     LmStudio {
         default_model: Option<LmStudioModel>,
-        api_url: Option<String>,
-    },
-    #[serde(rename = "deepseek")]
-    DeepSeek {
-        default_model: Option<DeepseekModel>,
         api_url: Option<String>,
     },
     #[serde(rename = "mistral")]
@@ -230,11 +224,6 @@ impl AgentSettingsContent {
                                     provider: "lmstudio".into(),
                                     model: model.id().to_string(),
                                 }),
-                            AgentProviderContentV1::DeepSeek { default_model, .. } => default_model
-                                .map(|model| LanguageModelSelection {
-                                    provider: "deepseek".into(),
-                                    model: model.id().to_string(),
-                                }),
                             AgentProviderContentV1::Mistral { default_model, .. } => default_model
                                 .map(|model| LanguageModelSelection {
                                     provider: "mistral".into(),
@@ -351,18 +340,6 @@ impl AgentSettingsContent {
                             default_model: OpenAiModel::from_id(&model).ok(),
                             api_url,
                             available_models,
-                        });
-                    }
-                    "deepseek" => {
-                        let api_url = match &settings.provider {
-                            Some(AgentProviderContentV1::DeepSeek { api_url, .. }) => {
-                                api_url.clone()
-                            }
-                            _ => None,
-                        };
-                        settings.provider = Some(AgentProviderContentV1::DeepSeek {
-                            default_model: DeepseekModel::from_id(&model).ok(),
-                            api_url,
                         });
                     }
                     _ => {}
@@ -675,7 +652,6 @@ impl JsonSchema for LanguageModelProviderSetting {
                 "openai".into(),
                 "zed.dev".into(),
                 "copilot_chat".into(),
-                "deepseek".into(),
                 "mistral".into(),
             ]),
             ..Default::default()
@@ -746,7 +722,7 @@ pub struct AgentSettingsContentV1 {
     default_height: Option<f32>,
     /// The provider of the Agent service.
     ///
-    /// This can be "openai", "lmstudio", "deepseek", "zed.dev"
+    /// This can be "openai", "lmstudio", "zed.dev"
     /// each with their respective default models and configurations.
     provider: Option<AgentProviderContentV1>,
 }

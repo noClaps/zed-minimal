@@ -4,7 +4,6 @@ use client::{Client, UserStore};
 use fs::Fs;
 use gpui::{App, Context, Entity};
 use language_model::LanguageModelRegistry;
-use provider::deepseek::DeepSeekLanguageModelProvider;
 
 pub mod provider;
 mod settings;
@@ -43,10 +42,6 @@ fn register_language_model_providers(
     );
     registry.register_provider(
         LmStudioLanguageModelProvider::new(client.http_client(), cx),
-        cx,
-    );
-    registry.register_provider(
-        DeepSeekLanguageModelProvider::new(client.http_client(), cx),
         cx,
     );
     registry.register_provider(
