@@ -12,7 +12,6 @@ use crate::provider::{
     cloud::{self, ZedDotDevSettings},
     copilot_chat::CopilotChatSettings,
     google::GoogleSettings,
-    lmstudio::LmStudioSettings,
     mistral::MistralSettings,
     open_ai::OpenAiSettings,
 };
@@ -42,25 +41,17 @@ pub struct AllLanguageModelSettings {
     pub zed_dot_dev: ZedDotDevSettings,
     pub google: GoogleSettings,
     pub copilot_chat: CopilotChatSettings,
-    pub lmstudio: LmStudioSettings,
     pub mistral: MistralSettings,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct AllLanguageModelSettingsContent {
-    pub lmstudio: Option<LmStudioSettingsContent>,
     pub openai: Option<OpenAiSettingsContent>,
     #[serde(rename = "zed.dev")]
     pub zed_dot_dev: Option<ZedDotDevSettingsContent>,
     pub google: Option<GoogleSettingsContent>,
     pub copilot_chat: Option<CopilotChatSettingsContent>,
     pub mistral: Option<MistralSettingsContent>,
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct LmStudioSettingsContent {
-    pub api_url: Option<String>,
-    pub available_models: Option<Vec<provider::lmstudio::AvailableModel>>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -163,18 +154,6 @@ impl settings::Settings for AllLanguageModelSettings {
         let mut settings = AllLanguageModelSettings::default();
 
         for value in sources.defaults_and_customizations() {
-            // LM Studio
-            let lmstudio = value.lmstudio.clone();
-
-            merge(
-                &mut settings.lmstudio.api_url,
-                value.lmstudio.as_ref().and_then(|s| s.api_url.clone()),
-            );
-            merge(
-                &mut settings.lmstudio.available_models,
-                lmstudio.as_ref().and_then(|s| s.available_models.clone()),
-            );
-
             // OpenAI
             let (openai, upgraded) = match value.openai.clone().map(|s| s.upgrade()) {
                 Some((content, upgraded)) => (Some(content), upgraded),
