@@ -35,8 +35,6 @@ pub enum Model {
     CohereCommandRV1,
     CohereCommandRPlusV1,
     CohereCommandLightTextV14_4k,
-    // DeepSeek
-    DeepSeekR1,
     // Meta models
     MetaLlama38BInstructV1,
     MetaLlama370BInstructV1,
@@ -80,7 +78,6 @@ impl Model {
             Model::AmazonNovaMicro => "amazon.nova-micro-v1:0",
             Model::AmazonNovaPro => "amazon.nova-pro-v1:0",
             Model::AmazonNovaPremier => "amazon.nova-premier-v1:0",
-            Model::DeepSeekR1 => "us.deepseek.r1-v1:0",
             Model::AI21J2GrandeInstruct => "ai21.j2-grande-instruct",
             Model::AI21J2JumboInstruct => "ai21.j2-jumbo-instruct",
             Model::AI21J2Mid => "ai21.j2-mid",
@@ -122,7 +119,6 @@ impl Model {
             Self::AmazonNovaMicro => "Amazon Nova Micro",
             Self::AmazonNovaPro => "Amazon Nova Pro",
             Self::AmazonNovaPremier => "Amazon Nova Premier",
-            Self::DeepSeekR1 => "DeepSeek R1",
             Self::AI21J2GrandeInstruct => "AI21 Jurassic2 Grande Instruct",
             Self::AI21J2JumboInstruct => "AI21 Jurassic2 Jumbo Instruct",
             Self::AI21J2Mid => "AI21 Jurassic2 Mid",
