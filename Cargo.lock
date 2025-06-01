@@ -147,7 +147,6 @@ dependencies = [
  "gpui",
  "indexmap",
  "language_model",
- "lmstudio",
  "log",
  "mistral",
  "open_ai",
@@ -8763,7 +8762,6 @@ dependencies = [
  "gpui_tokio",
  "http_client",
  "language_model",
- "lmstudio",
  "log",
  "menu",
  "mistral",
@@ -9250,19 +9248,6 @@ dependencies = [
  "cc",
  "doxygen-rs",
  "libc",
-]
-
-[[package]]
-name = "lmstudio"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.31",
- "http_client",
- "schemars",
- "serde",
- "serde_json",
- "workspace-hack",
 ]
 
 [[package]]

@@ -83,7 +83,6 @@ members = [
     "crates/languages",
     "crates/livekit_api",
     "crates/livekit_client",
-    "crates/lmstudio",
     "crates/lsp",
     "crates/markdown",
     "crates/markdown_preview",
@@ -283,7 +282,6 @@ language_tools = { path = "crates/language_tools" }
 languages = { path = "crates/languages" }
 livekit_api = { path = "crates/livekit_api" }
 livekit_client = { path = "crates/livekit_client" }
-lmstudio = { path = "crates/lmstudio" }
 lsp = { path = "crates/lsp" }
 markdown = { path = "crates/markdown" }
 markdown_preview = { path = "crates/markdown_preview" }
@@ -698,7 +696,6 @@ image_viewer = { codegen-units = 1 }
 inline_completion_button = { codegen-units = 1 }
 install_cli = { codegen-units = 1 }
 journal = { codegen-units = 1 }
-lmstudio = { codegen-units = 1 }
 menu = { codegen-units = 1 }
 notifications = { codegen-units = 1 }
 outline = { codegen-units = 1 }
