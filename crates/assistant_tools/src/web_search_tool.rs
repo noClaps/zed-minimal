@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use ui::{IconName, Tooltip, prelude::*};
 use web_search::WebSearchRegistry;
 use workspace::Workspace;
-use zed_llm_client::{WebSearchResponse, WebSearchResult};
+use zed_llm_client::WebSearchResponse;
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchToolInput {
@@ -218,107 +218,25 @@ impl Component for WebSearchToolCard {
             }),
         });
 
-        let successful_search = cx.new(|_cx| WebSearchToolCard {
-            response: Some(Ok(example_search_response())),
-            _task: Task::ready(()),
-        });
-
-        let error_search = cx.new(|_cx| WebSearchToolCard {
-            response: Some(Err(anyhow!("Failed to resolve https://google.com"))),
-            _task: Task::ready(()),
-        });
-
         Some(
             v_flex()
                 .gap_6()
-                .children(vec![example_group(vec![
-                    single_example(
-                        "In Progress",
-                        div()
-                            .size_full()
-                            .child(in_progress_search.update(cx, |tool, cx| {
-                                tool.render(
-                                    &ToolUseStatus::Pending,
-                                    window,
-                                    WeakEntity::new_invalid(),
-                                    cx,
-                                )
-                                .into_any_element()
-                            }))
-                            .into_any_element(),
-                    ),
-                    single_example(
-                        "Successful",
-                        div()
-                            .size_full()
-                            .child(successful_search.update(cx, |tool, cx| {
-                                tool.render(
-                                    &ToolUseStatus::Finished("".into()),
-                                    window,
-                                    WeakEntity::new_invalid(),
-                                    cx,
-                                )
-                                .into_any_element()
-                            }))
-                            .into_any_element(),
-                    ),
-                    single_example(
-                        "Error",
-                        div()
-                            .size_full()
-                            .child(error_search.update(cx, |tool, cx| {
-                                tool.render(
-                                    &ToolUseStatus::Error("".into()),
-                                    window,
-                                    WeakEntity::new_invalid(),
-                                    cx,
-                                )
-                                .into_any_element()
-                            }))
-                            .into_any_element(),
-                    ),
-                ])])
+                .children(vec![example_group(vec![single_example(
+                    "In Progress",
+                    div()
+                        .size_full()
+                        .child(in_progress_search.update(cx, |tool, cx| {
+                            tool.render(
+                                &ToolUseStatus::Pending,
+                                window,
+                                WeakEntity::new_invalid(),
+                                cx,
+                            )
+                            .into_any_element()
+                        }))
+                        .into_any_element(),
+                )])])
                 .into_any_element(),
         )
-    }
-}
-
-fn example_search_response() -> WebSearchResponse {
-    WebSearchResponse {
-        results: vec![
-            WebSearchResult {
-                title: "Alo".to_string(),
-                url: "https://www.google.com/maps/search/Alo%2C+Toronto%2C+Canada".to_string(),
-                text: "Alo is a popular restaurant in Toronto.".to_string(),
-            },
-            WebSearchResult {
-                title: "Alo".to_string(),
-                url: "https://www.google.com/maps/search/Alo%2C+Toronto%2C+Canada".to_string(),
-                text: "Information about Alo restaurant in Toronto.".to_string(),
-            },
-            WebSearchResult {
-                title: "Edulis".to_string(),
-                url: "https://www.google.com/maps/search/Edulis%2C+Toronto%2C+Canada".to_string(),
-                text: "Details about Edulis restaurant in Toronto.".to_string(),
-            },
-            WebSearchResult {
-                title: "Sushi Masaki Saito".to_string(),
-                url: "https://www.google.com/maps/search/Sushi+Masaki+Saito%2C+Toronto%2C+Canada"
-                    .to_string(),
-                text: "Information about Sushi Masaki Saito in Toronto.".to_string(),
-            },
-            WebSearchResult {
-                title: "Shoushin".to_string(),
-                url: "https://www.google.com/maps/search/Shoushin%2C+Toronto%2C+Canada".to_string(),
-                text: "Details about Shoushin restaurant in Toronto.".to_string(),
-            },
-            WebSearchResult {
-                title: "Restaurant 20 Victoria".to_string(),
-                url:
-                    "https://www.google.com/maps/search/Restaurant+20+Victoria%2C+Toronto%2C+Canada"
-                        .to_string(),
-                text: "Information about Restaurant 20 Victoria in Toronto.".to_string(),
-            },
-        ],
     }
 }

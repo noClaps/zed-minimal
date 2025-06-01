@@ -155,7 +155,7 @@ mod tests {
             .unwrap();
 
             let error_message = format!(
-                "Tool schema for `{}` is not compatible with `language_model::LanguageModelToolSchemaFormat::JsonSchemaSubset` (Gemini Models).\n\
+                "Tool schema for `{}` is not compatible with `language_model::LanguageModelToolSchemaFormat::JsonSchemaSubset`.\n\
                 Are you using `schema::json_schema_for<T>(format)` to generate the schema?",
                 tool.name(),
             );

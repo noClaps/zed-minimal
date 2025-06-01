@@ -770,10 +770,6 @@ mod tests {
                     "utf8": "привіт"
                 },
                 "something": "else",
-                "agent": {
-                    "name": "assistant-2",
-                    "model": "gemini-pro"
-                }
             }
         "#,
             Some(
@@ -784,10 +780,6 @@ mod tests {
                     "utf8": "привіт"
                 }, */
                 "something": "else",
-                "agent": {
-                    "name": "assistant-2",
-                    "model": "gemini-pro"
-                }
             }
         "#,
             ),

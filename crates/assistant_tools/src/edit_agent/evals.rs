@@ -38,8 +38,6 @@ fn eval_extract_handle_command_output() {
     //
     // Model                       | Pass rate
     // ----------------------------|----------
-    // gemini-2.5-pro              |  0.86
-    // gemini-2.5-flash            |  0.11
     // gpt-4.1                     |  1.00
 
     let input_file_path = "root/blame.rs";
@@ -56,7 +54,7 @@ fn eval_extract_handle_command_output() {
     let edit_description = "Extract `handle_command_output` method from `run_git_blame`.";
     eval(
         100,
-        0.7, // Taking the lower bar for Gemini
+        0.7,
         EvalInput::from_conversation(
             vec![
                 message(
@@ -167,8 +165,6 @@ fn eval_translate_doc_comments() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  1.0
-    //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
     let input_file_path = "root/canvas.rs";
     let input_file_content = include_str!("evals/fixtures/translate_doc_comments/before.rs");
@@ -228,8 +224,6 @@ fn eval_use_wasi_sdk_in_compile_parser_to_wasm() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  0.99
-    //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
     let input_file_path = "root/lib.rs";
     let input_file_content =
@@ -352,8 +346,6 @@ fn eval_disable_cursor_blinking() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  1.0
-    //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
     let input_file_path = "root/editor.rs";
     let input_file_content = include_str!("evals/fixtures/disable_cursor_blinking/before.rs");
@@ -434,8 +426,6 @@ fn eval_from_pixels_constructor() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  0.94
-    //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
     let input_file_path = "root/canvas.rs";
     let input_file_content = include_str!("evals/fixtures/from_pixels_constructor/before.rs");
@@ -633,8 +623,6 @@ fn eval_zode() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  1.0
-    //  gemini-2.5-flash-preview-04-17 |  1.0
     //  gpt-4.1                        |  1.0
     let input_file_path = "root/zode.py";
     let input_content = None;
@@ -738,8 +726,6 @@ fn eval_add_overwrite_test() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  0.35
-    //  gemini-2.5-flash-preview-04-17 |
     //  gpt-4.1                        |
     let input_file_path = "root/action_log.rs";
     let input_file_content = include_str!("evals/fixtures/add_overwrite_test/before.rs");
@@ -972,8 +958,6 @@ fn eval_create_empty_file() {
     //  Model                          | Pass rate
     // ============================================
     //
-    //  gemini-2.5-pro-preview-03-25   |  1.00
-    //  gemini-2.5-flash-preview-04-17 |  1.00
     //  gpt-4.1                        |  1.00
     //
     //

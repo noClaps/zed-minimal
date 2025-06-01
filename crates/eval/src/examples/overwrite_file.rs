@@ -11,11 +11,6 @@ pub struct FileOverwriteExample;
 This eval tests a fix for a destructive behavior of the `edit_file` tool.
 Previously, it would rewrite existing files too aggressively, which often
 resulted in content loss.
-
-Model           | Pass rate
-----------------|----------
-Sonnet 3.7      | 100%
-Gemini 2.5 Pro  |  80%
 */
 
 #[async_trait(?Send)]

@@ -6901,20 +6901,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "google_ai"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.31",
- "http_client",
- "schemars",
- "serde",
- "serde_json",
- "strum 0.27.1",
- "workspace-hack",
-]
-
-[[package]]
 name = "gpu-alloc"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8757,7 +8743,6 @@ dependencies = [
  "editor",
  "fs",
  "futures 0.3.31",
- "google_ai",
  "gpui",
  "gpui_tokio",
  "http_client",

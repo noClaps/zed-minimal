@@ -21,7 +21,7 @@ pub fn adapt_schema_to_format(
     }
 }
 
-/// Tries to adapt the json schema so that it is compatible with https://ai.google.dev/api/caching#Schema
+/// Tries to adapt the json schema so that it is compatible
 fn adapt_to_json_schema_subset(json: &mut Value) -> Result<()> {
     if let Value::Object(obj) = json {
         const UNSUPPORTED_KEYS: [&str; 4] = ["if", "then", "else", "$ref"];
