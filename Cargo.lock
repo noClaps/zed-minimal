@@ -1682,18 +1682,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aws_http_client"
-version = "0.1.0"
-dependencies = [
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "futures 0.3.31",
- "http_client",
- "tokio",
- "workspace-hack",
-]
-
-[[package]]
 name = "axum"
 version = "0.6.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8761,9 +8749,6 @@ name = "language_models"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "aws-config",
- "aws-credential-types",
- "aws_http_client",
  "client",
  "collections",
  "copilot",
