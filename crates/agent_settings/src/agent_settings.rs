@@ -7,7 +7,6 @@ use anyhow::{Result, bail};
 use collections::IndexMap;
 use gpui::{App, Pixels, SharedString};
 use language_model::LanguageModel;
-use lmstudio::Model as LmStudioModel;
 use mistral::Model as MistralModel;
 use schemars::{JsonSchema, schema::Schema};
 use serde::{Deserialize, Serialize};
@@ -56,11 +55,6 @@ pub enum AgentProviderContentV1 {
         default_model: Option<OpenAiModel>,
         api_url: Option<String>,
         available_models: Option<Vec<OpenAiModel>>,
-    },
-    #[serde(rename = "lmstudio")]
-    LmStudio {
-        default_model: Option<LmStudioModel>,
-        api_url: Option<String>,
     },
     #[serde(rename = "mistral")]
     Mistral {
@@ -219,11 +213,6 @@ impl AgentSettingsContent {
                                     provider: "openai".into(),
                                     model: model.id().to_string(),
                                 }),
-                            AgentProviderContentV1::LmStudio { default_model, .. } => default_model
-                                .map(|model| LanguageModelSelection {
-                                    provider: "lmstudio".into(),
-                                    model: model.id().to_string(),
-                                }),
                             AgentProviderContentV1::Mistral { default_model, .. } => default_model
                                 .map(|model| LanguageModelSelection {
                                     provider: "mistral".into(),
@@ -314,18 +303,6 @@ impl AgentSettingsContent {
                 VersionedAgentSettingsContent::V1(ref mut settings) => match provider.as_ref() {
                     "zed.dev" => {
                         log::warn!("attempted to set zed.dev model on outdated settings");
-                    }
-                    "lmstudio" => {
-                        let api_url = match &settings.provider {
-                            Some(AgentProviderContentV1::LmStudio { api_url, .. }) => {
-                                api_url.clone()
-                            }
-                            _ => None,
-                        };
-                        settings.provider = Some(AgentProviderContentV1::LmStudio {
-                            default_model: Some(lmstudio::Model::new(&model, None, None, false)),
-                            api_url,
-                        });
                     }
                     "openai" => {
                         let (api_url, available_models) = match &settings.provider {
@@ -647,7 +624,6 @@ impl JsonSchema for LanguageModelProviderSetting {
         schemars::schema::SchemaObject {
             enum_values: Some(vec![
                 "google".into(),
-                "lmstudio".into(),
                 "openai".into(),
                 "zed.dev".into(),
                 "copilot_chat".into(),
@@ -721,7 +697,7 @@ pub struct AgentSettingsContentV1 {
     default_height: Option<f32>,
     /// The provider of the Agent service.
     ///
-    /// This can be "openai", "lmstudio", "zed.dev"
+    /// This can be "openai", "zed.dev"
     /// each with their respective default models and configurations.
     provider: Option<AgentProviderContentV1>,
 }
