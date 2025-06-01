@@ -1584,9 +1584,6 @@
     "google": {
       "api_url": "https://generativelanguage.googleapis.com"
     },
-    "ollama": {
-      "api_url": "http://localhost:11434"
-    },
     "openai": {
       "version": "1",
       "api_url": "https://api.openai.com/v1"

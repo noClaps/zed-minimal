@@ -16,7 +16,6 @@ use crate::provider::{
     google::GoogleSettings,
     lmstudio::LmStudioSettings,
     mistral::MistralSettings,
-    ollama::OllamaSettings,
     open_ai::OpenAiSettings,
 };
 
@@ -42,7 +41,6 @@ pub fn init(fs: Arc<dyn Fs>, cx: &mut App) {
 #[derive(Default)]
 pub struct AllLanguageModelSettings {
     pub bedrock: AmazonBedrockSettings,
-    pub ollama: OllamaSettings,
     pub openai: OpenAiSettings,
     pub zed_dot_dev: ZedDotDevSettings,
     pub google: GoogleSettings,
@@ -55,7 +53,6 @@ pub struct AllLanguageModelSettings {
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct AllLanguageModelSettingsContent {
     pub bedrock: Option<AmazonBedrockSettingsContent>,
-    pub ollama: Option<OllamaSettingsContent>,
     pub lmstudio: Option<LmStudioSettingsContent>,
     pub openai: Option<OpenAiSettingsContent>,
     #[serde(rename = "zed.dev")]
@@ -73,12 +70,6 @@ pub struct AmazonBedrockSettingsContent {
     region: Option<String>,
     profile: Option<String>,
     authentication_method: Option<provider::bedrock::BedrockAuthMethod>,
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct OllamaSettingsContent {
-    pub api_url: Option<String>,
-    pub available_models: Option<Vec<provider::ollama::AvailableModel>>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -210,18 +201,6 @@ impl settings::Settings for AllLanguageModelSettings {
             merge(
                 &mut settings.bedrock.endpoint,
                 bedrock.as_ref().map(|s| s.endpoint_url.clone()),
-            );
-
-            // Ollama
-            let ollama = value.ollama.clone();
-
-            merge(
-                &mut settings.ollama.api_url,
-                value.ollama.as_ref().and_then(|s| s.api_url.clone()),
-            );
-            merge(
-                &mut settings.ollama.available_models,
-                ollama.as_ref().and_then(|s| s.available_models.clone()),
             );
 
             // LM Studio

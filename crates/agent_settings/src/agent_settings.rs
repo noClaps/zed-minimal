@@ -10,7 +10,6 @@ use gpui::{App, Pixels, SharedString};
 use language_model::LanguageModel;
 use lmstudio::Model as LmStudioModel;
 use mistral::Model as MistralModel;
-use ollama::Model as OllamaModel;
 use schemars::{JsonSchema, schema::Schema};
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsSources};
@@ -58,11 +57,6 @@ pub enum AgentProviderContentV1 {
         default_model: Option<OpenAiModel>,
         api_url: Option<String>,
         available_models: Option<Vec<OpenAiModel>>,
-    },
-    #[serde(rename = "ollama")]
-    Ollama {
-        default_model: Option<OllamaModel>,
-        api_url: Option<String>,
     },
     #[serde(rename = "lmstudio")]
     LmStudio {
@@ -231,11 +225,6 @@ impl AgentSettingsContent {
                                     provider: "openai".into(),
                                     model: model.id().to_string(),
                                 }),
-                            AgentProviderContentV1::Ollama { default_model, .. } => default_model
-                                .map(|model| LanguageModelSelection {
-                                    provider: "ollama".into(),
-                                    model: model.id().to_string(),
-                                }),
                             AgentProviderContentV1::LmStudio { default_model, .. } => default_model
                                 .map(|model| LanguageModelSelection {
                                     provider: "lmstudio".into(),
@@ -336,21 +325,6 @@ impl AgentSettingsContent {
                 VersionedAgentSettingsContent::V1(ref mut settings) => match provider.as_ref() {
                     "zed.dev" => {
                         log::warn!("attempted to set zed.dev model on outdated settings");
-                    }
-                    "ollama" => {
-                        let api_url = match &settings.provider {
-                            Some(AgentProviderContentV1::Ollama { api_url, .. }) => api_url.clone(),
-                            _ => None,
-                        };
-                        settings.provider = Some(AgentProviderContentV1::Ollama {
-                            default_model: Some(ollama::Model::new(
-                                &model,
-                                None,
-                                None,
-                                Some(language_model.supports_tools()),
-                            )),
-                            api_url,
-                        });
                     }
                     "lmstudio" => {
                         let api_url = match &settings.provider {
@@ -698,7 +672,6 @@ impl JsonSchema for LanguageModelProviderSetting {
                 "amazon-bedrock".into(),
                 "google".into(),
                 "lmstudio".into(),
-                "ollama".into(),
                 "openai".into(),
                 "zed.dev".into(),
                 "copilot_chat".into(),
@@ -773,7 +746,7 @@ pub struct AgentSettingsContentV1 {
     default_height: Option<f32>,
     /// The provider of the Agent service.
     ///
-    /// This can be "openai", "ollama", "lmstudio", "deepseek", "zed.dev"
+    /// This can be "openai", "lmstudio", "deepseek", "zed.dev"
     /// each with their respective default models and configurations.
     provider: Option<AgentProviderContentV1>,
 }
