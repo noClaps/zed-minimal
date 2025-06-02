@@ -11,16 +11,16 @@ use chrono::{DateTime, Utc};
 use collections::HashMap;
 use editor::display_map::CreaseMetadata;
 use feature_flags::{self, FeatureFlagAppExt};
+use futures::FutureExt;
 use futures::future::Shared;
-use futures::{FutureExt, StreamExt as _};
 use git::repository::DiffType;
 use gpui::{
     AnyWindowHandle, App, AppContext, AsyncApp, Context, Entity, EventEmitter, SharedString, Task,
     WeakEntity,
 };
 use language_model::{
-    ConfiguredModel, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelKnownError, LanguageModelRegistry, LanguageModelRequest,
+    ConfiguredModel, LanguageModel, LanguageModelCompletionEvent, LanguageModelId,
+    LanguageModelKnownError, LanguageModelRegistry, LanguageModelRequest,
     LanguageModelRequestMessage, LanguageModelRequestTool, LanguageModelToolResult,
     LanguageModelToolResultContent, LanguageModelToolUseId, MessageContent,
     ModelRequestLimitReachedError, PaymentRequiredError, RequestUsage, Role, SelectedModel,
@@ -38,7 +38,7 @@ use thiserror::Error;
 use ui::Window;
 use util::{ResultExt as _, post_inc};
 use uuid::Uuid;
-use zed_llm_client::{CompletionIntent, CompletionRequestStatus};
+use zed_llm_client::CompletionIntent;
 
 use crate::ThreadStore;
 use crate::context::{AgentContext, AgentContextHandle, ContextLoadResult, LoadedContext};
@@ -46,7 +46,7 @@ use crate::thread_store::{
     SerializedCrease, SerializedLanguageModel, SerializedMessage, SerializedMessageSegment,
     SerializedThread, SerializedToolResult, SerializedToolUse, SharedProjectContext,
 };
-use crate::tool_use::{PendingToolUse, ToolUse, ToolUseMetadata, ToolUseState};
+use crate::tool_use::{PendingToolUse, ToolUse, ToolUseState};
 
 #[derive(
     Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Serialize, Deserialize, JsonSchema,
@@ -674,10 +674,6 @@ impl Thread {
 
         self.last_received_chunk_at
             .map(|instant| instant.elapsed().as_millis() > STALE_THRESHOLD)
-    }
-
-    fn received_chunk(&mut self) {
-        self.last_received_chunk_at = Some(Instant::now());
     }
 
     pub fn queue_state(&self) -> Option<QueueState> {
@@ -1368,58 +1364,6 @@ impl Thread {
         request
     }
 
-    fn to_summarize_request(
-        &self,
-        model: &Arc<dyn LanguageModel>,
-        intent: CompletionIntent,
-        added_user_message: String,
-        cx: &App,
-    ) -> LanguageModelRequest {
-        let mut request = LanguageModelRequest {
-            thread_id: None,
-            prompt_id: None,
-            intent: Some(intent),
-            mode: None,
-            messages: vec![],
-            tools: Vec::new(),
-            tool_choice: None,
-            stop: Vec::new(),
-            temperature: AgentSettings::temperature_for_model(model, cx),
-        };
-
-        for message in &self.messages {
-            let mut request_message = LanguageModelRequestMessage {
-                role: message.role,
-                content: Vec::new(),
-                cache: false,
-            };
-
-            for segment in &message.segments {
-                match segment {
-                    MessageSegment::Text(text) => request_message
-                        .content
-                        .push(MessageContent::Text(text.clone())),
-                    MessageSegment::Thinking { .. } => {}
-                    MessageSegment::RedactedThinking(_) => {}
-                }
-            }
-
-            if request_message.content.is_empty() {
-                continue;
-            }
-
-            request.messages.push(request_message);
-        }
-
-        request.messages.push(LanguageModelRequestMessage {
-            role: Role::User,
-            content: vec![MessageContent::Text(added_user_message)],
-            cache: false,
-        });
-
-        request
-    }
-
     fn attached_tracked_files_state(
         &self,
         messages: &mut Vec<LanguageModelRequestMessage>,
@@ -1470,222 +1414,26 @@ impl Thread {
         self.tool_use_limit_reached = false;
 
         let pending_completion_id = post_inc(&mut self.completion_count);
-        let mut request_callback_parameters = if self.request_callback.is_some() {
+        let request_callback_parameters = if self.request_callback.is_some() {
             Some((request.clone(), Vec::new()))
         } else {
             None
         };
         let prompt_id = self.last_prompt_id.clone();
-        let tool_use_metadata = ToolUseMetadata {
-            model: model.clone(),
-            thread_id: self.id.clone(),
-            prompt_id: prompt_id.clone(),
-        };
 
         self.last_received_chunk_at = Some(Instant::now());
 
         let task = cx.spawn(async move |thread, cx| {
-            let stream_completion_future = model.stream_completion(request, &cx);
             let initial_token_usage =
                 thread.read_with(cx, |thread, _cx| thread.cumulative_token_usage);
             let stream_completion = async {
-                let mut events = stream_completion_future.await?;
-
-                let mut stop_reason = StopReason::EndTurn;
-                let mut current_token_usage = TokenUsage::default();
+                let stop_reason = StopReason::EndTurn;
 
                 thread
                     .update(cx, |_thread, cx| {
                         cx.emit(ThreadEvent::NewRequest);
                     })
                     .ok();
-
-                let mut request_assistant_message_id = None;
-
-                while let Some(event) = events.next().await {
-                    if let Some((_, response_events)) = request_callback_parameters.as_mut() {
-                        response_events
-                            .push(event.as_ref().map_err(|error| error.to_string()).cloned());
-                    }
-
-                    thread.update(cx, |thread, cx| {
-                        let event = match event {
-                            Ok(event) => event,
-                            Err(LanguageModelCompletionError::BadInputJson {
-                                id,
-                                tool_name,
-                                raw_input: invalid_input_json,
-                                json_parse_error,
-                            }) => {
-                                thread.receive_invalid_tool_json(
-                                    id,
-                                    tool_name,
-                                    invalid_input_json,
-                                    json_parse_error,
-                                    window,
-                                    cx,
-                                );
-                                return Ok(());
-                            }
-                            Err(LanguageModelCompletionError::Other(error)) => {
-                                return Err(error);
-                            }
-                        };
-
-                        match event {
-                            LanguageModelCompletionEvent::StartMessage { .. } => {
-                                request_assistant_message_id =
-                                    Some(thread.insert_assistant_message(
-                                        vec![MessageSegment::Text(String::new())],
-                                        cx,
-                                    ));
-                            }
-                            LanguageModelCompletionEvent::Stop(reason) => {
-                                stop_reason = reason;
-                            }
-                            LanguageModelCompletionEvent::UsageUpdate(token_usage) => {
-                                thread.update_token_usage_at_last_message(token_usage);
-                                thread.cumulative_token_usage = thread.cumulative_token_usage
-                                    + token_usage
-                                    - current_token_usage;
-                                current_token_usage = token_usage;
-                            }
-                            LanguageModelCompletionEvent::Text(chunk) => {
-                                thread.received_chunk();
-
-                                cx.emit(ThreadEvent::ReceivedTextChunk);
-                                if let Some(last_message) = thread.messages.last_mut() {
-                                    if last_message.role == Role::Assistant
-                                        && !thread.tool_use.has_tool_results(last_message.id)
-                                    {
-                                        last_message.push_text(&chunk);
-                                        cx.emit(ThreadEvent::StreamedAssistantText(
-                                            last_message.id,
-                                            chunk,
-                                        ));
-                                    } else {
-                                        // If we won't have an Assistant message yet, assume this chunk marks the beginning
-                                        // of a new Assistant response.
-                                        //
-                                        // Importantly: We do *not* want to emit a `StreamedAssistantText` event here, as it
-                                        // will result in duplicating the text of the chunk in the rendered Markdown.
-                                        request_assistant_message_id =
-                                            Some(thread.insert_assistant_message(
-                                                vec![MessageSegment::Text(chunk.to_string())],
-                                                cx,
-                                            ));
-                                    };
-                                }
-                            }
-                            LanguageModelCompletionEvent::Thinking {
-                                text: chunk,
-                                signature,
-                            } => {
-                                thread.received_chunk();
-
-                                if let Some(last_message) = thread.messages.last_mut() {
-                                    if last_message.role == Role::Assistant
-                                        && !thread.tool_use.has_tool_results(last_message.id)
-                                    {
-                                        last_message.push_thinking(&chunk, signature);
-                                        cx.emit(ThreadEvent::StreamedAssistantThinking(
-                                            last_message.id,
-                                            chunk,
-                                        ));
-                                    } else {
-                                        // If we won't have an Assistant message yet, assume this chunk marks the beginning
-                                        // of a new Assistant response.
-                                        //
-                                        // Importantly: We do *not* want to emit a `StreamedAssistantText` event here, as it
-                                        // will result in duplicating the text of the chunk in the rendered Markdown.
-                                        request_assistant_message_id =
-                                            Some(thread.insert_assistant_message(
-                                                vec![MessageSegment::Thinking {
-                                                    text: chunk.to_string(),
-                                                    signature,
-                                                }],
-                                                cx,
-                                            ));
-                                    };
-                                }
-                            }
-                            LanguageModelCompletionEvent::ToolUse(tool_use) => {
-                                let last_assistant_message_id = request_assistant_message_id
-                                    .unwrap_or_else(|| {
-                                        let new_assistant_message_id =
-                                            thread.insert_assistant_message(vec![], cx);
-                                        request_assistant_message_id =
-                                            Some(new_assistant_message_id);
-                                        new_assistant_message_id
-                                    });
-
-                                let tool_use_id = tool_use.id.clone();
-                                let streamed_input = if tool_use.is_input_complete {
-                                    None
-                                } else {
-                                    Some((&tool_use.input).clone())
-                                };
-
-                                let ui_text = thread.tool_use.request_tool_use(
-                                    last_assistant_message_id,
-                                    tool_use,
-                                    tool_use_metadata.clone(),
-                                    cx,
-                                );
-
-                                if let Some(input) = streamed_input {
-                                    cx.emit(ThreadEvent::StreamedToolUse {
-                                        tool_use_id,
-                                        ui_text,
-                                        input,
-                                    });
-                                }
-                            }
-                            LanguageModelCompletionEvent::StatusUpdate(status_update) => {
-                                if let Some(completion) = thread
-                                    .pending_completions
-                                    .iter_mut()
-                                    .find(|completion| completion.id == pending_completion_id)
-                                {
-                                    match status_update {
-                                        CompletionRequestStatus::Queued {
-                                            position,
-                                        } => {
-                                            completion.queue_state = QueueState::Queued { position };
-                                        }
-                                        CompletionRequestStatus::Started => {
-                                            completion.queue_state =  QueueState::Started;
-                                        }
-                                        CompletionRequestStatus::Failed {
-                                            code, message, request_id
-                                        } => {
-                                            anyhow::bail!("completion request failed. request_id: {request_id}, code: {code}, message: {message}");
-                                        }
-                                        CompletionRequestStatus::UsageUpdated {
-                                            amount, limit
-                                        } => {
-                                            let usage = RequestUsage { limit, amount: amount as i32 };
-
-                                            thread.last_usage = Some(usage);
-                                        }
-                                        CompletionRequestStatus::ToolUseLimitReached => {
-                                            thread.tool_use_limit_reached = true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        thread.touch_updated_at();
-                        cx.emit(ThreadEvent::StreamedCompletion);
-                        cx.notify();
-
-                        thread.auto_capture_telemetry(cx);
-                        Ok(())
-                    })??;
-
-                    smol::future::yield_now().await;
-                }
 
                 thread.update(cx, |thread, cx| {
                     thread.last_received_chunk_at = None;
@@ -1717,7 +1465,7 @@ impl Thread {
                                 let tool_uses = thread.use_pending_tools(window, cx, model.clone());
                                 cx.emit(ThreadEvent::UsePendingTools { tool_uses });
                             }
-                            StopReason::EndTurn | StopReason::MaxTokens  => {
+                            StopReason::EndTurn | StopReason::MaxTokens => {
                                 thread.project.update(cx, |project, cx| {
                                     project.set_agent_location(None, cx);
                                 });
@@ -1739,7 +1487,8 @@ impl Thread {
                                                 break;
                                             }
 
-                                            if let Some(prev_message) = thread.messages.get(ix - 1) {
+                                            if let Some(prev_message) = thread.messages.get(ix - 1)
+                                            {
                                                 if prev_message.role == Role::Assistant {
                                                     break;
                                                 }
@@ -1754,7 +1503,9 @@ impl Thread {
 
                                 cx.emit(ThreadEvent::ShowError(ThreadError::Message {
                                     header: "Language model refusal".into(),
-                                    message: "Model refused to generate content for safety reasons.".into(),
+                                    message:
+                                        "Model refused to generate content for safety reasons."
+                                            .into(),
                                 }));
                             }
                         },
@@ -1849,50 +1600,11 @@ impl Thread {
             return;
         }
 
-        let added_user_message = include_str!("./prompts/summarize_thread_prompt.txt");
-
-        let request = self.to_summarize_request(
-            &model.model,
-            CompletionIntent::ThreadSummarization,
-            added_user_message.into(),
-            cx,
-        );
-
         self.summary = ThreadSummary::Generating;
 
         self.pending_summary = cx.spawn(async move |this, cx| {
             let result = async {
-                let mut messages = model.model.stream_completion(request, &cx).await?;
-
-                let mut new_summary = String::new();
-                while let Some(event) = messages.next().await {
-                    let Ok(event) = event else {
-                        continue;
-                    };
-                    let text = match event {
-                        LanguageModelCompletionEvent::Text(text) => text,
-                        LanguageModelCompletionEvent::StatusUpdate(
-                            CompletionRequestStatus::UsageUpdated { amount, limit },
-                        ) => {
-                            this.update(cx, |thread, _cx| {
-                                thread.last_usage = Some(RequestUsage {
-                                    limit,
-                                    amount: amount as i32,
-                                });
-                            })?;
-                            continue;
-                        }
-                        _ => continue,
-                    };
-
-                    let mut lines = text.lines();
-                    new_summary.extend(lines.next());
-
-                    // Stop if the LLM generated multiple lines.
-                    if lines.next().is_some() {
-                        break;
-                    }
-                }
+                let new_summary = String::new();
 
                 anyhow::Ok(new_summary)
             }
@@ -1940,7 +1652,7 @@ impl Thread {
             _ => {}
         }
 
-        let Some(ConfiguredModel { model, provider }) =
+        let Some(ConfiguredModel { model: _, provider }) =
             LanguageModelRegistry::read_global(cx).thread_summary_model()
         else {
             return;
@@ -1949,15 +1661,6 @@ impl Thread {
         if !provider.is_authenticated(cx) {
             return;
         }
-
-        let added_user_message = include_str!("./prompts/summarize_thread_detailed_prompt.txt");
-
-        let request = self.to_summarize_request(
-            &model,
-            CompletionIntent::ThreadContextSummarization,
-            added_user_message.into(),
-            cx,
-        );
 
         *self.detailed_summary_tx.borrow_mut() = DetailedSummaryState::Generating {
             message_id: last_message_id,
@@ -1968,24 +1671,7 @@ impl Thread {
         // which result to prefer (the old task could complete after the new one, resulting in a
         // stale summary).
         self.detailed_summary_task = cx.spawn(async move |thread, cx| {
-            let stream = model.stream_completion_text(request, &cx);
-            let Some(mut messages) = stream.await.log_err() else {
-                thread
-                    .update(cx, |thread, _cx| {
-                        *thread.detailed_summary_tx.borrow_mut() =
-                            DetailedSummaryState::NotGenerated;
-                    })
-                    .ok()?;
-                return None;
-            };
-
-            let mut new_detailed_summary = String::new();
-
-            while let Some(chunk) = messages.stream.next().await {
-                if let Some(chunk) = chunk.log_err() {
-                    new_detailed_summary.push_str(&chunk);
-                }
-            }
+            let new_detailed_summary = String::new();
 
             thread
                 .update(cx, |thread, _cx| {
@@ -2072,17 +1758,6 @@ impl Thread {
                         tool,
                     );
                     cx.emit(ThreadEvent::ToolConfirmationNeeded);
-                } else {
-                    self.run_tool(
-                        tool_use.id.clone(),
-                        tool_use.ui_text.clone(),
-                        tool_use.input.clone(),
-                        request.clone(),
-                        tool,
-                        model.clone(),
-                        window,
-                        cx,
-                    );
                 }
             } else {
                 self.handle_hallucinated_tool_use(
@@ -2172,14 +1847,11 @@ impl Thread {
         tool_use_id: LanguageModelToolUseId,
         ui_text: impl Into<SharedString>,
         input: serde_json::Value,
-        request: Arc<LanguageModelRequest>,
         tool: Arc<dyn Tool>,
-        model: Arc<dyn LanguageModel>,
         window: Option<AnyWindowHandle>,
         cx: &mut Context<Thread>,
     ) {
-        let task =
-            self.spawn_tool_use(tool_use_id.clone(), request, input, tool, model, window, cx);
+        let task = self.spawn_tool_use(tool_use_id.clone(), input, tool, window, cx);
         self.tool_use
             .run_pending_tool(tool_use_id, ui_text.into(), task);
     }
@@ -2187,10 +1859,8 @@ impl Thread {
     fn spawn_tool_use(
         &mut self,
         tool_use_id: LanguageModelToolUseId,
-        request: Arc<LanguageModelRequest>,
         input: serde_json::Value,
         tool: Arc<dyn Tool>,
-        model: Arc<dyn LanguageModel>,
         window: Option<AnyWindowHandle>,
         cx: &mut Context<Thread>,
     ) -> Task<()> {
@@ -2201,10 +1871,8 @@ impl Thread {
         } else {
             tool.run(
                 input,
-                request,
                 self.project.clone(),
                 self.action_log.clone(),
-                model,
                 window,
                 cx,
             )
@@ -2753,16 +2421,6 @@ impl Thread {
             .get(self.messages.len().saturating_sub(1))
             .or_else(|| self.request_token_usage.last())
             .cloned()
-    }
-
-    fn update_token_usage_at_last_message(&mut self, token_usage: TokenUsage) {
-        let placeholder = self.token_usage_at_last_message().unwrap_or_default();
-        self.request_token_usage
-            .resize(self.messages.len(), placeholder);
-
-        if let Some(last) = self.request_token_usage.last_mut() {
-            *last = token_usage;
-        }
     }
 
     pub fn deny_tool_use(

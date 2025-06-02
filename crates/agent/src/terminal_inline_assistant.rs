@@ -207,11 +207,11 @@ impl TerminalInlineAssistant {
             .log_err();
 
         let codegen = assist.codegen.clone();
-        let Some(request_task) = self.request_for_inline_assist(assist_id, cx).log_err() else {
+        let Some(_) = self.request_for_inline_assist(assist_id, cx).log_err() else {
             return;
         };
 
-        codegen.update(cx, |codegen, cx| codegen.start(request_task, cx));
+        codegen.update(cx, |codegen, cx| codegen.start(cx));
     }
 
     fn stop_assist(&mut self, assist_id: TerminalInlineAssistId, cx: &mut App) {

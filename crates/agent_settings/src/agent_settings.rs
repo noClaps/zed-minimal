@@ -2,7 +2,6 @@ mod agent_profile;
 
 use std::sync::Arc;
 
-use ::open_ai::Model as OpenAiModel;
 use anyhow::{Result, bail};
 use collections::IndexMap;
 use gpui::{App, Pixels, SharedString};
@@ -49,12 +48,6 @@ pub enum NotifyWhenAgentWaiting {
 pub enum AgentProviderContentV1 {
     #[serde(rename = "zed.dev")]
     ZedDotDev { default_model: Option<String> },
-    #[serde(rename = "openai")]
-    OpenAi {
-        default_model: Option<OpenAiModel>,
-        api_url: Option<String>,
-        available_models: Option<Vec<OpenAiModel>>,
-    },
 }
 
 #[derive(Default, Clone, Debug)]
@@ -202,11 +195,6 @@ impl AgentSettingsContent {
                                     provider: "zed.dev".into(),
                                     model,
                                 }),
-                            AgentProviderContentV1::OpenAi { default_model, .. } => default_model
-                                .map(|model| LanguageModelSelection {
-                                    provider: "openai".into(),
-                                    model: model.id().to_string(),
-                                }),
                         }),
                     inline_assistant_model: None,
                     commit_message_model: None,
@@ -232,15 +220,7 @@ impl AgentSettingsContent {
                 dock: settings.dock,
                 default_width: settings.default_width,
                 default_height: settings.default_height,
-                default_model: Some(LanguageModelSelection {
-                    provider: "openai".into(),
-                    model: settings
-                        .default_open_ai_model
-                        .clone()
-                        .unwrap_or_default()
-                        .id()
-                        .to_string(),
-                }),
+                default_model: None,
                 inline_assistant_model: None,
                 commit_message_model: None,
                 thread_summary_model: None,
@@ -289,24 +269,9 @@ impl AgentSettingsContent {
 
         match &mut self.inner {
             Some(AgentSettingsContentInner::Versioned(settings)) => match **settings {
-                VersionedAgentSettingsContent::V1(ref mut settings) => match provider.as_ref() {
+                VersionedAgentSettingsContent::V1(_) => match provider.as_ref() {
                     "zed.dev" => {
                         log::warn!("attempted to set zed.dev model on outdated settings");
-                    }
-                    "openai" => {
-                        let (api_url, available_models) = match &settings.provider {
-                            Some(AgentProviderContentV1::OpenAi {
-                                api_url,
-                                available_models,
-                                ..
-                            }) => (api_url.clone(), available_models.clone()),
-                            _ => (None, None),
-                        };
-                        settings.provider = Some(AgentProviderContentV1::OpenAi {
-                            default_model: OpenAiModel::from_id(&model).ok(),
-                            api_url,
-                            available_models,
-                        });
                     }
                     _ => {}
                 },
@@ -317,11 +282,6 @@ impl AgentSettingsContent {
                     });
                 }
             },
-            Some(AgentSettingsContentInner::Legacy(settings)) => {
-                if let Ok(model) = OpenAiModel::from_id(&language_model.id().0) {
-                    settings.default_open_ai_model = Some(model);
-                }
-            }
             None => {
                 self.inner = Some(AgentSettingsContentInner::for_v2(AgentSettingsContentV2 {
                     default_model: Some(LanguageModelSelection {
@@ -331,6 +291,7 @@ impl AgentSettingsContent {
                     ..Default::default()
                 }));
             }
+            _ => unreachable!(),
         }
     }
 
@@ -611,11 +572,7 @@ impl JsonSchema for LanguageModelProviderSetting {
 
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> Schema {
         schemars::schema::SchemaObject {
-            enum_values: Some(vec![
-                "openai".into(),
-                "zed.dev".into(),
-                "copilot_chat".into(),
-            ]),
+            enum_values: Some(vec!["zed.dev".into(), "copilot_chat".into()]),
             ..Default::default()
         }
         .into()
@@ -637,8 +594,8 @@ impl From<&str> for LanguageModelProviderSetting {
 impl Default for LanguageModelSelection {
     fn default() -> Self {
         Self {
-            provider: LanguageModelProviderSetting("openai".to_string()),
-            model: "gpt-4".to_string(),
+            model: String::new(),
+            provider: LanguageModelProviderSetting(String::new()),
         }
     }
 }
@@ -684,7 +641,7 @@ pub struct AgentSettingsContentV1 {
     default_height: Option<f32>,
     /// The provider of the Agent service.
     ///
-    /// This can be "openai", "zed.dev"
+    /// This can be "zed.dev"
     /// each with their respective default models and configurations.
     provider: Option<AgentProviderContentV1>,
 }
@@ -708,14 +665,6 @@ pub struct LegacyAgentSettingsContent {
     ///
     /// Default: 320
     pub default_height: Option<f32>,
-    /// The default OpenAI model to use when creating new chats.
-    ///
-    /// Default: gpt-4-1106-preview
-    pub default_open_ai_model: Option<OpenAiModel>,
-    /// OpenAI API base URL to use when creating new chats.
-    ///
-    /// Default: <https://api.openai.com/v1>
-    pub openai_api_url: Option<String>,
 }
 
 impl Settings for AgentSettings {
@@ -861,7 +810,6 @@ fn merge<T>(target: &mut T, value: Option<T>) {
 mod tests {
     use fs::Fs;
     use gpui::{ReadGlobal, TestAppContext};
-    use settings::SettingsStore;
 
     use super::*;
 
@@ -888,10 +836,7 @@ mod tests {
                 |settings, _| {
                     *settings = AgentSettingsContent {
                         inner: Some(AgentSettingsContentInner::for_v2(AgentSettingsContentV2 {
-                            default_model: Some(LanguageModelSelection {
-                                provider: "test-provider".into(),
-                                model: "gpt-99".into(),
-                            }),
+                            default_model: None,
                             inline_assistant_model: None,
                             commit_message_model: None,
                             thread_summary_model: None,
@@ -932,66 +877,5 @@ mod tests {
             serde_json_lenient::from_str(&raw_settings_value).unwrap();
 
         assert!(!agent_settings.agent.is_version_outdated());
-    }
-
-    #[gpui::test]
-    async fn test_load_settings_from_old_key(cx: &mut TestAppContext) {
-        let fs = fs::FakeFs::new(cx.executor().clone());
-        fs.create_dir(paths::settings_file().parent().unwrap())
-            .await
-            .unwrap();
-
-        cx.update(|cx| {
-            let mut test_settings = settings::SettingsStore::test(cx);
-            let user_settings_content = r#"{
-            "assistant": {
-                "enabled": true,
-                "version": "2",
-                "default_model": {
-                  "provider": "zed.dev",
-                  "model": "gpt-99"
-                },
-            }}"#;
-            test_settings
-                .set_user_settings(user_settings_content, cx)
-                .unwrap();
-            cx.set_global(test_settings);
-            AgentSettings::register(cx);
-        });
-
-        cx.run_until_parked();
-
-        let agent_settings = cx.update(|cx| AgentSettings::get_global(cx).clone());
-        assert!(agent_settings.enabled);
-        assert!(!agent_settings.using_outdated_settings_version);
-        assert_eq!(agent_settings.default_model.model, "gpt-99");
-
-        cx.update_global::<SettingsStore, _>(|settings_store, cx| {
-            settings_store.update_user_settings::<AgentSettings>(cx, |settings| {
-                *settings = AgentSettingsContent {
-                    inner: Some(AgentSettingsContentInner::for_v2(AgentSettingsContentV2 {
-                        enabled: Some(false),
-                        default_model: Some(LanguageModelSelection {
-                            provider: "xai".to_owned().into(),
-                            model: "grok".to_owned(),
-                        }),
-                        ..Default::default()
-                    })),
-                };
-            });
-        });
-
-        cx.run_until_parked();
-
-        let settings = cx.update(|cx| SettingsStore::global(cx).raw_user_settings().clone());
-
-        #[derive(Debug, Deserialize)]
-        struct AgentSettingsTest {
-            assistant: AgentSettingsContent,
-            agent: Option<serde_json_lenient::Value>,
-        }
-
-        let agent_settings: AgentSettingsTest = serde_json::from_value(settings).unwrap();
-        assert!(agent_settings.agent.is_none());
     }
 }

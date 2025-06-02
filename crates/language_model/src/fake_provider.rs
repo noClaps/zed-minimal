@@ -1,11 +1,10 @@
 use crate::{
-    AuthenticateError, LanguageModel, LanguageModelCompletionError, LanguageModelCompletionEvent,
-    LanguageModelId, LanguageModelName, LanguageModelProvider, LanguageModelProviderId,
-    LanguageModelProviderName, LanguageModelProviderState, LanguageModelRequest,
-    LanguageModelToolChoice,
+    AuthenticateError, LanguageModel, LanguageModelId, LanguageModelName, LanguageModelProvider,
+    LanguageModelProviderId, LanguageModelProviderName, LanguageModelProviderState,
+    LanguageModelRequest, LanguageModelToolChoice,
 };
-use futures::{FutureExt, StreamExt, channel::mpsc, future::BoxFuture, stream::BoxStream};
-use gpui::{AnyView, App, AsyncApp, Entity, Task, Window};
+use futures::channel::mpsc;
+use gpui::{AnyView, App, Entity, Task, Window};
 use http_client::Result;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -171,30 +170,6 @@ impl LanguageModel for FakeLanguageModel {
 
     fn max_token_count(&self) -> usize {
         1000000
-    }
-
-    fn count_tokens(&self, _: LanguageModelRequest, _: &App) -> BoxFuture<'static, Result<usize>> {
-        futures::future::ready(Ok(0)).boxed()
-    }
-
-    fn stream_completion(
-        &self,
-        request: LanguageModelRequest,
-        _: &AsyncApp,
-    ) -> BoxFuture<
-        'static,
-        Result<
-            BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
-        >,
-    > {
-        let (tx, rx) = mpsc::unbounded();
-        self.current_completion_txs.lock().push((request, tx));
-        async move {
-            Ok(rx
-                .map(|text| Ok(LanguageModelCompletionEvent::Text(text)))
-                .boxed())
-        }
-        .boxed()
     }
 
     fn as_fake(&self) -> &Self {

@@ -19,12 +19,11 @@ use gpui::{
 };
 use language::{AnchorRangeExt, Bias, Buffer, LanguageRegistry, OffsetRangeExt, Point, ToOffset};
 use language_model::{
-    LanguageModel, LanguageModelCacheConfiguration, LanguageModelCompletionEvent,
-    LanguageModelImage, LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage,
-    LanguageModelToolUseId, MessageContent, PaymentRequiredError, Role, StopReason,
-    report_assistant_event,
+    LanguageModel, LanguageModelCacheConfiguration, LanguageModelImage, LanguageModelRegistry,
+    LanguageModelRequest, LanguageModelRequestMessage, LanguageModelToolUseId, MessageContent,
+    PaymentRequiredError, Role, StopReason, report_assistant_event,
 };
-use open_ai::Model as OpenAiModel;
+
 use paths::contexts_dir;
 use project::Project;
 use prompt_store::PromptBuilder;
@@ -38,7 +37,7 @@ use std::{
     ops::Range,
     path::Path,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use telemetry_events::{AssistantEventData, AssistantKind, AssistantPhase};
 use text::{BufferSnapshot, ToPoint};
@@ -1256,7 +1255,6 @@ impl AssistantContext {
         let Some(model) = LanguageModelRegistry::read_global(cx).default_model() else {
             return;
         };
-        let request = self.to_completion_request(Some(&model.model), cx);
         let debounce = self.token_count.is_some();
         self.pending_token_count = cx.spawn(async move |this, cx| {
             async move {
@@ -1266,11 +1264,7 @@ impl AssistantContext {
                         .await;
                 }
 
-                let token_count = cx
-                    .update(|cx| model.model.count_tokens(request, cx))?
-                    .await?;
                 this.update(cx, |this, cx| {
-                    this.token_count = Some(token_count);
                     this.start_cache_warming(&model.model, cx);
                     cx.notify()
                 })
@@ -1401,31 +1395,8 @@ impl AssistantContext {
             }
         }
 
-        let request = {
-            let mut req = self.to_completion_request(Some(&model), cx);
-            // Skip the last message because it's likely to change and
-            // therefore would be a waste to cache.
-            req.messages.pop();
-            req.messages.push(LanguageModelRequestMessage {
-                role: Role::User,
-                content: vec!["Respond only with OK, nothing else.".into()],
-                cache: false,
-            });
-            req
-        };
-
-        let model = Arc::clone(model);
         self.pending_cache_warming_task = cx.spawn(async move |this, cx| {
             async move {
-                match model.stream_completion(request, &cx).await {
-                    Ok(mut stream) => {
-                        stream.next().await;
-                        log::info!("Cache warming completed successfully");
-                    }
-                    Err(e) => {
-                        log::warn!("Cache warming failed: {}", e);
-                    }
-                };
                 this.update(cx, |this, cx| {
                     this.update_cache_status_for_completion(cx);
                 })
@@ -1962,35 +1933,6 @@ impl AssistantContext {
         );
     }
 
-    fn insert_thought_process_output_section(
-        &mut self,
-        section: ThoughtProcessOutputSection<language::Anchor>,
-        cx: &mut Context<Self>,
-    ) {
-        let buffer = self.buffer.read(cx);
-        let insertion_ix = match self
-            .thought_process_output_sections
-            .binary_search_by(|probe| probe.range.cmp(&section.range, buffer))
-        {
-            Ok(ix) | Err(ix) => ix,
-        };
-        self.thought_process_output_sections
-            .insert(insertion_ix, section.clone());
-        // cx.emit(ContextEvent::ThoughtProcessOutputSectionAdded {
-        //     section: section.clone(),
-        // });
-        let version = self.version.clone();
-        let timestamp = self.next_timestamp();
-        self.push_op(
-            ContextOperation::ThoughtProcessOutputSectionAdded {
-                timestamp,
-                section,
-                version,
-            },
-            cx,
-        );
-    }
-
     pub fn completion_provider_changed(&mut self, cx: &mut Context<Self>) {
         self.count_remaining_tokens(cx);
     }
@@ -2019,8 +1961,6 @@ impl AssistantContext {
         // Compute which messages to cache, including the last one.
         self.mark_cache_anchors(&model.cache_configuration(), false, cx);
 
-        let request = self.to_completion_request(Some(&model), cx);
-
         let assistant_message = self
             .insert_message_after(last_message_id, Role::Assistant, MessageStatus::Pending, cx)
             .unwrap();
@@ -2034,117 +1974,11 @@ impl AssistantContext {
 
         let task = cx.spawn({
             async move |this, cx| {
-                let stream = model.stream_completion(request, &cx);
                 let assistant_message_id = assistant_message.id;
-                let mut response_latency = None;
+                let response_latency = None;
                 let stream_completion = async {
-                    let request_start = Instant::now();
-                    let mut events = stream.await?;
-                    let mut stop_reason = StopReason::EndTurn;
-                    let mut thought_process_stack = Vec::new();
+                    let stop_reason = StopReason::EndTurn;
 
-                    const THOUGHT_PROCESS_START_MARKER: &str = "<think>\n";
-                    const THOUGHT_PROCESS_END_MARKER: &str = "\n</think>";
-
-                    while let Some(event) = events.next().await {
-                        if response_latency.is_none() {
-                            response_latency = Some(request_start.elapsed());
-                        }
-                        let event = event?;
-
-                        let mut context_event = None;
-                        let mut thought_process_output_section = None;
-
-                        this.update(cx, |this, cx| {
-                            let message_ix = this
-                                .message_anchors
-                                .iter()
-                                .position(|message| message.id == assistant_message_id)?;
-                            this.buffer.update(cx, |buffer, cx| {
-                                let message_old_end_offset = this.message_anchors[message_ix + 1..]
-                                    .iter()
-                                    .find(|message| message.start.is_valid(buffer))
-                                    .map_or(buffer.len(), |message| {
-                                        message.start.to_offset(buffer).saturating_sub(1)
-                                    });
-
-                                match event {
-                                    LanguageModelCompletionEvent::StatusUpdate { .. } => {}
-                                    LanguageModelCompletionEvent::StartMessage { .. } => {}
-                                    LanguageModelCompletionEvent::Stop(reason) => {
-                                        stop_reason = reason;
-                                    }
-                                    LanguageModelCompletionEvent::Thinking { text: chunk, .. } => {
-                                        if thought_process_stack.is_empty() {
-                                            let start =
-                                                buffer.anchor_before(message_old_end_offset);
-                                            thought_process_stack.push(start);
-                                            let chunk =
-                                                format!("{THOUGHT_PROCESS_START_MARKER}{chunk}{THOUGHT_PROCESS_END_MARKER}");
-                                            let chunk_len = chunk.len();
-                                            buffer.edit(
-                                                [(
-                                                    message_old_end_offset..message_old_end_offset,
-                                                    chunk,
-                                                )],
-                                                None,
-                                                cx,
-                                            );
-                                            let end = buffer
-                                                .anchor_before(message_old_end_offset + chunk_len);
-                                            context_event = Some(
-                                                ContextEvent::StartedThoughtProcess(start..end),
-                                            );
-                                        } else {
-                                            // This ensures that all the thinking chunks are inserted inside the thinking tag
-                                            let insertion_position =
-                                                message_old_end_offset - THOUGHT_PROCESS_END_MARKER.len();
-                                            buffer.edit(
-                                                [(insertion_position..insertion_position, chunk)],
-                                                None,
-                                                cx,
-                                            );
-                                        }
-                                    }
-                                    LanguageModelCompletionEvent::Text(mut chunk) => {
-                                        if let Some(start) = thought_process_stack.pop() {
-                                            let end = buffer.anchor_before(message_old_end_offset);
-                                            context_event =
-                                                Some(ContextEvent::EndedThoughtProcess(end));
-                                            thought_process_output_section =
-                                                Some(ThoughtProcessOutputSection {
-                                                    range: start..end,
-                                                });
-                                            chunk.insert_str(0, "\n\n");
-                                        }
-
-                                        buffer.edit(
-                                            [(
-                                                message_old_end_offset..message_old_end_offset,
-                                                chunk,
-                                            )],
-                                            None,
-                                            cx,
-                                        );
-                                    }
-                                    LanguageModelCompletionEvent::ToolUse(_) |
-                                    LanguageModelCompletionEvent::UsageUpdate(_)  => {}
-                                }
-                            });
-
-                            if let Some(section) = thought_process_output_section.take() {
-                                this.insert_thought_process_output_section(section, cx);
-                            }
-                            if let Some(context_event) = context_event.take() {
-                                cx.emit(context_event);
-                            }
-
-                            cx.emit(ContextEvent::StreamedCompletion);
-
-                            Some(())
-                        })?;
-                        smol::future::yield_now().await;
-                    }
                     this.update(cx, |this, cx| {
                         this.pending_completions
                             .retain(|completion| completion.id != pending_completion_id);
@@ -2641,7 +2475,7 @@ impl AssistantContext {
         self.message_anchors.insert(insertion_ix, new_anchor);
     }
 
-    pub fn summarize(&mut self, mut replace_old: bool, cx: &mut Context<Self>) {
+    pub fn summarize(&mut self, replace_old: bool, cx: &mut Context<Self>) {
         let Some(model) = LanguageModelRegistry::read_global(cx).default_model() else {
             return;
         };
@@ -2670,45 +2504,12 @@ impl AssistantContext {
                         done: false,
                         timestamp: clock::Lamport::default(),
                     });
-                    replace_old = true;
                 }
                 ContextSummary::Content(_) => {}
             }
 
             self.summary_task = cx.spawn(async move |this, cx| {
                 let result = async {
-                    let stream = model.model.stream_completion_text(request, &cx);
-                    let mut messages = stream.await?;
-
-                    let mut replaced = !replace_old;
-                    while let Some(message) = messages.stream.next().await {
-                        let text = message?;
-                        let mut lines = text.lines();
-                        this.update(cx, |this, cx| {
-                            let version = this.version.clone();
-                            let timestamp = this.next_timestamp();
-                            let summary = this.summary.content_or_set_empty();
-                            if !replaced && replace_old {
-                                summary.text.clear();
-                                replaced = true;
-                            }
-                            summary.text.extend(lines.next());
-                            summary.timestamp = timestamp;
-                            let operation = ContextOperation::UpdateSummary {
-                                summary: summary.clone(),
-                                version,
-                            };
-                            this.push_op(operation, cx);
-                            cx.emit(ContextEvent::SummaryChanged);
-                            cx.emit(ContextEvent::SummaryGenerated);
-                        })?;
-
-                        // Stop if the LLM generated multiple lines.
-                        if lines.next().is_some() {
-                            break;
-                        }
-                    }
-
                     this.read_with(cx, |this, _cx| {
                         if let Some(summary) = this.summary.content() {
                             if summary.text.is_empty() {
@@ -3252,7 +3053,6 @@ struct SavedContextV0_1_0 {
     message_metadata: HashMap<SavedMessageIdPreV0_4_0, SavedMessageMetadataPreV0_4_0>,
     summary: String,
     api_url: Option<String>,
-    model: OpenAiModel,
 }
 
 impl SavedContextV0_1_0 {

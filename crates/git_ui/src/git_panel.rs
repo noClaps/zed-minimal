@@ -17,11 +17,10 @@ use editor::{
     Editor, EditorElement, EditorMode, EditorSettings, MultiBuffer, ShowScrollbar,
     scroll::ScrollbarAutoHide,
 };
-use futures::StreamExt as _;
 use git::blame::ParsedCommitMessage;
 use git::repository::{
-    Branch, CommitDetails, CommitOptions, CommitSummary, DiffType, PushOptions, Remote,
-    RemoteCommandOutput, ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
+    Branch, CommitDetails, CommitOptions, CommitSummary, PushOptions, Remote, RemoteCommandOutput,
+    ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
 };
 use git::status::StageStatus;
 use git::{Amend, ToggleStaged, repository::RepoPath, status::FileStatus};
@@ -35,10 +34,7 @@ use gpui::{
 };
 use itertools::Itertools;
 use language::{Buffer, File};
-use language_model::{
-    ConfiguredModel, LanguageModel, LanguageModelRegistry, LanguageModelRequest,
-    LanguageModelRequestMessage, Role,
-};
+use language_model::{ConfiguredModel, LanguageModel, LanguageModelRegistry};
 use menu::{Confirm, SecondaryConfirm, SelectFirst, SelectLast, SelectNext, SelectPrevious};
 use multi_buffer::ExcerptInfo;
 use notifications::status_toast::{StatusToast, ToastIcon};
@@ -69,7 +65,6 @@ use workspace::{
     dock::{DockPosition, Panel, PanelEvent},
     notifications::DetachAndPromptErr,
 };
-use zed_llm_client::CompletionIntent;
 
 actions!(
     git_panel,
@@ -1715,72 +1710,25 @@ impl GitPanel {
             return;
         }
 
-        let model = match current_language_model(cx) {
-            Some(value) => value,
-            None => return,
-        };
-
-        let Some(repo) = self.active_repository.as_ref() else {
-            return;
-        };
-
         telemetry::event!("Git Commit Message Generated");
 
-        let diff = repo.update(cx, |repo, cx| {
-            if self.has_staged_changes() {
-                repo.diff(DiffType::HeadToIndex, cx)
-            } else {
-                repo.diff(DiffType::HeadToWorktree, cx)
-            }
-        });
-
-        let temperature = AgentSettings::temperature_for_model(&model, cx);
-
         self.generate_commit_message_task = Some(cx.spawn(async move |this, cx| {
-             async move {
+            async move {
                 let _defer = cx.on_drop(&this, |this, _cx| {
                     this.generate_commit_message_task.take();
                 });
 
-                let mut diff_text = diff.await??;
-
-                const ONE_MB: usize = 1_000_000;
-                if diff_text.len() > ONE_MB {
-                    diff_text = diff_text.chars().take(ONE_MB).collect()
-                }
-
                 let subject = this.update(cx, |this, cx| {
-                    this.commit_editor.read(cx).text(cx).lines().next().map(ToOwned::to_owned).unwrap_or_default()
+                    this.commit_editor
+                        .read(cx)
+                        .text(cx)
+                        .lines()
+                        .next()
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_default()
                 })?;
 
                 let text_empty = subject.trim().is_empty();
-
-                let content = if text_empty {
-                    format!("{PROMPT}\nHere are the changes in this commit:\n{diff_text}")
-                } else {
-                    format!("{PROMPT}\nHere is the user's subject line:\n{subject}\nHere are the changes in this commit:\n{diff_text}\n")
-                };
-
-                const PROMPT: &str = include_str!("commit_message_prompt.txt");
-
-                let request = LanguageModelRequest {
-                    thread_id: None,
-                    prompt_id: None,
-                    intent: Some(CompletionIntent::GenerateGitCommitMessage),
-                    mode: None,
-                    messages: vec![LanguageModelRequestMessage {
-                        role: Role::User,
-                        content: vec![content.into()],
-                        cache: false,
-                    }],
-                    tools: Vec::new(),
-                    tool_choice: None,
-                    stop: Vec::new(),
-                    temperature,
-                };
-
-                let stream = model.stream_completion_text(request, &cx);
-                let mut messages = stream.await?;
 
                 if !text_empty {
                     this.update(cx, |this, cx| {
@@ -1791,20 +1739,10 @@ impl GitPanel {
                     })?;
                 }
 
-                while let Some(message) = messages.stream.next().await {
-                    let text = message?;
-
-                    this.update(cx, |this, cx| {
-                        this.commit_message_buffer(cx).update(cx, |buffer, cx| {
-                            let insert_position = buffer.anchor_before(buffer.len());
-                            buffer.edit([(insert_position..insert_position, text)], None, cx);
-                        });
-                    })?;
-                }
-
                 anyhow::Ok(())
             }
-            .log_err().await
+            .log_err()
+            .await
         }));
     }
 

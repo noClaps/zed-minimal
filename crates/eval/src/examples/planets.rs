@@ -4,7 +4,7 @@ use assistant_tool::Tool;
 use assistant_tools::{OpenTool, TerminalTool};
 use async_trait::async_trait;
 
-use crate::example::{Example, ExampleContext, ExampleMetadata, JudgeAssertion};
+use crate::example::{Example, ExampleContext, ExampleMetadata};
 
 pub struct Planets;
 
@@ -19,7 +19,6 @@ impl Example for Planets {
             max_assertions: None,
             profile_id: AgentProfileId::default(),
             existing_thread_json: None,
-            max_turns: None,
         }
     }
 
@@ -53,25 +52,5 @@ impl Example for Planets {
             .ok();
 
         Ok(())
-    }
-
-    fn diff_assertions(&self) -> Vec<JudgeAssertion> {
-        vec![
-            JudgeAssertion {
-                id: "animated solar system".to_string(),
-                description: "This page should render a solar system, and it should be animated."
-                    .to_string(),
-            },
-            JudgeAssertion {
-                id: "drag to rotate camera".to_string(),
-                description: "The user can drag to rotate the camera around.".to_string(),
-            },
-            JudgeAssertion {
-                id: "plain JavaScript".to_string(),
-                description:
-                    "The code base uses plain JavaScript and no npm, along with HTML and CSS."
-                        .to_string(),
-            },
-        ]
     }
 }
