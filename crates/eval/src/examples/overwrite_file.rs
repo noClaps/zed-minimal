@@ -1,9 +1,6 @@
-use agent_settings::AgentProfileId;
-use anyhow::Result;
-use assistant_tools::{EditFileMode, EditFileToolInput};
 use async_trait::async_trait;
 
-use crate::example::{Example, ExampleContext, ExampleMetadata};
+use crate::example::{Example, ExampleMetadata};
 
 pub struct FileOverwriteExample;
 
@@ -21,26 +18,6 @@ impl Example for FileOverwriteExample {
             url: "https://github.com/zed-industries/zed.git".to_string(),
             revision: "023a60806a8cc82e73bd8d88e63b4b07fc7a0040".to_string(),
             language_server: None,
-            max_assertions: Some(1),
-            profile_id: AgentProfileId::default(),
-            existing_thread_json: None,
         }
-    }
-
-    async fn conversation(&self, cx: &mut ExampleContext) -> Result<()> {
-        let response = cx.run_turns(1).await?;
-        let file_overwritten = if let Some(tool_use) = response.find_tool_call("edit_file") {
-            let input = tool_use.parse_input::<EditFileToolInput>()?;
-            match input.mode {
-                EditFileMode::Edit => false,
-                EditFileMode::Create | EditFileMode::Overwrite => {
-                    input.path.ends_with("src/language_model_selector.rs")
-                }
-            }
-        } else {
-            false
-        };
-
-        cx.assert(!file_overwritten, "File should be edited, not overwritten")
     }
 }

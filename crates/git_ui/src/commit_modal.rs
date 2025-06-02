@@ -291,7 +291,6 @@ impl CommitModal {
             tooltip,
             commit_label,
             co_authors,
-            generate_commit_message,
             active_repo,
             is_amend_pending,
             has_previous_commit,
@@ -299,7 +298,6 @@ impl CommitModal {
             let (can_commit, tooltip) = git_panel.configure_commit_button(cx);
             let title = git_panel.commit_button_title();
             let co_authors = git_panel.render_co_authors(cx);
-            let generate_commit_message = git_panel.render_generate_commit_message_button(cx);
             let active_repo = git_panel.active_repository.clone();
             let is_amend_pending = git_panel.amend_pending();
             let has_previous_commit = active_repo
@@ -311,7 +309,6 @@ impl CommitModal {
                 tooltip,
                 title,
                 co_authors,
-                generate_commit_message,
                 active_repo,
                 is_amend_pending,
                 has_previous_commit,
@@ -383,7 +380,6 @@ impl CommitModal {
                             .overflow_x_hidden()
                             .child(branch_picker),
                     )
-                    .children(generate_commit_message)
                     .children(co_authors),
             )
             .child(div().flex_1())

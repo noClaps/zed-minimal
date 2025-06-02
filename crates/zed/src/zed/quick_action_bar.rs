@@ -1,6 +1,5 @@
 mod markdown_preview;
 mod repl_menu;
-use agent_settings::AgentSettings;
 use editor::actions::{
     AddSelectionAbove, AddSelectionBelow, CodeActionSource, DuplicateLineDown, GoToDiagnostic,
     GoToHunk, GoToPreviousDiagnostic, GoToPreviousHunk, MoveLineDown, MoveLineUp, SelectAll,
@@ -25,7 +24,7 @@ use vim_mode_setting::VimModeSetting;
 use workspace::{
     ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, Workspace, item::ItemHandle,
 };
-use zed_actions::{assistant::InlineAssist, outline::ToggleOutline};
+use zed_actions::outline::ToggleOutline;
 
 const MAX_CODE_ACTION_MENU_LINES: u32 = 16;
 
@@ -172,18 +171,6 @@ impl Render for QuickActionBar {
                 },
             )
         };
-
-        let assistant_button = QuickActionBarButton::new(
-            "toggle inline assistant",
-            IconName::CircleOff,
-            false,
-            Box::new(InlineAssist::default()),
-            focus_handle.clone(),
-            "Inline Assist",
-            move |_, window, cx| {
-                window.dispatch_action(Box::new(InlineAssist::default()), cx);
-            },
-        );
 
         let code_actions_dropdown = code_action_enabled.then(|| {
             let focus = editor.focus_handle(cx);
@@ -597,10 +584,6 @@ impl Render for QuickActionBar {
             .children(self.render_repl_menu(cx))
             .children(self.render_toggle_markdown_preview(self.workspace.clone(), cx))
             .children(search_button)
-            .when(
-                AgentSettings::get_global(cx).enabled && AgentSettings::get_global(cx).button,
-                |bar| bar.child(assistant_button),
-            )
             .child(run_button)
             .children(code_actions_dropdown)
             .children(editor_selections_dropdown)

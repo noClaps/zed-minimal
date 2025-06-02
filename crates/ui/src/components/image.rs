@@ -14,7 +14,6 @@ use crate::prelude::*;
 pub enum VectorName {
     ZedLogo,
     Grid,
-    AiGrid,
 }
 
 impl VectorName {

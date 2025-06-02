@@ -22,7 +22,6 @@ use gpui::{App, AppContext as _, Application, AsyncApp, UpdateGlobal as _};
 use gpui_tokio::Tokio;
 use http_client::{Url, read_proxy_from_env};
 use language::LanguageRegistry;
-use prompt_store::PromptBuilder;
 use reqwest_client::ReqwestClient;
 
 use assets::Assets;
@@ -507,22 +506,8 @@ Error: Running Zed as root or via sudo is unsupported.
             cx.background_executor().clone(),
         );
         command_palette::init(cx);
-        language_model::init(app_state.client.clone(), cx);
-        language_models::init(app_state.user_store.clone(), app_state.client.clone(), cx);
-        web_search::init(cx);
-        web_search_providers::init(app_state.client.clone(), cx);
         snippet_provider::init(cx);
         inline_completion_registry::init(app_state.user_store.clone(), cx);
-        let prompt_builder = PromptBuilder::load(app_state.fs.clone(), stdout_is_a_pty(), cx);
-        agent::init(
-            app_state.fs.clone(),
-            app_state.client.clone(),
-            prompt_builder.clone(),
-            app_state.languages.clone(),
-            false,
-            cx,
-        );
-        assistant_tools::init(app_state.client.http_client(), cx);
         repl::init(app_state.fs.clone(), cx);
         extension_host::init(
             extension_host_proxy,
@@ -621,7 +606,7 @@ Error: Running Zed as root or via sudo is unsupported.
         watch_languages(fs.clone(), app_state.languages.clone(), cx);
 
         cx.set_menus(app_menus());
-        initialize_workspace(app_state.clone(), prompt_builder, cx);
+        initialize_workspace(app_state.clone(), cx);
 
         cx.activate(true);
 
