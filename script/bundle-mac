@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-source script/lib/blob-store.sh
 
 build_flag="--release"
 target_dir="release"
@@ -210,10 +209,6 @@ function prepare_binaries() {
     gzip -f target/${architecture}/${target_dir}/Zed.dwarf
 
     echo "Uploading dSYMs${architecture} for $architecture to by-uuid/${uuid}.dwarf.gz"
-    upload_to_blob_store_public \
-        "zed-debug-symbols" \
-        target/${architecture}/${target_dir}/Zed.dwarf.gz \
-        "by-uuid/${uuid}.dwarf.gz"
 
     cp target/${architecture}/${target_dir}/zed "${app_path}/Contents/MacOS/zed"
     cp target/${architecture}/${target_dir}/cli "${app_path}/Contents/MacOS/cli"
