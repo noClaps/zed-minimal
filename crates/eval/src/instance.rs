@@ -197,9 +197,3 @@ pub async fn run_git(repo_path: &Path, args: &[&str]) -> Result<String> {
     );
     Ok(String::from_utf8(output.stdout)?.trim().to_string())
 }
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct ThreadDialog {
-    pub request: LanguageModelRequest,
-    pub response_events: Vec<std::result::Result<LanguageModelCompletionEvent, String>>,
-}

@@ -6,9 +6,8 @@ use gpui::{
 };
 use settings::{Settings, SettingsStore};
 use std::sync::Arc;
-use ui::{CheckboxWithLabel, ElevationIndex, Tooltip, prelude::*};
+use ui::{CheckboxWithLabel, ElevationIndex, prelude::*};
 use util::ResultExt;
-use vim_mode_setting::VimModeSetting;
 use workspace::{
     AppState, Welcome, Workspace, WorkspaceId,
     dock::DockPosition,
@@ -231,40 +230,6 @@ impl Render for WelcomePage {
                         v_container()
                             .px_2()
                             .gap_2()
-                            .child(
-                                h_flex()
-                                    .justify_between()
-                                    .child(
-                                        CheckboxWithLabel::new(
-                                            "enable-vim",
-                                            Label::new("Enable Vim Mode"),
-                                            if VimModeSetting::get_global(cx).0 {
-                                                ui::ToggleState::Selected
-                                            } else {
-                                                ui::ToggleState::Unselected
-                                            },
-                                            cx.listener(move |this, selection, _window, cx| {
-                                                telemetry::event!("Welcome Vim Mode Toggled");
-                                                this.update_settings::<VimModeSetting>(
-                                                    selection,
-                                                    cx,
-                                                    |setting, value| *setting = Some(value),
-                                                );
-                                            }),
-                                        )
-                                        .fill()
-                                        .elevation(ElevationIndex::ElevatedSurface),
-                                    )
-                                    .child(
-                                        IconButton::new("vim-mode", IconName::Info)
-                                            .icon_size(IconSize::XSmall)
-                                            .icon_color(Color::Muted)
-                                            .tooltip(
-                                                Tooltip::text(
-                                                    "You can also toggle Vim Mode via the command palette or Editor Controls menu.")
-                                            ),
-                                    ),
-                            )
                             .child(
                                 CheckboxWithLabel::new(
                                     "enable-crash",

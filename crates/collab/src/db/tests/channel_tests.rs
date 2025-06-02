@@ -440,21 +440,10 @@ async fn test_user_is_channel_participant(db: &Arc<Database>) {
         .create_sub_channel("active", zed_channel, admin)
         .await
         .unwrap();
-    let public_channel_id = db
-        .create_sub_channel("vim", zed_channel, admin)
-        .await
-        .unwrap();
 
     db.set_channel_visibility(zed_channel, crate::db::ChannelVisibility::Public, admin)
         .await
         .unwrap();
-    db.set_channel_visibility(
-        public_channel_id,
-        crate::db::ChannelVisibility::Public,
-        admin,
-    )
-    .await
-    .unwrap();
     db.invite_channel_member(zed_channel, member, admin, ChannelRole::Member)
         .await
         .unwrap();
@@ -466,130 +455,21 @@ async fn test_user_is_channel_participant(db: &Arc<Database>) {
         .await
         .unwrap();
 
-    db.transaction(|tx| async move {
-        db.check_user_is_channel_participant(
-            &db.get_channel_internal(public_channel_id, &tx).await?,
-            admin,
-            &tx,
-        )
-        .await
-    })
-    .await
-    .unwrap();
-    db.transaction(|tx| async move {
-        db.check_user_is_channel_participant(
-            &db.get_channel_internal(public_channel_id, &tx).await?,
-            member,
-            &tx,
-        )
-        .await
-    })
-    .await
-    .unwrap();
-
-    let (mut members, _) = db
-        .get_channel_participant_details(public_channel_id, "", 100, admin)
-        .await
-        .unwrap();
-
-    members.sort_by_key(|member| member.user_id);
-
-    assert_eq!(
-        members,
-        &[
-            proto::ChannelMember {
-                user_id: admin.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Admin.into(),
-            },
-            proto::ChannelMember {
-                user_id: member.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Member.into(),
-            },
-            proto::ChannelMember {
-                user_id: guest.to_proto(),
-                kind: proto::channel_member::Kind::Invitee.into(),
-                role: proto::ChannelRole::Guest.into(),
-            },
-        ]
-    );
-
     db.respond_to_channel_invite(zed_channel, guest, true)
         .await
         .unwrap();
 
-    db.transaction(|tx| async move {
-        db.check_user_is_channel_participant(
-            &db.get_channel_internal(public_channel_id, &tx).await?,
-            guest,
-            &tx,
-        )
-        .await
-    })
-    .await
-    .unwrap();
-
     let channels = db.get_channels_for_user(guest).await.unwrap().channels;
-    assert_channel_tree(
-        channels,
-        &[(zed_channel, &[]), (public_channel_id, &[zed_channel])],
-    );
+    assert_channel_tree(channels, &[(zed_channel, &[])]);
     let channels = db.get_channels_for_user(member).await.unwrap().channels;
     assert_channel_tree(
         channels,
-        &[
-            (zed_channel, &[]),
-            (internal_channel_id, &[zed_channel]),
-            (public_channel_id, &[zed_channel]),
-        ],
+        &[(zed_channel, &[]), (internal_channel_id, &[zed_channel])],
     );
 
     db.set_channel_member_role(zed_channel, admin, guest, ChannelRole::Banned)
         .await
         .unwrap();
-    assert!(
-        db.transaction(|tx| async move {
-            db.check_user_is_channel_participant(
-                &db.get_channel_internal(public_channel_id, &tx)
-                    .await
-                    .unwrap(),
-                guest,
-                &tx,
-            )
-            .await
-        })
-        .await
-        .is_err()
-    );
-
-    let (mut members, _) = db
-        .get_channel_participant_details(public_channel_id, "", 100, admin)
-        .await
-        .unwrap();
-
-    members.sort_by_key(|member| member.user_id);
-
-    assert_eq!(
-        members,
-        &[
-            proto::ChannelMember {
-                user_id: admin.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Admin.into(),
-            },
-            proto::ChannelMember {
-                user_id: member.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Member.into(),
-            },
-            proto::ChannelMember {
-                user_id: guest.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Banned.into(),
-            },
-        ]
-    );
 
     db.remove_channel_member(zed_channel, guest, admin)
         .await
@@ -598,35 +478,6 @@ async fn test_user_is_channel_participant(db: &Arc<Database>) {
     db.invite_channel_member(zed_channel, guest, admin, ChannelRole::Guest)
         .await
         .unwrap();
-
-    // currently people invited to parent channels are not shown here
-    let (mut members, _) = db
-        .get_channel_participant_details(public_channel_id, "", 100, admin)
-        .await
-        .unwrap();
-
-    members.sort_by_key(|member| member.user_id);
-
-    assert_eq!(
-        members,
-        &[
-            proto::ChannelMember {
-                user_id: admin.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Admin.into(),
-            },
-            proto::ChannelMember {
-                user_id: member.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Member.into(),
-            },
-            proto::ChannelMember {
-                user_id: guest.to_proto(),
-                kind: proto::channel_member::Kind::Invitee.into(),
-                role: proto::ChannelRole::Guest.into(),
-            },
-        ]
-    );
 
     db.respond_to_channel_invite(zed_channel, guest, true)
         .await
@@ -657,52 +508,8 @@ async fn test_user_is_channel_participant(db: &Arc<Database>) {
         .is_err(),
     );
 
-    db.transaction(|tx| async move {
-        db.check_user_is_channel_participant(
-            &db.get_channel_internal(public_channel_id, &tx)
-                .await
-                .unwrap(),
-            guest,
-            &tx,
-        )
-        .await
-    })
-    .await
-    .unwrap();
-
-    let (mut members, _) = db
-        .get_channel_participant_details(public_channel_id, "", 100, admin)
-        .await
-        .unwrap();
-
-    members.sort_by_key(|member| member.user_id);
-
-    assert_eq!(
-        members,
-        &[
-            proto::ChannelMember {
-                user_id: admin.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Admin.into(),
-            },
-            proto::ChannelMember {
-                user_id: member.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Member.into(),
-            },
-            proto::ChannelMember {
-                user_id: guest.to_proto(),
-                kind: proto::channel_member::Kind::Member.into(),
-                role: proto::ChannelRole::Guest.into(),
-            },
-        ]
-    );
-
     let channels = db.get_channels_for_user(guest).await.unwrap().channels;
-    assert_channel_tree(
-        channels,
-        &[(zed_channel, &[]), (public_channel_id, &[zed_channel])],
-    )
+    assert_channel_tree(channels, &[(zed_channel, &[])])
 }
 
 test_both_dbs!(

@@ -47,7 +47,7 @@ use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
     DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings,
-    SettingsStore, VIM_KEYMAP_PATH, initial_debug_tasks_content, initial_project_settings_content,
+    SettingsStore, initial_debug_tasks_content, initial_project_settings_content,
     initial_tasks_content, update_settings_file,
 };
 use std::path::PathBuf;
@@ -59,7 +59,6 @@ use ui::{PopoverMenuHandle, prelude::*};
 use util::markdown::MarkdownString;
 use util::{ResultExt, asset_str};
 use uuid::Uuid;
-use vim_mode_setting::VimModeSetting;
 use welcome::{BaseKeymap, DOCS_URL, MultibufferHint};
 use workspace::notifications::{NotificationId, dismiss_app_notification, show_app_notification};
 use workspace::{
@@ -226,7 +225,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             cx.new(|_| language_selector::ActiveBufferLanguage::new(workspace));
         let active_toolchain_language =
             cx.new(|cx| toolchain_selector::ActiveToolchain::new(workspace, window, cx));
-        let vim_mode_indicator = cx.new(|cx| vim::ModeIndicator::new(window, cx));
         let image_info = cx.new(|_cx| ImageInfo::new(workspace));
         let cursor_position =
             cx.new(|_| go_to_line::cursor_position::CursorPosition::new(workspace));
@@ -237,7 +235,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             status_bar.add_right_item(inline_completion_button, window, cx);
             status_bar.add_right_item(active_buffer_language, window, cx);
             status_bar.add_right_item(active_toolchain_language, window, cx);
-            status_bar.add_right_item(vim_mode_indicator, window, cx);
             status_bar.add_right_item(cursor_position, window, cx);
             status_bar.add_right_item(image_info, window, cx);
         });
@@ -1158,19 +1155,15 @@ pub fn handle_keymap_file_changes(
     cx: &mut App,
 ) {
     BaseKeymap::register(cx);
-    VimModeSetting::register(cx);
 
     let (base_keymap_tx, mut base_keymap_rx) = mpsc::unbounded();
     let (keyboard_layout_tx, mut keyboard_layout_rx) = mpsc::unbounded();
     let mut old_base_keymap = *BaseKeymap::get_global(cx);
-    let mut old_vim_enabled = VimModeSetting::get_global(cx).0;
     cx.observe_global::<SettingsStore>(move |cx| {
         let new_base_keymap = *BaseKeymap::get_global(cx);
-        let new_vim_enabled = VimModeSetting::get_global(cx).0;
 
-        if new_base_keymap != old_base_keymap || new_vim_enabled != old_vim_enabled {
+        if new_base_keymap != old_base_keymap {
             old_base_keymap = new_base_keymap;
-            old_vim_enabled = new_vim_enabled;
             base_keymap_tx.unbounded_send(()).unwrap();
         }
     })
@@ -1356,10 +1349,6 @@ pub fn load_default_keymap(cx: &mut App) {
 
     if let Some(asset_path) = base_keymap.asset_path() {
         cx.bind_keys(KeymapFile::load_asset(asset_path, cx).unwrap());
-    }
-
-    if VimModeSetting::get_global(cx).0 {
-        cx.bind_keys(KeymapFile::load_asset(VIM_KEYMAP_PATH, cx).unwrap());
     }
 }
 
@@ -4087,21 +4076,7 @@ mod tests {
             let mut errors = Vec::new();
             for action in all_actions {
                 match action.to_string().as_str() {
-                    "vim::FindCommand"
-                    | "vim::Literal"
-                    | "vim::ResizePane"
-                    | "vim::PushObject"
-                    | "vim::PushFindForward"
-                    | "vim::PushFindBackward"
-                    | "vim::PushSneak"
-                    | "vim::PushSneakBackward"
-                    | "vim::PushChangeSurrounds"
-                    | "vim::PushJump"
-                    | "vim::PushDigraph"
-                    | "vim::PushLiteral"
-                    | "vim::Number"
-                    | "vim::SelectRegister"
-                    | "git::StageAndNext"
+                    "git::StageAndNext"
                     | "git::UnstageAndNext"
                     | "terminal::SendText"
                     | "terminal::SendKeystroke"
@@ -4206,7 +4181,6 @@ mod tests {
             app_state.languages.add(markdown_language());
 
             gpui_tokio::init(cx);
-            vim_mode_setting::init(cx);
             theme::init(theme::LoadThemes::JustBase, cx);
             audio::init((), cx);
             channel::init(&app_state.client, app_state.user_store.clone(), cx);

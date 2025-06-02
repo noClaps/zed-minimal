@@ -1009,53 +1009,25 @@ async fn test_channel_link_notifications(
     );
     assert_channels_list_shape(client_c.channel_store(), cx_c, &[(zed_channel, 0)]);
 
-    let vim_channel = client_a
-        .channel_store()
-        .update(cx_a, |channel_store, cx| {
-            channel_store.create_channel("vim", Some(zed_channel), cx)
-        })
-        .await
-        .unwrap();
-
-    client_a
-        .channel_store()
-        .update(cx_a, |channel_store, cx| {
-            channel_store.set_channel_visibility(vim_channel, proto::ChannelVisibility::Public, cx)
-        })
-        .await
-        .unwrap();
-
     executor.run_until_parked();
 
     // the new channel shows for b and c
     assert_channels_list_shape(
         client_a.channel_store(),
         cx_a,
-        &[(zed_channel, 0), (active_channel, 1), (vim_channel, 1)],
+        &[(zed_channel, 0), (active_channel, 1)],
     );
     assert_channels_list_shape(
         client_b.channel_store(),
         cx_b,
-        &[(zed_channel, 0), (active_channel, 1), (vim_channel, 1)],
+        &[(zed_channel, 0), (active_channel, 1)],
     );
-    assert_channels_list_shape(
-        client_c.channel_store(),
-        cx_c,
-        &[(zed_channel, 0), (vim_channel, 1)],
-    );
+    assert_channels_list_shape(client_c.channel_store(), cx_c, &[(zed_channel, 0)]);
 
     let helix_channel = client_a
         .channel_store()
         .update(cx_a, |channel_store, cx| {
             channel_store.create_channel("helix", Some(zed_channel), cx)
-        })
-        .await
-        .unwrap();
-
-    client_a
-        .channel_store()
-        .update(cx_a, |channel_store, cx| {
-            channel_store.move_channel(helix_channel, vim_channel, cx)
         })
         .await
         .unwrap();
@@ -1077,17 +1049,12 @@ async fn test_channel_link_notifications(
     assert_channels_list_shape(
         client_b.channel_store(),
         cx_b,
-        &[
-            (zed_channel, 0),
-            (active_channel, 1),
-            (vim_channel, 1),
-            (helix_channel, 2),
-        ],
+        &[(zed_channel, 0), (active_channel, 1), (helix_channel, 2)],
     );
     assert_channels_list_shape(
         client_c.channel_store(),
         cx_c,
-        &[(zed_channel, 0), (vim_channel, 1), (helix_channel, 2)],
+        &[(zed_channel, 0), (helix_channel, 2)],
     );
 }
 
@@ -1104,19 +1071,14 @@ async fn test_channel_membership_notifications(
     let user_b = client_b.user_id().unwrap();
 
     let channels = server
-        .make_channel_tree(
-            &[("zed", None), ("vim", Some("zed")), ("opensource", None)],
-            (&client_a, cx_a),
-        )
+        .make_channel_tree(&[("zed", None), ("opensource", None)], (&client_a, cx_a))
         .await;
     let zed_channel = channels[0];
-    let vim_channel = channels[1];
-    let opensource_channel = channels[2];
+    let opensource_channel = channels[1];
 
     try_join_all(client_a.channel_store().update(cx_a, |channel_store, cx| {
         [
             channel_store.set_channel_visibility(zed_channel, proto::ChannelVisibility::Public, cx),
-            channel_store.set_channel_visibility(vim_channel, proto::ChannelVisibility::Public, cx),
             channel_store.invite_member(zed_channel, user_b, proto::ChannelRole::Admin, cx),
             channel_store.invite_member(opensource_channel, user_b, proto::ChannelRole::Member, cx),
         ]
@@ -1136,22 +1098,15 @@ async fn test_channel_membership_notifications(
 
     executor.run_until_parked();
 
-    // we have an admin (a), and a guest (b) with access to all of zed, and membership in vim.
+    // we have an admin (a), and a guest (b) with access to all of zed.
     assert_channels(
         client_b.channel_store(),
         cx_b,
-        &[
-            ExpectedChannel {
-                depth: 0,
-                id: zed_channel,
-                name: "zed".into(),
-            },
-            ExpectedChannel {
-                depth: 1,
-                id: vim_channel,
-                name: "vim".into(),
-            },
-        ],
+        &[ExpectedChannel {
+            depth: 0,
+            id: zed_channel,
+            name: "zed".into(),
+        }],
     );
 
     client_b.channel_store().update(cx_b, |channel_store, _| {

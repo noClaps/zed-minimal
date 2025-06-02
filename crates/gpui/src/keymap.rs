@@ -193,8 +193,6 @@ impl Keymap {
     /// returns the last binding for the given bindings, which
     /// should be the user's binding in their keymap.json if they've set one,
     /// otherwise, the last declared binding for this action in the base keymaps
-    /// (with Vim mode bindings being considered as declared later if Vim mode
-    /// is enabled)
     ///
     /// If you are considering changing the behavior of this function
     /// (especially to fix a user reported issue) see issues #23621, #24931,

@@ -112,9 +112,6 @@ pub struct LanguageSettings {
     /// - `"..."` - A placeholder to refer to the **rest** of the registered language servers for this language.
     pub language_servers: Vec<String>,
     /// Controls where the `editor::Rewrap` action is allowed for this language.
-    ///
-    /// Note: This setting has no effect in Vim mode, as rewrap is already
-    /// allowed everywhere.
     pub allow_rewrap: RewrapBehavior,
     /// Controls whether edit predictions are shown immediately (true)
     /// or manually by triggering `editor::ShowEditPrediction` (false).
@@ -444,9 +441,6 @@ pub struct LanguageSettingsContent {
     #[serde(default)]
     pub language_servers: Option<Vec<String>>,
     /// Controls where the `editor::Rewrap` action is allowed for this language.
-    ///
-    /// Note: This setting has no effect in Vim mode, as rewrap is already
-    /// allowed everywhere.
     ///
     /// Default: "in_comments"
     #[serde(default)]

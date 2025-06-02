@@ -668,7 +668,6 @@ fn for_snowflake(
                     "welcome page: toggle metric telemetry" => {
                         "Welcome Metric Telemetry Toggled".to_string()
                     }
-                    "welcome page: toggle vim" => "Welcome Vim Mode Toggled".to_string(),
                     "welcome page: view docs" => "Welcome Documentation Viewed".to_string(),
 
                     // Extensions
@@ -683,10 +682,6 @@ fn for_snowflake(
                     "repl sessions: open" => "REPL Session Started".to_string(),
 
                     // Feature Upsell
-                    "feature upsell: toggle vim" => {
-                        properties["source"] = json!("Feature Upsell");
-                        "Vim Mode Toggled".to_string()
-                    }
                     _ => e
                         .operation
                         .strip_prefix("feature upsell: viewed docs (")

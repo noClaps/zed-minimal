@@ -119,20 +119,7 @@ fn main() {
             );
         }
 
-        let agent_model = load_model(&args.model, cx).unwrap();
-        let judge_model = load_model(&args.judge_model, cx).unwrap();
-
-        LanguageModelRegistry::global(cx).update(cx, |registry, cx| {
-            registry.set_default_model(Some(agent_model.clone()), cx);
-        });
-
-        let auth1 = agent_model.provider.authenticate(cx);
-        let auth2 = judge_model.provider.authenticate(cx);
-
         cx.spawn(async move |cx| {
-            auth1.await?;
-            auth2.await?;
-
             let mut examples = Vec::new();
 
             const COLORS: [&str; 12] = [
@@ -395,48 +382,6 @@ pub fn init(cx: &mut App) -> Arc<AgentAppState> {
         user_store,
         fs,
         node_runtime,
-    })
-}
-
-pub fn find_model(
-    model_name: &str,
-    model_registry: &LanguageModelRegistry,
-    cx: &App,
-) -> anyhow::Result<Arc<dyn LanguageModel>> {
-    let selected = SelectedModel::from_str(model_name).map_err(|e| anyhow::anyhow!(e))?;
-    model_registry
-        .available_models(cx)
-        .find(|model| model.id() == selected.model && model.provider_id() == selected.provider)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No language model with ID {}/{} was available. Available models: {}",
-                selected.model.0,
-                selected.provider.0,
-                model_registry
-                    .available_models(cx)
-                    .map(|model| format!("{}/{}", model.provider_id().0, model.id().0))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })
-}
-
-pub fn load_model(model_name: &str, cx: &mut App) -> anyhow::Result<ConfiguredModel> {
-    let model = {
-        let model_registry = LanguageModelRegistry::read_global(cx);
-        find_model(model_name, model_registry, cx)?
-    };
-
-    let provider = {
-        let model_registry = LanguageModelRegistry::read_global(cx);
-        model_registry
-            .provider(&model.provider_id())
-            .ok_or_else(|| anyhow::anyhow!("Provider not found: {}", model.provider_id()))?
-    };
-
-    Ok(ConfiguredModel {
-        provider: provider.clone(),
-        model: model.clone(),
     })
 }
 

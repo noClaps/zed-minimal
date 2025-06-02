@@ -541,7 +541,6 @@ Error: Running Zed as root or via sudo is unsupported.
         snippets_ui::init(cx);
         channel::init(&app_state.client.clone(), app_state.user_store.clone(), cx);
         search::init(cx);
-        vim::init(cx);
         terminal_view::init(cx);
         journal::init(app_state.clone(), cx);
         language_selector::init(cx);

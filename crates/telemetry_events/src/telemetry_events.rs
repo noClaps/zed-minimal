@@ -120,8 +120,6 @@ pub struct EditorEvent {
     pub operation: String,
     /// The extension of the file that was opened or saved
     pub file_extension: Option<String>,
-    /// Whether the user is in vim mode or not
-    pub vim_mode: bool,
     /// Whether the client is opening/saving a local file or a remote file via SSH
     #[serde(default)]
     pub is_via_ssh: bool,

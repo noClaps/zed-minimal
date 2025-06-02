@@ -108,8 +108,6 @@
   // Currently "alt" or "cmd_or_ctrl"  (also aliased as
   // "cmd" and "ctrl") are supported.
   "multi_cursor_modifier": "alt",
-  // Whether to enable vim modes and key bindings.
-  "vim_mode": false,
   // Whether to show the informational hover box when moving the mouse
   // over symbols in the editor.
   "hover_popover_enabled": true,
@@ -283,8 +281,6 @@
   // When using values other than `in_comments`, it is possible for the rewrapping to produce code
   // that is syntactically invalid. Keep this in mind when selecting which behavior you would like
   // to use.
-  //
-  // Note: This setting has no effect in Vim mode, as rewrap is already allowed everywhere.
   "allow_rewrap": "in_comments",
   // Controls whether edit predictions are shown immediately (true)
   // or manually by triggering `editor::ShowEditPrediction` (false).
@@ -1187,7 +1183,7 @@
     // Set whether Alternate Scroll mode (code: ?1007) is active by default.
     // Alternate Scroll mode converts mouse scroll events into up / down key
     // presses when in the alternate screen (e.g. when running applications
-    // like vim or  less). The terminal can still set and unset this mode.
+    // like less). The terminal can still set and unset this mode.
     // May take 2 values:
     //  1. Default alternate scroll mode to on
     //         "alternate_scroll": "on",
@@ -1607,21 +1603,6 @@
     //    "python": "conda-base"
     //    "typescript": "deno"
     // }
-  },
-  // Vim settings
-  "vim": {
-    "default_mode": "normal",
-    "toggle_relative_line_numbers": false,
-    "use_system_clipboard": "always",
-    "use_multiline_find": false,
-    "use_smartcase_find": false,
-    "highlight_on_yank_duration": 200,
-    "custom_digraphs": {},
-    // Cursor shape for the each mode.
-    // Specify the mode as the key and the shape as the value.
-    // The mode can be one of the following: "normal", "replace", "insert", "visual".
-    // The shape can be one of the following: "block", "bar", "underline", "hollow".
-    "cursor_shape": {}
   },
   // The server to connect to. If the environment variable
   // ZED_SERVER_URL is set, it will override this setting.

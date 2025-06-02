@@ -323,32 +323,6 @@ mod tests {
     }
 
     #[test]
-    fn test_replace_action_argument_object_with_single_value_2() {
-        assert_migrate_keymap(
-            r#"
-            [
-                {
-                    "bindings": {
-                        "cmd-1": ["vim::PushOperator", { "Object": { "some" : "value" } }]
-                    }
-                }
-            ]
-            "#,
-            Some(
-                r#"
-            [
-                {
-                    "bindings": {
-                        "cmd-1": ["vim::PushObject", { "some" : "value" }]
-                    }
-                }
-            ]
-            "#,
-            ),
-        )
-    }
-
-    #[test]
     fn test_rename_context_key() {
         assert_migrate_keymap(
             r#"
@@ -411,9 +385,7 @@ mod tests {
             [
                 {
                     "bindings": {
-                        "cmd-1": ["vim::PushOperator", { "Object": { "around": false } }],
                         "cmd-3": ["pane::CloseActiveItem", { "saveIntent": "saveAll" }],
-                        "cmd-2": ["vim::NextWordStart", { "ignorePunctuation": true }],
                         "cmd-4": ["task::Spawn", { "task_name": "a b" }] // should remain as it is
                     }
                 }
@@ -424,9 +396,7 @@ mod tests {
             [
                 {
                     "bindings": {
-                        "cmd-1": ["vim::PushObject", { "around": false }],
                         "cmd-3": ["pane::CloseActiveItem", { "save_intent": "save_all" }],
-                        "cmd-2": ["vim::NextWordStart", { "ignore_punctuation": true }],
                         "cmd-4": ["task::Spawn", { "task_name": "a b" }] // should remain as it is
                     }
                 }

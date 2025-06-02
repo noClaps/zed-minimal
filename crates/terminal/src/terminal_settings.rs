@@ -179,7 +179,7 @@ pub struct TerminalSettingsContent {
     /// Sets whether Alternate Scroll mode (code: ?1007) is active by default.
     /// Alternate Scroll mode converts mouse scroll events into up / down key
     /// presses when in the alternate screen (e.g. when running applications
-    /// like vim or  less). The terminal can still set and unset this mode.
+    /// like less). The terminal can still set and unset this mode.
     ///
     /// Default: on
     pub alternate_scroll: Option<AlternateScroll>,

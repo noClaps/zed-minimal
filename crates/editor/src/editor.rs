@@ -10,8 +10,6 @@
 //! * [`inlay_hint_cache`] - is a storage of inlay hints out of LSP requests, responsible for querying LSP and updating `display_map`'s state accordingly.
 //!
 //! All other submodules and structs are mostly concerned with holding editor data about the way it displays current buffer region(s).
-//!
-//! If you're looking to improve Vim mode, you should check out Vim crate that wraps Editor and overrides its behavior.
 pub mod actions;
 mod blink_manager;
 mod clangd_ext;
@@ -823,7 +821,7 @@ pub struct ResolvedTasks {
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 struct BufferOffset(usize);
 
-// Addons allow storing per-editor state in other crates (e.g. Vim)
+// Addons allow storing per-editor state in other crates
 pub trait Addon: 'static {
     fn extend_key_context(&self, _: &mut KeyContext, _: &App) {}
 
@@ -1021,7 +1019,6 @@ pub struct Editor {
     /// Used to prevent flickering as the user types while the menu is open
     stale_inline_completion_in_menu: Option<InlineCompletionState>,
     edit_prediction_settings: EditPredictionSettings,
-    inline_completions_hidden_for_vim_mode: bool,
     show_inline_completions_override: Option<bool>,
     menu_inline_completions_policy: MenuInlineCompletionsPolicy,
     edit_prediction_preview: EditPredictionPreview,
@@ -1905,7 +1902,6 @@ impl Editor {
             hovered_cursors: HashMap::default(),
             next_editor_action_id: EditorActionId::default(),
             editor_actions: Rc::default(),
-            inline_completions_hidden_for_vim_mode: false,
             show_inline_completions_override: None,
             menu_inline_completions_policy: MenuInlineCompletionsPolicy::ByProvider,
             edit_prediction_settings: EditPredictionSettings::Disabled,
@@ -2002,27 +1998,24 @@ impl Editor {
                     }
                 }
                 EditorEvent::Edited { .. } => {
-                    if !vim_enabled(cx) {
-                        let (map, selections) = editor.selections.all_adjusted_display(cx);
-                        let pop_state = editor
-                            .change_list
-                            .last()
-                            .map(|previous| {
-                                previous.len() == selections.len()
-                                    && previous.iter().enumerate().all(|(ix, p)| {
-                                        p.to_display_point(&map).row()
-                                            == selections[ix].head().row()
-                                    })
-                            })
-                            .unwrap_or(false);
-                        let new_positions = selections
-                            .into_iter()
-                            .map(|s| map.display_point_to_anchor(s.head(), Bias::Left))
-                            .collect();
-                        editor
-                            .change_list
-                            .push_to_change_list(pop_state, new_positions);
-                    }
+                    let (map, selections) = editor.selections.all_adjusted_display(cx);
+                    let pop_state = editor
+                        .change_list
+                        .last()
+                        .map(|previous| {
+                            previous.len() == selections.len()
+                                && previous.iter().enumerate().all(|(ix, p)| {
+                                    p.to_display_point(&map).row() == selections[ix].head().row()
+                                })
+                        })
+                        .unwrap_or(false);
+                    let new_positions = selections
+                        .into_iter()
+                        .map(|s| map.display_point_to_anchor(s.head(), Bias::Left))
+                        .collect();
+                    editor
+                        .change_list
+                        .push_to_change_list(pop_state, new_positions);
                 }
                 _ => (),
             },
@@ -2148,7 +2141,6 @@ impl Editor {
             None => {}
         }
 
-        // Disable vim contexts when a sub-editor (e.g. rename/inline assistant) is focused.
         if !self.focus_handle(cx).contains_focused(window, cx)
             || (self.is_focused(window) || self.mouse_menu_is_focused(window, cx))
         {
@@ -2542,22 +2534,6 @@ impl Editor {
 
     pub fn set_input_enabled(&mut self, input_enabled: bool) {
         self.input_enabled = input_enabled;
-    }
-
-    pub fn set_inline_completions_hidden_for_vim_mode(
-        &mut self,
-        hidden: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if hidden != self.inline_completions_hidden_for_vim_mode {
-            self.inline_completions_hidden_for_vim_mode = hidden;
-            if hidden {
-                self.update_visible_inline_completion(window, cx);
-            } else {
-                self.refresh_inline_completion(true, false, window, cx);
-            }
-        }
     }
 
     pub fn set_menu_inline_completions_policy(&mut self, value: MenuInlineCompletionsPolicy) {
@@ -6621,7 +6597,7 @@ impl Editor {
         let cursor = self.selections.newest_anchor().head();
         let (buffer, cursor_buffer_position) =
             self.buffer.read(cx).text_anchor_for_position(cursor, cx)?;
-        if self.inline_completions_hidden_for_vim_mode || !self.should_show_edit_predictions() {
+        if !self.should_show_edit_predictions() {
             return None;
         }
 
@@ -6721,7 +6697,6 @@ impl Editor {
                         || !self.edit_prediction_requires_modifier()
                     {
                         self.unfold_ranges(&[target..target], true, false, cx);
-                        // Note that this is also done in vim's handler of the Tab action.
                         self.change_selections(
                             Some(Autoscroll::newest()),
                             window,
@@ -7141,16 +7116,14 @@ impl Editor {
         } else {
             None
         };
-        let is_move =
-            move_invalidation_row_range.is_some() || self.inline_completions_hidden_for_vim_mode;
+        let is_move = move_invalidation_row_range.is_some();
         let completion = if is_move {
             invalidation_row_range =
                 move_invalidation_row_range.unwrap_or(edit_start_row..edit_end_row);
             let target = first_edit_start;
             InlineCompletion::Move { target }
         } else {
-            let show_completions_in_buffer = !self.edit_prediction_visible_in_cursor_popover(true)
-                && !self.inline_completions_hidden_for_vim_mode;
+            let show_completions_in_buffer = !self.edit_prediction_visible_in_cursor_popover(true);
 
             if show_completions_in_buffer {
                 if edits
@@ -10878,8 +10851,7 @@ impl Editor {
                 options.preserve_existing_whitespace,
             );
 
-            // TODO: should always use char-based diff while still supporting cursor behavior that
-            // matches vim.
+            // TODO: should always use char-based diff.
             let mut diff_options = DiffOptions::default();
             if options.override_language_settings {
                 diff_options.max_word_diff_len = 0;
@@ -19008,15 +18980,12 @@ impl Editor {
             .and_then(|e| e.to_str())
             .map(|a| a.to_string()));
 
-        let vim_mode = vim_enabled(cx);
-
         let edit_predictions_provider = all_language_settings(file, cx).edit_predictions.provider;
 
         let project = project.read(cx);
         telemetry::event!(
             event_type,
             file_extension,
-            vim_mode,
             edit_predictions_provider,
             is_via_ssh = project.is_via_ssh(),
         );
@@ -19454,13 +19423,6 @@ impl Editor {
 
         self.read_scroll_position_from_db(item_id, workspace_id, window, cx);
     }
-}
-
-fn vim_enabled(cx: &App) -> bool {
-    cx.global::<SettingsStore>()
-        .raw_user_settings()
-        .get("vim_mode")
-        == Some(&serde_json::Value::Bool(true))
 }
 
 fn process_completion_for_edit(
