@@ -90,10 +90,10 @@ if [ "$local_arch" = true ]; then
     cargo build ${build_flag} --package zed --package cli --package remote_server
 else
     echo "Compiling zed binaries"
-    cargo build ${build_flag} --package zed --package cli --target aarch64-apple-darwin --target x86_64-apple-darwin
+    cargo build ${build_flag} --package zed --package cli --target aarch64-apple-darwin
     # Build remote_server in separate invocation to prevent feature unification from other crates
     # from influencing dynamic libraries required by it.
-    cargo build ${build_flag} --package remote_server     --target aarch64-apple-darwin --target x86_64-apple-darwin
+    cargo build ${build_flag} --package remote_server     --target aarch64-apple-darwin
 fi
 
 echo "Creating application bundle"
@@ -107,9 +107,8 @@ sed \
 if [ "$local_arch" = true ]; then
     app_path=$(cargo bundle ${build_flag} --select-workspace-root | xargs)
 else
-    app_path_x64=$(cargo bundle ${build_flag} --target x86_64-apple-darwin --select-workspace-root | xargs)
     app_path_aarch64=$(cargo bundle ${build_flag} --target aarch64-apple-darwin --select-workspace-root | xargs)
-    app_path=$app_path_x64
+    app_path=$app_path_aarch64
 fi
 
 mv Cargo.toml.backup Cargo.toml
@@ -169,9 +168,6 @@ function download_git() {
     case "$architecture" in
         aarch64-apple-darwin)
             download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-arm64.tar.gz" bin/git ./git
-            ;;
-        x86_64-apple-darwin)
-            download_and_unpack "https://github.com/desktop/dugite-native/releases/download/${GIT_VERSION}/dugite-native-${GIT_VERSION}-${GIT_VERSION_SHA}-macOS-x64.tar.gz" bin/git ./git
             ;;
         *)
             echo "Unsupported architecture: $architecture"
