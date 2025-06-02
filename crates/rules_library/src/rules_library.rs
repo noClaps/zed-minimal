@@ -8,9 +8,7 @@ use gpui::{
     transparent_black,
 };
 use language::{Buffer, LanguageRegistry, language_settings::SoftWrap};
-use language_model::{
-    ConfiguredModel, LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage, Role,
-};
+use language_model::{ConfiguredModel, LanguageModelRegistry};
 use picker::{Picker, PickerDelegate};
 use release_channel::ReleaseChannel;
 use rope::Rope;
@@ -26,7 +24,6 @@ use ui::{
 };
 use util::{ResultExt, TryFutureExt};
 use workspace::Workspace;
-use zed_actions::assistant::InlineAssist;
 
 use prompt_store::*;
 
@@ -48,7 +45,6 @@ pub trait InlineAssistDelegate {
     fn assist(
         &self,
         prompt_editor: &Entity<Editor>,
-        initial_prompt: Option<String>,
         window: &mut Window,
         cx: &mut Context<RulesLibrary>,
     );
@@ -781,17 +777,7 @@ impl RulesLibrary {
         }
     }
 
-    fn focus_picker(&mut self, _: &menu::Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        self.picker
-            .update(cx, |picker, cx| picker.focus(window, cx));
-    }
-
-    pub fn inline_assist(
-        &mut self,
-        action: &InlineAssist,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn inline_assist(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(active_rule_id) = self.active_rule_id else {
             cx.propagate();
             return;
@@ -804,10 +790,8 @@ impl RulesLibrary {
             return;
         };
 
-        let initial_prompt = action.prompt.clone();
         if provider.is_authenticated(cx) {
-            self.inline_assist_delegate
-                .assist(rule_editor, initial_prompt, window, cx);
+            self.inline_assist_delegate.assist(rule_editor, window, cx);
         } else {
             for window in cx.windows() {
                 if let Some(workspace) = window.downcast::<Workspace>() {
@@ -903,46 +887,18 @@ impl RulesLibrary {
     }
 
     fn count_tokens(&mut self, prompt_id: PromptId, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(ConfiguredModel { model, .. }) =
-            LanguageModelRegistry::read_global(cx).default_model()
+        let Some(ConfiguredModel { .. }) = LanguageModelRegistry::read_global(cx).default_model()
         else {
             return;
         };
         if let Some(rule) = self.rule_editors.get_mut(&prompt_id) {
-            let editor = &rule.body_editor.read(cx);
-            let buffer = &editor.buffer().read(cx).as_singleton().unwrap().read(cx);
-            let body = buffer.as_rope().clone();
             rule.pending_token_count = cx.spawn_in(window, async move |this, cx| {
                 async move {
                     const DEBOUNCE_TIMEOUT: Duration = Duration::from_secs(1);
 
                     cx.background_executor().timer(DEBOUNCE_TIMEOUT).await;
-                    let token_count = cx
-                        .update(|_, cx| {
-                            model.count_tokens(
-                                LanguageModelRequest {
-                                    thread_id: None,
-                                    prompt_id: None,
-                                    intent: None,
-                                    mode: None,
-                                    messages: vec![LanguageModelRequestMessage {
-                                        role: Role::System,
-                                        content: vec![body.to_string().into()],
-                                        cache: false,
-                                    }],
-                                    tools: Vec::new(),
-                                    tool_choice: None,
-                                    stop: Vec::new(),
-                                    temperature: None,
-                                },
-                                cx,
-                            )
-                        })?
-                        .await?;
 
-                    this.update(cx, |this, cx| {
-                        let rule_editor = this.rule_editors.get_mut(&prompt_id).unwrap();
-                        rule_editor.token_count = Some(token_count);
+                    this.update(cx, |_, cx| {
                         cx.notify();
                     })
                 }
@@ -1223,8 +1179,6 @@ impl RulesLibrary {
                         )
                         .child(
                             div()
-                                .on_action(cx.listener(Self::focus_picker))
-                                .on_action(cx.listener(Self::inline_assist))
                                 .on_action(cx.listener(Self::move_up_from_body))
                                 .flex_grow()
                                 .h_full()

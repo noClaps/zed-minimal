@@ -64,7 +64,6 @@ pub struct Model {
     id: String,
     name: String,
     policy: Option<ModelPolicy>,
-    vendor: ModelVendor,
     model_picker_enabled: bool,
 }
 
@@ -103,13 +102,6 @@ struct ModelSupportedFeatures {
     vision: bool,
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub enum ModelVendor {
-    // Azure OpenAI should have no functional difference from OpenAI in Copilot Chat
-    #[serde(alias = "Azure OpenAI")]
-    OpenAI,
-}
-
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(tag = "type")]
 pub enum ChatMessagePart {
@@ -143,10 +135,6 @@ impl Model {
 
     pub fn supports_tools(&self) -> bool {
         self.capabilities.supports.tool_calls
-    }
-
-    pub fn vendor(&self) -> ModelVendor {
-        self.vendor
     }
 
     pub fn supports_vision(&self) -> bool {
@@ -654,48 +642,5 @@ async fn stream_completion(
         let response: ResponseEvent = serde_json::from_str(body_str)?;
 
         Ok(futures::stream::once(async move { Ok(response) }).boxed())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resilient_model_schema_deserialize() {
-        let json = r#"{
-              "data": [
-                {
-                  "capabilities": {
-                    "family": "gpt-4",
-                    "limits": {
-                      "max_context_window_tokens": 32768,
-                      "max_output_tokens": 4096,
-                      "max_prompt_tokens": 32768
-                    },
-                    "object": "model_capabilities",
-                    "supports": { "streaming": true, "tool_calls": true },
-                    "tokenizer": "cl100k_base",
-                    "type": "chat"
-                  },
-                  "id": "gpt-4",
-                  "model_picker_enabled": false,
-                  "name": "GPT 4",
-                  "object": "model",
-                  "preview": false,
-                  "vendor": "Azure OpenAI",
-                  "version": "gpt-4-0613"
-                },
-                {
-                    "some-unknown-field": 123
-                },
-              ],
-              "object": "list"
-            }"#;
-
-        let schema: ModelSchema = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(schema.data.len(), 2);
-        assert_eq!(schema.data[0].id, "gpt-4");
     }
 }

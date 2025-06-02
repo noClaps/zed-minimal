@@ -598,12 +598,10 @@ impl PickerDelegate for LanguageModelPickerDelegate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{future::BoxFuture, stream::BoxStream};
-    use gpui::{AsyncApp, TestAppContext, http_client};
+    use gpui::TestAppContext;
     use language_model::{
-        LanguageModelCompletionError, LanguageModelCompletionEvent, LanguageModelId,
-        LanguageModelName, LanguageModelProviderId, LanguageModelProviderName,
-        LanguageModelRequest, LanguageModelToolChoice,
+        LanguageModelId, LanguageModelName, LanguageModelProviderId, LanguageModelProviderName,
+        LanguageModelToolChoice,
     };
     use ui::IconName;
 
@@ -662,30 +660,6 @@ mod tests {
         fn max_token_count(&self) -> usize {
             1000
         }
-
-        fn count_tokens(
-            &self,
-            _: LanguageModelRequest,
-            _: &App,
-        ) -> BoxFuture<'static, http_client::Result<usize>> {
-            unimplemented!()
-        }
-
-        fn stream_completion(
-            &self,
-            _: LanguageModelRequest,
-            _: &AsyncApp,
-        ) -> BoxFuture<
-            'static,
-            http_client::Result<
-                BoxStream<
-                    'static,
-                    http_client::Result<LanguageModelCompletionEvent, LanguageModelCompletionError>,
-                >,
-            >,
-        > {
-            unimplemented!()
-        }
     }
 
     fn create_models(model_specs: Vec<(&str, &str)>) -> Vec<ModelInfo> {
@@ -713,61 +687,6 @@ mod tests {
                 i
             );
         }
-    }
-
-    #[gpui::test]
-    fn test_exact_match(cx: &mut TestAppContext) {
-        let models = create_models(vec![
-            ("zed", "gpt-4.1"),
-            ("zed", "gpt-4.1-nano"),
-            ("openai", "gpt-3.5-turbo"),
-            ("openai", "gpt-4.1"),
-            ("openai", "gpt-4.1-nano"),
-        ]);
-        let matcher = ModelMatcher::new(models, cx.background_executor.clone());
-
-        // The order of models should be maintained, case doesn't matter
-        let results = matcher.exact_search("GPT-4.1");
-        assert_models_eq(
-            results,
-            vec![
-                "zed/gpt-4.1",
-                "zed/gpt-4.1-nano",
-                "openai/gpt-4.1",
-                "openai/gpt-4.1-nano",
-            ],
-        );
-    }
-
-    #[gpui::test]
-    fn test_fuzzy_match(cx: &mut TestAppContext) {
-        let models = create_models(vec![
-            ("zed", "gpt-4.1"),
-            ("zed", "gpt-4.1-nano"),
-            ("openai", "gpt-3.5-turbo"),
-            ("openai", "gpt-4.1"),
-            ("openai", "gpt-4.1-nano"),
-        ]);
-        let matcher = ModelMatcher::new(models, cx.background_executor.clone());
-
-        // Results should preserve models order whenever possible.
-        // In the case below, `zed/gpt-4.1` and `openai/gpt-4.1` have identical
-        // similarity scores, but `zed/gpt-4.1` was higher in the models list,
-        // so it should appear first in the results.
-        let results = matcher.fuzzy_search("41");
-        assert_models_eq(
-            results,
-            vec![
-                "zed/gpt-4.1",
-                "openai/gpt-4.1",
-                "zed/gpt-4.1-nano",
-                "openai/gpt-4.1-nano",
-            ],
-        );
-
-        // Fuzzy search
-        let results = matcher.fuzzy_search("z4n");
-        assert_models_eq(results, vec!["zed/gpt-4.1-nano"]);
     }
 
     #[gpui::test]

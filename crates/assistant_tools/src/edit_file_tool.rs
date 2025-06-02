@@ -1,8 +1,4 @@
-use crate::{
-    Templates,
-    edit_agent::{EditAgent, EditAgentOutput, EditAgentOutputEvent},
-    schema::json_schema_for,
-};
+use crate::{edit_agent::EditAgentOutput, schema::json_schema_for};
 use anyhow::{Context as _, Result, anyhow};
 use assistant_tool::{
     ActionLog, AnyToolCard, Tool, ToolCard, ToolResult, ToolResultContent, ToolResultOutput,
@@ -10,7 +6,7 @@ use assistant_tool::{
 };
 use buffer_diff::{BufferDiff, BufferDiffSnapshot};
 use editor::{Editor, EditorMode, MinimapVisibility, MultiBuffer, PathKey};
-use futures::StreamExt;
+
 use gpui::{
     Animation, AnimationExt, AnyWindowHandle, App, AppContext, AsyncApp, Entity, Task,
     TextStyleRefinement, WeakEntity, pulsating_between,
@@ -21,7 +17,7 @@ use language::{
     TextBuffer,
     language_settings::{self, FormatOnSave, SoftWrap},
 };
-use language_model::{LanguageModel, LanguageModelRequest, LanguageModelToolSchemaFormat};
+use language_model::LanguageModelToolSchemaFormat;
 use markdown::{Markdown, MarkdownElement, MarkdownStyle};
 use project::{
     Project, ProjectPath,
@@ -166,10 +162,8 @@ impl Tool for EditFileTool {
     fn run(
         self: Arc<Self>,
         input: serde_json::Value,
-        request: Arc<LanguageModelRequest>,
         project: Entity<Project>,
         action_log: Entity<ActionLog>,
-        model: Arc<dyn LanguageModel>,
         window: Option<AnyWindowHandle>,
         cx: &mut App,
     ) -> ToolResult {
@@ -194,11 +188,7 @@ impl Tool for EditFileTool {
         });
 
         let card_clone = card.clone();
-        let action_log_clone = action_log.clone();
         let task = cx.spawn(async move |cx: &mut AsyncApp| {
-            let edit_agent =
-                EditAgent::new(model, project.clone(), action_log_clone, Templates::new());
-
             let buffer = project
                 .update(cx, |project, cx| {
                     project.open_buffer(project_path.clone(), cx)
@@ -217,39 +207,7 @@ impl Tool for EditFileTool {
                 card.update(cx, |card, cx| card.initialize(buffer.clone(), cx))?;
             }
 
-            let (output, mut events) = if matches!(input.mode, EditFileMode::Edit) {
-                edit_agent.edit(
-                    buffer.clone(),
-                    input.display_description.clone(),
-                    &request,
-                    cx,
-                )
-            } else {
-                edit_agent.overwrite(
-                    buffer.clone(),
-                    input.display_description.clone(),
-                    &request,
-                    cx,
-                )
-            };
-
-            let mut hallucinated_old_text = false;
-            while let Some(event) = events.next().await {
-                match event {
-                    EditAgentOutputEvent::Edited => {
-                        if let Some(card) = card_clone.as_ref() {
-                            card.update(cx, |card, cx| card.update_diff(cx))?;
-                        }
-                    }
-                    EditAgentOutputEvent::UnresolvedEditRange => hallucinated_old_text = true,
-                    EditAgentOutputEvent::ResolvingEditRange(range) => {
-                        if let Some(card) = card_clone.as_ref() {
-                            card.update(cx, |card, cx| card.reveal_range(range, cx))?;
-                        }
-                    }
-                }
-            }
-            let agent_output = output.await?;
+            let hallucinated_old_text = false;
 
             // If format_on_save is enabled, format the buffer
             let format_on_save_enabled = buffer
@@ -303,7 +261,7 @@ impl Tool for EditFileTool {
                 original_path: project_path.path.to_path_buf(),
                 new_text: new_text.clone(),
                 old_text,
-                raw_output: Some(agent_output),
+                raw_output: None,
             };
 
             if let Some(card) = card_clone {
@@ -593,11 +551,6 @@ impl EditFileToolCard {
             })?;
             this.update(cx, |this, cx| this.update_visible_ranges(cx))
         }));
-    }
-
-    pub fn reveal_range(&mut self, range: Range<Anchor>, cx: &mut Context<Self>) {
-        self.revealed_ranges.push(range);
-        self.update_visible_ranges(cx);
     }
 
     fn update_visible_ranges(&mut self, cx: &mut Context<Self>) {
@@ -1155,7 +1108,6 @@ mod tests {
         fs.insert_tree("/root", json!({})).await;
         let project = Project::test(fs.clone(), [path!("/root").as_ref()], cx).await;
         let action_log = cx.new(|_| ActionLog::new(project.clone()));
-        let model = Arc::new(FakeLanguageModel::default());
         let result = cx
             .update(|cx| {
                 let input = serde_json::to_value(EditFileToolInput {
@@ -1165,15 +1117,7 @@ mod tests {
                 })
                 .unwrap();
                 Arc::new(EditFileTool)
-                    .run(
-                        input,
-                        Arc::default(),
-                        project.clone(),
-                        action_log,
-                        model,
-                        None,
-                        cx,
-                    )
+                    .run(input, project.clone(), action_log, None, cx)
                     .output
             })
             .await;
@@ -1378,17 +1322,6 @@ mod tests {
         let language_registry = project.read_with(cx, |project, _| project.languages().clone());
         language_registry.add(rust_language);
 
-        let mut fake_language_servers = language_registry.register_fake_lsp(
-            "Rust",
-            language::FakeLspAdapter {
-                capabilities: lsp::ServerCapabilities {
-                    document_formatting_provider: Some(lsp::OneOf::Left(true)),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        );
-
         // Create the file
         fs.save(
             path!("/root/src/main.rs").as_ref(),
@@ -1414,17 +1347,6 @@ mod tests {
         const UNFORMATTED_CONTENT: &str = "fn main() {println!(\"Hello!\");}\n";
         const FORMATTED_CONTENT: &str =
             "This file was formatted by the fake formatter in the test.\n";
-
-        // Get the fake language server and set up formatting handler
-        let fake_language_server = fake_language_servers.next().await.unwrap();
-        fake_language_server.set_request_handler::<lsp::request::Formatting, _, _>({
-            |_, _| async move {
-                Ok(Some(vec![lsp::TextEdit {
-                    range: lsp::Range::new(lsp::Position::new(0, 0), lsp::Position::new(1, 0)),
-                    new_text: FORMATTED_CONTENT.to_string(),
-                }]))
-            }
-        });
 
         let action_log = cx.new(|_| ActionLog::new(project.clone()));
         let model = Arc::new(FakeLanguageModel::default());
@@ -1453,15 +1375,7 @@ mod tests {
                 })
                 .unwrap();
                 Arc::new(EditFileTool)
-                    .run(
-                        input,
-                        Arc::default(),
-                        project.clone(),
-                        action_log.clone(),
-                        model.clone(),
-                        None,
-                        cx,
-                    )
+                    .run(input, project.clone(), action_log.clone(), None, cx)
                     .output
             });
 
@@ -1517,15 +1431,7 @@ mod tests {
                 })
                 .unwrap();
                 Arc::new(EditFileTool)
-                    .run(
-                        input,
-                        Arc::default(),
-                        project.clone(),
-                        action_log.clone(),
-                        model.clone(),
-                        None,
-                        cx,
-                    )
+                    .run(input, project.clone(), action_log.clone(), None, cx)
                     .output
             });
 
@@ -1596,15 +1502,7 @@ mod tests {
                 })
                 .unwrap();
                 Arc::new(EditFileTool)
-                    .run(
-                        input,
-                        Arc::default(),
-                        project.clone(),
-                        action_log.clone(),
-                        model.clone(),
-                        None,
-                        cx,
-                    )
+                    .run(input, project.clone(), action_log.clone(), None, cx)
                     .output
             });
 
@@ -1653,15 +1551,7 @@ mod tests {
                 })
                 .unwrap();
                 Arc::new(EditFileTool)
-                    .run(
-                        input,
-                        Arc::default(),
-                        project.clone(),
-                        action_log.clone(),
-                        model.clone(),
-                        None,
-                        cx,
-                    )
+                    .run(input, project.clone(), action_log.clone(), None, cx)
                     .output
             });
 

@@ -148,7 +148,6 @@ dependencies = [
  "indexmap",
  "language_model",
  "log",
- "open_ai",
  "paths",
  "schemars",
  "serde",
@@ -512,7 +511,6 @@ dependencies = [
  "languages",
  "log",
  "multi_buffer",
- "open_ai",
  "ordered-float 2.10.1",
  "parking_lot",
  "paths",
@@ -8748,7 +8746,6 @@ dependencies = [
  "language_model",
  "log",
  "menu",
- "open_ai",
  "partial-json-fixer",
  "project",
  "proto",
@@ -10537,20 +10534,6 @@ dependencies = [
  "is-wsl",
  "libc",
  "pathdiff",
-]
-
-[[package]]
-name = "open_ai"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.31",
- "http_client",
- "schemars",
- "serde",
- "serde_json",
- "strum 0.27.1",
- "workspace-hack",
 ]
 
 [[package]]
@@ -13981,7 +13964,6 @@ dependencies = [
  "language_model",
  "languages",
  "log",
- "open_ai",
  "parking_lot",
  "project",
  "reqwest_client",

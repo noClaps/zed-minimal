@@ -9,7 +9,7 @@ use crate::ui::{
     AnimatedLabel, MaxModeTooltip,
     preview::{AgentPreview, UsageCallout},
 };
-use agent_settings::{AgentSettings, CompletionMode};
+use agent_settings::CompletionMode;
 use assistant_context_editor::language_model_selector::ToggleModelSelector;
 use buffer_diff::BufferDiff;
 use client::UserStore;
@@ -28,10 +28,7 @@ use gpui::{
     Task, TextStyle, WeakEntity, linear_color_stop, linear_gradient, point, pulsating_between,
 };
 use language::{Buffer, Language};
-use language_model::{
-    ConfiguredModel, LanguageModelRequestMessage, MessageContent, RequestUsage,
-    ZED_CLOUD_PROVIDER_ID,
-};
+use language_model::{ConfiguredModel, RequestUsage, ZED_CLOUD_PROVIDER_ID};
 use multi_buffer;
 use project::Project;
 use prompt_store::PromptStore;
@@ -1239,12 +1236,10 @@ impl MessageEditor {
         cx.emit(MessageEditorEvent::Changed);
         self.update_token_count_task.take();
 
-        let Some(model) = self.thread.read(cx).configured_model() else {
+        let Some(_) = self.thread.read(cx).configured_model() else {
             self.last_estimated_token_count.take();
             return;
         };
-
-        let editor = self.editor.clone();
 
         self.update_token_count_task = Some(cx.spawn(async move |this, cx| {
             if debounce {
@@ -1253,57 +1248,7 @@ impl MessageEditor {
                     .await;
             }
 
-            let token_count = if let Some(task) = this
-                .update(cx, |this, cx| {
-                    let loaded_context = this
-                        .last_loaded_context
-                        .as_ref()
-                        .map(|context_load_result| &context_load_result.loaded_context);
-                    let message_text = editor.read(cx).text(cx);
-
-                    if message_text.is_empty()
-                        && loaded_context.map_or(true, |loaded_context| loaded_context.is_empty())
-                    {
-                        return None;
-                    }
-
-                    let mut request_message = LanguageModelRequestMessage {
-                        role: language_model::Role::User,
-                        content: Vec::new(),
-                        cache: false,
-                    };
-
-                    if let Some(loaded_context) = loaded_context {
-                        loaded_context.add_to_request_message(&mut request_message);
-                    }
-
-                    if !message_text.is_empty() {
-                        request_message
-                            .content
-                            .push(MessageContent::Text(message_text));
-                    }
-
-                    let request = language_model::LanguageModelRequest {
-                        thread_id: None,
-                        prompt_id: None,
-                        intent: None,
-                        mode: None,
-                        messages: vec![request_message],
-                        tools: vec![],
-                        tool_choice: None,
-                        stop: vec![],
-                        temperature: AgentSettings::temperature_for_model(&model.model, cx),
-                    };
-
-                    Some(model.model.count_tokens(request, cx))
-                })
-                .ok()
-                .flatten()
-            {
-                task.await.log_err()
-            } else {
-                Some(0)
-            };
+            let token_count = Some(0);
 
             this.update(cx, |this, cx| {
                 if let Some(token_count) = token_count {

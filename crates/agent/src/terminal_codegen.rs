@@ -1,11 +1,9 @@
 use crate::inline_prompt_editor::CodegenStatus;
 use client::telemetry::Telemetry;
-use futures::{SinkExt, StreamExt, channel::mpsc};
+use futures::{StreamExt, channel::mpsc};
 use gpui::{App, AppContext as _, Context, Entity, EventEmitter, Task};
-use language_model::{
-    ConfiguredModel, LanguageModelRegistry, LanguageModelRequest, report_assistant_event,
-};
-use std::{sync::Arc, time::Instant};
+use language_model::{ConfiguredModel, LanguageModelRegistry, report_assistant_event};
+use std::sync::Arc;
 use telemetry_events::{AssistantEventData, AssistantKind, AssistantPhase};
 use terminal::Terminal;
 
@@ -32,7 +30,7 @@ impl TerminalCodegen {
         }
     }
 
-    pub fn start(&mut self, prompt_task: Task<LanguageModelRequest>, cx: &mut Context<Self>) {
+    pub fn start(&mut self, cx: &mut Context<Self>) {
         let Some(ConfiguredModel { model, .. }) =
             LanguageModelRegistry::read_global(cx).inline_assistant_model()
         else {
@@ -43,35 +41,16 @@ impl TerminalCodegen {
         self.status = CodegenStatus::Pending;
         self.transaction = Some(TerminalTransaction::start(self.terminal.clone()));
         self.generation = cx.spawn(async move |this, cx| {
-            let prompt = prompt_task.await;
             let model_telemetry_id = model.telemetry_id();
             let model_provider_id = model.provider_id();
-            let response = model.stream_completion_text(prompt, &cx).await;
-            let generate = async {
-                let message_id = response
-                    .as_ref()
-                    .ok()
-                    .and_then(|response| response.message_id.clone());
 
-                let (mut hunks_tx, mut hunks_rx) = mpsc::channel(1);
+            let generate = async {
+                let (_, mut hunks_rx) = mpsc::channel(1);
 
                 let task = cx.background_spawn({
-                    let message_id = message_id.clone();
                     async move {
-                        let mut response_latency = None;
-                        let request_start = Instant::now();
-                        let task = async {
-                            let mut chunks = response?.stream;
-                            while let Some(chunk) = chunks.next().await {
-                                if response_latency.is_none() {
-                                    response_latency = Some(request_start.elapsed());
-                                }
-                                let chunk = chunk?;
-                                hunks_tx.send(chunk).await?;
-                            }
-
-                            anyhow::Ok(())
-                        };
+                        let response_latency = None;
+                        let task = async { anyhow::Ok(()) };
 
                         let result = task.await;
 
@@ -80,7 +59,7 @@ impl TerminalCodegen {
                             AssistantEventData {
                                 conversation_id: None,
                                 kind: AssistantKind::InlineTerminal,
-                                message_id,
+                                message_id: None,
                                 phase: AssistantPhase::Response,
                                 model: model_telemetry_id,
                                 model_provider: model_provider_id.to_string(),
@@ -95,10 +74,6 @@ impl TerminalCodegen {
                         anyhow::Ok(())
                     }
                 });
-
-                this.update(cx, |this, _| {
-                    this.message_id = message_id;
-                })?;
 
                 while let Some(hunk) = hunks_rx.next().await {
                     this.update(cx, |this, cx| {

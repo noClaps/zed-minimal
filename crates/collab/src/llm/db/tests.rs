@@ -1,5 +1,3 @@
-mod provider_tests;
-
 use gpui::BackgroundExecutor;
 use parking_lot::Mutex;
 use rand::prelude::*;

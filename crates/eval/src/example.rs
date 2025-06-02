@@ -27,18 +27,6 @@ pub const THREAD_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 2);
 pub trait Example {
     fn meta(&self) -> ExampleMetadata;
     async fn conversation(&self, cx: &mut ExampleContext) -> Result<()>;
-    fn diff_assertions(&self) -> Vec<JudgeAssertion> {
-        Vec::new()
-    }
-    fn thread_assertions(&self) -> Vec<JudgeAssertion> {
-        Vec::new()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct JudgeAssertion {
-    pub id: String,
-    pub description: String,
 }
 
 #[derive(Clone, Debug)]
@@ -50,7 +38,6 @@ pub struct ExampleMetadata {
     pub max_assertions: Option<usize>,
     pub profile_id: AgentProfileId,
     pub existing_thread_json: Option<String>,
-    pub max_turns: Option<u32>,
 }
 
 #[derive(Clone, Debug)]

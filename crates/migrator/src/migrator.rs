@@ -761,32 +761,6 @@ mod tests {
     }
 
     #[test]
-    fn test_comment_duplicated_agent() {
-        assert_migrate_settings(
-            r#"{
-                "agent": {
-                    "name": "assistant-1",
-                "model": "gpt-4", // weird formatting
-                    "utf8": "привіт"
-                },
-                "something": "else",
-            }
-        "#,
-            Some(
-                r#"{
-                /* Duplicated key auto-commented: "agent": {
-                    "name": "assistant-1",
-                "model": "gpt-4", // weird formatting
-                    "utf8": "привіт"
-                }, */
-                "something": "else",
-            }
-        "#,
-            ),
-        );
-    }
-
-    #[test]
     fn test_preferred_completion_mode_migration() {
         assert_migrate_settings(
             r#"{

@@ -17,7 +17,7 @@ use collections::{HashMap, HashSet};
 use extension::ExtensionHostProxy;
 use futures::future;
 use gpui::http_client::read_proxy_from_env;
-use gpui::{App, AppContext, Application, AsyncApp, Entity, SemanticVersion, UpdateGlobal};
+use gpui::{App, AppContext, Application, Entity, SemanticVersion, UpdateGlobal};
 use gpui_tokio::Tokio;
 use language::LanguageRegistry;
 use language_model::{ConfiguredModel, LanguageModel, LanguageModelRegistry, SelectedModel};
@@ -103,7 +103,7 @@ fn main() {
 
     let http_client = Arc::new(ReqwestClient::new());
     let app = Application::headless().with_http_client(http_client.clone());
-    let all_threads = examples::all(&examples_dir);
+    let all_threads = examples::all();
 
     app.run(move |cx| {
         let app_state = init(cx);
@@ -293,7 +293,6 @@ fn main() {
                                 &run_id,
                                 &run_output,
                                 enable_telemetry,
-                                cx,
                             )
                             .await;
                             anyhow::Ok((run_output, judge_output))
@@ -417,7 +416,7 @@ pub fn init(cx: &mut App) -> Arc<AgentAppState> {
     debug_adapter_extension::init(extension_host_proxy.clone(), cx);
     language_extension::init(extension_host_proxy.clone(), languages.clone());
     language_model::init(client.clone(), cx);
-    language_models::init(user_store.clone(), client.clone(), fs.clone(), cx);
+    language_models::init(user_store.clone(), client.clone(), cx);
     languages::init(languages.clone(), node_runtime.clone(), cx);
     prompt_store::init(cx);
     terminal_view::init(cx);
@@ -512,9 +511,8 @@ async fn judge_example(
     run_id: &str,
     run_output: &RunOutput,
     enable_telemetry: bool,
-    cx: &AsyncApp,
 ) -> JudgeOutput {
-    let judge_output = example.judge(model.clone(), &run_output, cx).await;
+    let judge_output = example.judge().await;
 
     if enable_telemetry {
         telemetry::event!(

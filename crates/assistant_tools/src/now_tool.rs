@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use assistant_tool::{ActionLog, Tool, ToolResult};
 use chrono::{Local, Utc};
 use gpui::{AnyWindowHandle, App, Entity, Task};
-use language_model::{LanguageModel, LanguageModelRequest, LanguageModelToolSchemaFormat};
+use language_model::LanguageModelToolSchemaFormat;
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -56,10 +56,8 @@ impl Tool for NowTool {
     fn run(
         self: Arc<Self>,
         input: serde_json::Value,
-        _request: Arc<LanguageModelRequest>,
         _project: Entity<Project>,
         _action_log: Entity<ActionLog>,
-        _model: Arc<dyn LanguageModel>,
         _window: Option<AnyWindowHandle>,
         _cx: &mut App,
     ) -> ToolResult {

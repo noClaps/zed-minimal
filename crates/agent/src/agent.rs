@@ -140,12 +140,7 @@ pub fn init(
     context_server_configuration::init(language_registry, cx);
 
     register_slash_commands(cx);
-    inline_assistant::init(
-        fs.clone(),
-        prompt_builder.clone(),
-        client.telemetry().clone(),
-        cx,
-    );
+    inline_assistant::init(fs.clone(), client.telemetry().clone(), cx);
     terminal_inline_assistant::init(
         fs.clone(),
         prompt_builder.clone(),

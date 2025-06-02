@@ -29,10 +29,7 @@ use language_model::{LanguageModelRegistry, report_assistant_event};
 use multi_buffer::MultiBufferRow;
 use parking_lot::Mutex;
 use project::LspAction;
-use project::Project;
 use project::{CodeAction, ProjectTransaction};
-use prompt_store::PromptBuilder;
-use prompt_store::PromptStore;
 use settings::{Settings, SettingsStore};
 use telemetry_events::{AssistantEventData, AssistantKind, AssistantPhase};
 use terminal_view::{TerminalView, terminal_panel::TerminalPanel};
@@ -51,13 +48,8 @@ use crate::terminal_inline_assistant::TerminalInlineAssistant;
 use crate::thread_store::TextThreadStore;
 use crate::thread_store::ThreadStore;
 
-pub fn init(
-    fs: Arc<dyn Fs>,
-    prompt_builder: Arc<PromptBuilder>,
-    telemetry: Arc<Telemetry>,
-    cx: &mut App,
-) {
-    cx.set_global(InlineAssistant::new(fs, prompt_builder, telemetry));
+pub fn init(fs: Arc<dyn Fs>, telemetry: Arc<Telemetry>, cx: &mut App) {
+    cx.set_global(InlineAssistant::new(fs, telemetry));
     cx.observe_new(|_workspace: &mut Workspace, window, cx| {
         let Some(window) = window else {
             return;
@@ -85,7 +77,6 @@ pub struct InlineAssistant {
     assist_groups: HashMap<InlineAssistGroupId, InlineAssistGroup>,
     confirmed_assists: HashMap<InlineAssistId, Entity<CodegenAlternative>>,
     prompt_history: VecDeque<String>,
-    prompt_builder: Arc<PromptBuilder>,
     telemetry: Arc<Telemetry>,
     fs: Arc<dyn Fs>,
 }
@@ -93,11 +84,7 @@ pub struct InlineAssistant {
 impl Global for InlineAssistant {}
 
 impl InlineAssistant {
-    pub fn new(
-        fs: Arc<dyn Fs>,
-        prompt_builder: Arc<PromptBuilder>,
-        telemetry: Arc<Telemetry>,
-    ) -> Self {
+    pub fn new(fs: Arc<dyn Fs>, telemetry: Arc<Telemetry>) -> Self {
         Self {
             next_assist_id: InlineAssistId::default(),
             next_assist_group_id: InlineAssistGroupId::default(),
@@ -106,7 +93,6 @@ impl InlineAssistant {
             assist_groups: HashMap::default(),
             confirmed_assists: HashMap::default(),
             prompt_history: VecDeque::default(),
-            prompt_builder,
             telemetry,
             fs,
         }
@@ -257,8 +243,6 @@ impl InlineAssistant {
                             &active_editor,
                             cx.entity().downgrade(),
                             context_store,
-                            workspace.project().downgrade(),
-                            prompt_store,
                             thread_store,
                             text_thread_store,
                             action.prompt.clone(),
@@ -330,8 +314,6 @@ impl InlineAssistant {
         editor: &Entity<Editor>,
         workspace: WeakEntity<Workspace>,
         context_store: Entity<ContextStore>,
-        project: WeakEntity<Project>,
-        prompt_store: Option<Entity<PromptStore>>,
         thread_store: Option<WeakEntity<ThreadStore>>,
         text_thread_store: Option<WeakEntity<TextThreadStore>>,
         initial_prompt: Option<String>,
@@ -459,17 +441,7 @@ impl InlineAssistant {
         for range in codegen_ranges {
             let assist_id = self.next_assist_id.post_inc();
             let codegen = cx.new(|cx| {
-                BufferCodegen::new(
-                    editor.read(cx).buffer().clone(),
-                    range.clone(),
-                    None,
-                    context_store.clone(),
-                    project.clone(),
-                    prompt_store.clone(),
-                    self.telemetry.clone(),
-                    self.prompt_builder.clone(),
-                    cx,
-                )
+                BufferCodegen::new(editor.read(cx).buffer().clone(), range.clone(), None, cx)
             });
 
             let editor_margins = Arc::new(Mutex::new(EditorMargins::default()));
@@ -555,7 +527,6 @@ impl InlineAssistant {
         initial_transaction_id: Option<TransactionId>,
         focus: bool,
         workspace: Entity<Workspace>,
-        prompt_store: Option<Entity<PromptStore>>,
         thread_store: Option<WeakEntity<ThreadStore>>,
         text_thread_store: Option<WeakEntity<TextThreadStore>>,
         window: &mut Window,
@@ -582,11 +553,6 @@ impl InlineAssistant {
                 editor.read(cx).buffer().clone(),
                 range.clone(),
                 initial_transaction_id,
-                context_store.clone(),
-                project,
-                prompt_store,
-                self.telemetry.clone(),
-                self.prompt_builder.clone(),
                 cx,
             )
         });
@@ -1265,7 +1231,7 @@ impl InlineAssistant {
 
         assist
             .codegen
-            .update(cx, |codegen, cx| codegen.start(model, user_prompt, cx))
+            .update(cx, |codegen, cx| codegen.start(model, cx))
             .log_err();
     }
 
@@ -1827,7 +1793,6 @@ impl CodeActionProvider for AssistantCodeActionProvider {
         let workspace = self.workspace.clone();
         let thread_store = self.thread_store.clone();
         let text_thread_store = self.text_thread_store.clone();
-        let prompt_store = PromptStore::global(cx);
         window.spawn(cx, async move |cx| {
             let workspace = workspace.upgrade().context("workspace was released")?;
             let editor = editor.upgrade().context("editor was released")?;
@@ -1868,7 +1833,6 @@ impl CodeActionProvider for AssistantCodeActionProvider {
                 })?
                 .context("invalid range")?;
 
-            let prompt_store = prompt_store.await.ok();
             cx.update_global(|assistant: &mut InlineAssistant, window, cx| {
                 let assist_id = assistant.suggest_assist(
                     &editor,
@@ -1877,7 +1841,6 @@ impl CodeActionProvider for AssistantCodeActionProvider {
                     None,
                     true,
                     workspace,
-                    prompt_store,
                     thread_store,
                     text_thread_store,
                     window,

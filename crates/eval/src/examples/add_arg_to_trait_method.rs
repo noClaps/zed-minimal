@@ -4,7 +4,7 @@ use agent_settings::AgentProfileId;
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::example::{Example, ExampleContext, ExampleMetadata, JudgeAssertion, LanguageServer};
+use crate::example::{Example, ExampleContext, ExampleMetadata, LanguageServer};
 
 pub struct AddArgToTraitMethod;
 
@@ -22,7 +22,6 @@ impl Example for AddArgToTraitMethod {
             max_assertions: None,
             profile_id: AgentProfileId::default(),
             existing_thread_json: None,
-            max_turns: None,
         }
     }
 
@@ -97,22 +96,5 @@ impl Example for AddArgToTraitMethod {
         .ok();
 
         Ok(())
-    }
-
-    fn diff_assertions(&self) -> Vec<JudgeAssertion> {
-        vec![
-            JudgeAssertion {
-                id: "batch tool passes window to each".to_string(),
-                description:
-                    "batch_tool is modified to pass a clone of the window to each tool it calls."
-                        .to_string(),
-            },
-            JudgeAssertion {
-                id: "tool tests updated".to_string(),
-                description:
-                    "tool tests are updated to pass the new `window` argument (`None` is ok)."
-                        .to_string(),
-            },
-        ]
     }
 }
