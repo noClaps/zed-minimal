@@ -78,7 +78,7 @@ pub fn config_dir() -> &'static PathBuf {
             }
             .join("zed")
         } else {
-            home_dir().join(".config").join("zed")
+            home_dir().join(".config").join("zed-min")
         }
     })
 }
