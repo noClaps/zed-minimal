@@ -306,10 +306,6 @@ impl LanguageModelProvider for CloudLanguageModelProvider {
         LanguageModelProviderName(PROVIDER_NAME.into())
     }
 
-    fn icon(&self) -> IconName {
-        IconName::AiZed
-    }
-
     fn default_model(&self, cx: &App) -> Option<Arc<dyn LanguageModel>> {
         let default_model = self.state.read(cx).default_model.clone()?;
         Some(self.create_language_model(default_model))

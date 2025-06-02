@@ -996,18 +996,7 @@ impl ActiveThread {
             }
             ThreadEvent::Stopped(reason) => match reason {
                 Ok(StopReason::EndTurn | StopReason::MaxTokens) => {
-                    let used_tools = self.thread.read(cx).used_tools_since_last_user_message();
                     self.play_notification_sound(cx);
-                    self.show_notification(
-                        if used_tools {
-                            "Finished running tools"
-                        } else {
-                            "New message"
-                        },
-                        IconName::ZedAssistant,
-                        window,
-                        cx,
-                    );
                 }
                 _ => {}
             },

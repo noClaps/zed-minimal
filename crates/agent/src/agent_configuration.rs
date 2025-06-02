@@ -155,11 +155,6 @@ impl AgentConfiguration {
                     .child(
                         h_flex()
                             .gap_2()
-                            .child(
-                                Icon::new(provider.icon())
-                                    .size(IconSize::Small)
-                                    .color(Color::Muted),
-                            )
                             .child(Label::new(provider_name.clone()).size(LabelSize::Large))
                             .when(provider.is_authenticated(cx) && !is_expanded, |parent| {
                                 parent.child(Icon::new(IconName::Check).color(Color::Success))

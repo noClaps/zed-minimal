@@ -238,10 +238,6 @@ fn replace_string_action(
 /// "ctrl-k ctrl-1": "inline_completion::ToggleMenu" -> "edit_prediction::ToggleMenu"
 static STRING_REPLACE: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
     HashMap::from_iter([
-        (
-            "inline_completion::ToggleMenu",
-            "edit_prediction::ToggleMenu",
-        ),
         ("editor::NextInlineCompletion", "editor::NextEditPrediction"),
         (
             "editor::PreviousInlineCompletion",

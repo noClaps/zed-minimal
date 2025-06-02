@@ -512,11 +512,7 @@ Error: Running Zed as root or via sudo is unsupported.
         web_search::init(cx);
         web_search_providers::init(app_state.client.clone(), cx);
         snippet_provider::init(cx);
-        inline_completion_registry::init(
-            app_state.client.clone(),
-            app_state.user_store.clone(),
-            cx,
-        );
+        inline_completion_registry::init(app_state.user_store.clone(), cx);
         let prompt_builder = PromptBuilder::load(app_state.fs.clone(), stdout_is_a_pty(), cx);
         agent::init(
             app_state.fs.clone(),
@@ -577,7 +573,6 @@ Error: Running Zed as root or via sudo is unsupported.
         welcome::init(cx);
         settings_ui::init(cx);
         extensions_ui::init(cx);
-        zeta::init(cx);
         inspector_ui::init(app_state.clone(), cx);
 
         cx.observe_global::<SettingsStore>({

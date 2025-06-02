@@ -56,7 +56,7 @@ fn all_models(cx: &App) -> GroupedModels {
                 .into_iter()
                 .map(|model| ModelInfo {
                     model,
-                    icon: provider.icon(),
+                    icon: IconName::CircleOff,
                 })
         })
         .collect();
@@ -69,7 +69,7 @@ fn all_models(cx: &App) -> GroupedModels {
                 .into_iter()
                 .map(|model| ModelInfo {
                     model,
-                    icon: provider.icon(),
+                    icon: IconName::CircleOff,
                 })
         })
         .collect();
@@ -551,7 +551,6 @@ impl PickerDelegate for LanguageModelPickerDelegate {
                 .when(cx.has_flag::<ZedProFeatureFlag>(), |this| {
                     this.child(match plan {
                         Plan::ZedPro => Button::new("zed-pro", "Zed Pro")
-                            .icon(IconName::ZedAssistant)
                             .icon_size(IconSize::Small)
                             .icon_color(Color::Muted)
                             .icon_position(IconPosition::Start)

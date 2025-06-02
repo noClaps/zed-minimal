@@ -4,7 +4,6 @@ use gpui::{
     Action, App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     ParentElement, Render, Styled, Subscription, Task, WeakEntity, Window, actions, svg,
 };
-use language::language_settings::{EditPredictionProvider, all_language_settings};
 use settings::{Settings, SettingsStore};
 use std::sync::Arc;
 use ui::{CheckboxWithLabel, ElevationIndex, Tooltip, prelude::*};
@@ -76,16 +75,6 @@ pub struct WelcomePage {
 
 impl Render for WelcomePage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let edit_prediction_provider_is_zed =
-            all_language_settings(None, cx).edit_predictions.provider
-                == EditPredictionProvider::Zed;
-
-        let edit_prediction_label = if edit_prediction_provider_is_zed {
-            "Edit Prediction Enabled"
-        } else {
-            "Try Edit Prediction"
-        };
-
         h_flex()
             .size_full()
             .bg(cx.theme().colors().editor_background)
@@ -171,23 +160,6 @@ impl Render for WelcomePage {
                                                     })
                                                     .ok();
                                             })),
-                                    )
-                                    .child(
-                                        Button::new(
-                                            "try-zed-edit-prediction",
-                                            edit_prediction_label,
-                                        )
-                                        .disabled(edit_prediction_provider_is_zed)
-                                        .icon(IconName::ZedPredict)
-                                        .icon_size(IconSize::XSmall)
-                                        .icon_color(Color::Muted)
-                                        .icon_position(IconPosition::Start)
-                                        .on_click(
-                                            cx.listener(|_, _, window, cx| {
-                                                telemetry::event!("Welcome Screen Try Edit Prediction clicked");
-                                                window.dispatch_action(zed_actions::OpenZedPredictOnboarding.boxed_clone(), cx);
-                                            }),
-                                        ),
                                     )
                                     .child(
                                         Button::new("edit settings", "Edit Settings")

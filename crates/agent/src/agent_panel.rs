@@ -1503,8 +1503,8 @@ impl Panel for AgentPanel {
         Some(proto::PanelId::AssistantPanel)
     }
 
-    fn icon(&self, _window: &Window, cx: &App) -> Option<IconName> {
-        (self.enabled(cx) && AgentSettings::get_global(cx).button).then_some(IconName::ZedAssistant)
+    fn icon(&self, _window: &Window, _: &App) -> Option<IconName> {
+        None
     }
 
     fn icon_tooltip(&self, _window: &Window, _cx: &App) -> Option<&'static str> {
