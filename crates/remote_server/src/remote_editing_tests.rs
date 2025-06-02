@@ -6,7 +6,6 @@ use assistant_tool::{Tool as _, ToolResultContent};
 use assistant_tools::{ReadFileTool, ReadFileToolInput};
 use client::{Client, UserStore};
 use clock::FakeSystemClock;
-use language_model::{LanguageModelRequest, fake_provider::FakeLanguageModel};
 
 use extension::ExtensionHostProxy;
 use fs::{FakeFs, Fs};
@@ -1572,8 +1571,6 @@ async fn test_remote_agent_fs_tool_calls(cx: &mut TestAppContext, server_cx: &mu
         .unwrap();
 
     let action_log = cx.new(|_| assistant_tool::ActionLog::new(project.clone()));
-    let model = Arc::new(FakeLanguageModel::default());
-    let request = Arc::new(LanguageModelRequest::default());
 
     let input = ReadFileToolInput {
         path: "project/b.txt".into(),
@@ -1584,10 +1581,8 @@ async fn test_remote_agent_fs_tool_calls(cx: &mut TestAppContext, server_cx: &mu
         ReadFileTool::run(
             Arc::new(ReadFileTool),
             serde_json::to_value(input).unwrap(),
-            request.clone(),
             project.clone(),
             action_log.clone(),
-            model.clone(),
             None,
             cx,
         )
@@ -1604,10 +1599,8 @@ async fn test_remote_agent_fs_tool_calls(cx: &mut TestAppContext, server_cx: &mu
         ReadFileTool::run(
             Arc::new(ReadFileTool),
             serde_json::to_value(input).unwrap(),
-            request.clone(),
             project.clone(),
             action_log.clone(),
-            model.clone(),
             None,
             cx,
         )

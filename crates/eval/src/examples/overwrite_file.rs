@@ -16,8 +16,6 @@ resulted in content loss.
 #[async_trait(?Send)]
 impl Example for FileOverwriteExample {
     fn meta(&self) -> ExampleMetadata {
-        let thread_json = include_str!("threads/overwrite-file.json");
-
         ExampleMetadata {
             name: "file_overwrite".to_string(),
             url: "https://github.com/zed-industries/zed.git".to_string(),
@@ -25,7 +23,7 @@ impl Example for FileOverwriteExample {
             language_server: None,
             max_assertions: Some(1),
             profile_id: AgentProfileId::default(),
-            existing_thread_json: Some(thread_json.to_string()),
+            existing_thread_json: None,
         }
     }
 
