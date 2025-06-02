@@ -9,7 +9,7 @@ use crate::thread::{
     ThreadEvent, ThreadFeedback, ThreadSummary,
 };
 use crate::thread_store::{RulesLoadingError, TextThreadStore, ThreadStore};
-use crate::tool_use::{PendingToolUseStatus, ToolUse};
+use crate::tool_use::ToolUse;
 use crate::ui::{
     AddedContext, AgentNotification, AgentNotificationEvent, AnimatedLabel, ContextPill,
 };
@@ -30,9 +30,7 @@ use gpui::{
     pulsating_between,
 };
 use language::{Buffer, Language, LanguageRegistry};
-use language_model::{
-    LanguageModelRequestMessage, LanguageModelToolUseId, MessageContent, Role, StopReason,
-};
+use language_model::{LanguageModelToolUseId, Role, StopReason};
 use markdown::parser::{CodeBlockKind, CodeBlockMetadata};
 use markdown::{
     HeadingLevelStyles, Markdown, MarkdownElement, MarkdownStyle, ParsedMarkdown, PathWithRange,
@@ -1383,21 +1381,12 @@ impl ActiveThread {
     }
 
     fn update_editing_message_token_count(&mut self, debounce: bool, cx: &mut Context<Self>) {
-        let Some((message_id, state)) = self.editing_message.as_mut() else {
+        let Some((_, state)) = self.editing_message.as_mut() else {
             return;
         };
 
         cx.emit(ActiveThreadEvent::EditingMessageTokenCountChanged);
         state._update_token_count_task.take();
-
-        let Some(configured_model) = self.thread.read(cx).configured_model() else {
-            state.last_estimated_token_count.take();
-            return;
-        };
-
-        let editor = state.editor.clone();
-        let thread = self.thread.clone();
-        let message_id = *message_id;
 
         state._update_token_count_task = Some(cx.spawn(async move |this, cx| {
             if debounce {
@@ -1406,58 +1395,7 @@ impl ActiveThread {
                     .await;
             }
 
-            let token_count = if let Some(task) = cx
-                .update(|cx| {
-                    let Some(message) = thread.read(cx).message(message_id) else {
-                        log::error!("Message that was being edited no longer exists");
-                        return None;
-                    };
-                    let message_text = editor.read(cx).text(cx);
-
-                    if message_text.is_empty() && message.loaded_context.is_empty() {
-                        return None;
-                    }
-
-                    let mut request_message = LanguageModelRequestMessage {
-                        role: language_model::Role::User,
-                        content: Vec::new(),
-                        cache: false,
-                    };
-
-                    message
-                        .loaded_context
-                        .add_to_request_message(&mut request_message);
-
-                    if !message_text.is_empty() {
-                        request_message
-                            .content
-                            .push(MessageContent::Text(message_text));
-                    }
-
-                    let request = language_model::LanguageModelRequest {
-                        thread_id: None,
-                        prompt_id: None,
-                        intent: None,
-                        mode: None,
-                        messages: vec![request_message],
-                        tools: vec![],
-                        tool_choice: None,
-                        stop: vec![],
-                        temperature: AgentSettings::temperature_for_model(
-                            &configured_model.model,
-                            cx,
-                        ),
-                    };
-
-                    Some(configured_model.model.count_tokens(request, cx))
-                })
-                .ok()
-                .flatten()
-            {
-                task.await.log_err()
-            } else {
-                Some(0)
-            };
+            let token_count = Some(0);
 
             if let Some(token_count) = token_count {
                 this.update(cx, |this, cx| {
@@ -3103,7 +3041,6 @@ impl ActiveThread {
                                     h_flex()
                                         .gap_0p5()
                                         .child({
-                                            let tool_id = tool_use.id.clone();
                                             Button::new(
                                                 "always-allow-tool-action",
                                                 "Always Allow",
@@ -3123,7 +3060,7 @@ impl ActiveThread {
                                                 )
                                             })
                                             .on_click(cx.listener(
-                                                move |this, event, window, cx| {
+                                                move |_, _, _, cx| {
                                                     if let Some(fs) = fs.clone() {
                                                         update_settings_file::<AgentSettings>(
                                                             fs.clone(),
@@ -3133,34 +3070,17 @@ impl ActiveThread {
                                                             },
                                                         );
                                                     }
-                                                    this.handle_allow_tool(
-                                                        tool_id.clone(),
-                                                        event,
-                                                        window,
-                                                        cx,
-                                                    )
                                                 },
                                             ))
                                         })
                                         .child(ui::Divider::vertical())
                                         .child({
-                                            let tool_id = tool_use.id.clone();
                                             Button::new("allow-tool-action", "Allow")
                                                 .label_size(LabelSize::Small)
                                                 .icon(IconName::Check)
                                                 .icon_position(IconPosition::Start)
                                                 .icon_size(IconSize::Small)
                                                 .icon_color(Color::Success)
-                                                .on_click(cx.listener(
-                                                    move |this, event, window, cx| {
-                                                        this.handle_allow_tool(
-                                                            tool_id.clone(),
-                                                            event,
-                                                            window,
-                                                            cx,
-                                                        )
-                                                    },
-                                                ))
                                         })
                                         .child({
                                             let tool_id = tool_use.id.clone();
@@ -3305,36 +3225,6 @@ impl ActiveThread {
                 )
             })
             .into_any()
-    }
-
-    fn handle_allow_tool(
-        &mut self,
-        tool_use_id: LanguageModelToolUseId,
-        _: &ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(PendingToolUseStatus::NeedsConfirmation(c)) = self
-            .thread
-            .read(cx)
-            .pending_tool(&tool_use_id)
-            .map(|tool_use| tool_use.status.clone())
-        {
-            self.thread.update(cx, |thread, cx| {
-                if let Some(configured) = thread.get_or_init_configured_model(cx) {
-                    thread.run_tool(
-                        c.tool_use_id.clone(),
-                        c.ui_text.clone(),
-                        c.input.clone(),
-                        c.request.clone(),
-                        c.tool.clone(),
-                        configured.model,
-                        Some(window.window_handle()),
-                        cx,
-                    );
-                }
-            });
-        }
     }
 
     fn handle_deny_tool(

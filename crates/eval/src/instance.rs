@@ -1,9 +1,9 @@
 use agent::{Message, MessageSegment, SerializedThread, ThreadStore};
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result};
 use assistant_tool::ToolWorkingSet;
 use client::proto::LspWorkProgress;
 use futures::channel::mpsc;
-use futures::{FutureExt as _, StreamExt as _, future};
+use futures::{FutureExt as _, StreamExt as _};
 use gpui::{App, AppContext as _, AsyncApp, Entity, Task};
 use handlebars::Handlebars;
 use language::{Buffer, DiagnosticSeverity, OffsetRangeExt as _};
@@ -24,13 +24,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
-use unindent::Unindent as _;
 use util::ResultExt as _;
 use util::command::new_smol_command;
 use util::markdown::MarkdownCodeBlock;
 
-use crate::assertions::{AssertionsReport, RanAssertion, RanAssertionResult};
-use crate::example::{Example, ExampleContext, FailedAssertion, JudgeAssertion};
+use crate::assertions::AssertionsReport;
+use crate::example::{Example, ExampleContext, FailedAssertion};
 use crate::{AgentAppState, ToolMetrics};
 
 pub const ZED_REPO_URL: &str = "https://github.com/zed-industries/zed.git";
@@ -442,17 +441,12 @@ impl ExampleInstance {
         run_git(&worktree_path, &diff_args).await
     }
 
-    pub async fn judge(
-        &self,
-        model: Arc<dyn LanguageModel>,
-        run_output: &RunOutput,
-        cx: &AsyncApp,
-    ) -> JudgeOutput {
+    pub async fn judge(&self) -> JudgeOutput {
         let mut output_file =
             File::create(self.run_directory.join("judge.md")).expect("failed to create judge.md");
 
-        let diff_task = self.judge_diff(model.clone(), &run_output, cx);
-        let thread_task = self.judge_thread(model.clone(), &run_output, cx);
+        let diff_task = self.judge_diff();
+        let thread_task = self.judge_thread();
 
         let (diff_result, thread_result) = futures::join!(diff_task, thread_task);
 
@@ -471,21 +465,7 @@ impl ExampleInstance {
         }
     }
 
-    async fn judge_diff(
-        &self,
-        model: Arc<dyn LanguageModel>,
-        run_output: &RunOutput,
-        cx: &AsyncApp,
-    ) -> (String, AssertionsReport) {
-        let diff_assertions = self.thread.diff_assertions();
-
-        if diff_assertions.is_empty() {
-            return (
-                "No diff assertions".to_string(),
-                AssertionsReport::default(),
-            );
-        }
-
+    async fn judge_diff(&self) -> (String, AssertionsReport) {
         println!("{}Running diff judge", self.log_prefix);
 
         let judge_diff_prompt = include_str!("judge_diff_prompt.hbs");
@@ -494,20 +474,7 @@ impl ExampleInstance {
         hbs.register_template_string(judge_diff_prompt_name, judge_diff_prompt)
             .unwrap();
 
-        let to_prompt = |assertion: String| {
-            hbs.render(
-                judge_diff_prompt_name,
-                &JudgeDiffInput {
-                    repository_diff: run_output.repository_diff.clone(),
-                    assertion,
-                },
-            )
-            .unwrap()
-        };
-
-        let (responses, report) = self
-            .judge_assertions(model, diff_assertions, to_prompt, cx)
-            .await;
+        let (responses, report) = self.judge_assertions().await;
 
         println!(
             "{}Judge - Diff score: {}%",
@@ -518,42 +485,14 @@ impl ExampleInstance {
         (responses, report)
     }
 
-    async fn judge_thread(
-        &self,
-        model: Arc<dyn LanguageModel>,
-        run_output: &RunOutput,
-        cx: &AsyncApp,
-    ) -> (String, AssertionsReport) {
-        let thread_assertions = self.thread.thread_assertions();
-
-        if thread_assertions.is_empty() {
-            return (
-                "No thread assertions".to_string(),
-                AssertionsReport::default(),
-            );
-        }
-
+    async fn judge_thread(&self) -> (String, AssertionsReport) {
         let judge_thread_prompt = include_str!("judge_thread_prompt.hbs");
         let judge_thread_prompt_name = "judge_thread_prompt";
         let mut hbs = Handlebars::new();
         hbs.register_template_string(judge_thread_prompt_name, judge_thread_prompt)
             .unwrap();
 
-        let complete_messages = &run_output.all_messages;
-        let to_prompt = |assertion: String| {
-            hbs.render(
-                judge_thread_prompt_name,
-                &JudgeThreadInput {
-                    messages: complete_messages.clone(),
-                    assertion,
-                },
-            )
-            .unwrap()
-        };
-
-        let (responses, report) = self
-            .judge_assertions(model, thread_assertions, to_prompt, cx)
-            .await;
+        let (responses, report) = self.judge_assertions().await;
 
         println!(
             "{}Judge - Thread score: {}%",
@@ -564,67 +503,9 @@ impl ExampleInstance {
         (responses, report)
     }
 
-    async fn judge_assertions(
-        &self,
-        model: Arc<dyn LanguageModel>,
-        assertions: Vec<JudgeAssertion>,
-        to_prompt: impl Fn(String) -> String,
-        cx: &AsyncApp,
-    ) -> (String, AssertionsReport) {
-        let assertions = assertions.into_iter().map(|assertion| {
-            let request = LanguageModelRequest {
-                thread_id: None,
-                prompt_id: None,
-                mode: None,
-                intent: None,
-                messages: vec![LanguageModelRequestMessage {
-                    role: Role::User,
-                    content: vec![MessageContent::Text(to_prompt(assertion.description))],
-                    cache: false,
-                }],
-                temperature: None,
-                tools: Vec::new(),
-                tool_choice: None,
-                stop: Vec::new(),
-            };
-
-            let model = model.clone();
-            let log_prefix = self.log_prefix.clone();
-            async move {
-                let response = send_language_model_request(model, request, cx).await;
-
-                let (response, result) = match response {
-                    Ok(response) => (
-                        response.clone(),
-                        parse_assertion_result(&response).map_err(|err| err.to_string()),
-                    ),
-                    Err(err) => (err.to_string(), Err(err.to_string())),
-                };
-
-                if result.is_ok() {
-                    println!("{}✅ {}", log_prefix, assertion.id);
-                } else {
-                    println!("{}❌ {}", log_prefix, assertion.id);
-                }
-
-                (
-                    response,
-                    RanAssertion {
-                        id: assertion.id,
-                        result,
-                    },
-                )
-            }
-        });
-
-        let mut responses = String::new();
-        let mut report = AssertionsReport::default();
-
-        for (response, assertion) in future::join_all(assertions).await {
-            writeln!(&mut responses, "# {}", assertion.id).unwrap();
-            writeln!(&mut responses, "{}\n\n", response).unwrap();
-            report.ran.push(assertion);
-        }
+    async fn judge_assertions(&self) -> (String, AssertionsReport) {
+        let responses = String::new();
+        let report = AssertionsReport::default();
 
         (responses, report)
     }
@@ -761,38 +642,6 @@ pub async fn query_lsp_diagnostics(
     anyhow::Ok(Some(output))
 }
 
-fn parse_assertion_result(response: &str) -> Result<RanAssertionResult> {
-    let analysis = get_tag("analysis", response)?.to_string();
-    let passed = match get_tag("passed", response)?.to_lowercase().as_str() {
-        "true" => true,
-        "false" => false,
-        value @ _ => bail!("invalid judge `passed` tag: {value}"),
-    };
-    Ok(RanAssertionResult {
-        analysis: Some(analysis),
-        passed,
-    })
-}
-
-fn get_tag(name: &'static str, response: &str) -> Result<String> {
-    let start_tag = format!("<{}>", name);
-    let end_tag = format!("</{}>", name);
-
-    let start_ix = response
-        .find(&start_tag)
-        .context(format!("{} start tag not found", name))?;
-    let content_start_ix = start_ix + start_tag.len();
-
-    let end_ix = content_start_ix
-        + response[content_start_ix..]
-            .find(&end_tag)
-            .context(format!("{} end tag not found", name))?;
-
-    let content = response[content_start_ix..end_ix].trim().unindent();
-
-    anyhow::Ok(content)
-}
-
 pub fn repo_path_for_url(repos_dir: &Path, repo_url: &str) -> PathBuf {
     let repo_name = repo_url
         .trim_start_matches("https://")
@@ -861,32 +710,6 @@ fn push_role(role: &Role, buf: &mut String, assistant_message_number: &mut u32) 
             buf.push_str(&format!("# 🤖 ASSISTANT {assistant_message_number}\n\n"));
             *assistant_message_number = *assistant_message_number + 1;
         }
-    }
-}
-
-pub async fn send_language_model_request(
-    model: Arc<dyn LanguageModel>,
-    request: LanguageModelRequest,
-    cx: &AsyncApp,
-) -> anyhow::Result<String> {
-    match model.stream_completion_text(request, &cx).await {
-        Ok(mut stream) => {
-            let mut full_response = String::new();
-            while let Some(chunk_result) = stream.stream.next().await {
-                match chunk_result {
-                    Ok(chunk_str) => {
-                        full_response.push_str(&chunk_str);
-                    }
-                    Err(err) => {
-                        anyhow::bail!("Error receiving response from language model: {err}");
-                    }
-                }
-            }
-            Ok(full_response)
-        }
-        Err(err) => Err(anyhow!(
-            "Failed to get response from language model. Error was: {err}"
-        )),
     }
 }
 
@@ -1140,46 +963,5 @@ impl ThreadDialog {
         } else {
             None
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_parse_judge_output() {
-        let response = r#"
-            <analysis>The model did a good job but there were still compilations errors.</analysis>
-            <passed>true</passed>
-        "#
-        .unindent();
-
-        let output = parse_assertion_result(&response).unwrap();
-        assert_eq!(
-            output.analysis,
-            Some("The model did a good job but there were still compilations errors.".into())
-        );
-        assert_eq!(output.passed, true);
-
-        let response = r#"
-            Text around ignored
-
-            <analysis>
-                Failed to compile:
-                - Error 1
-                - Error 2
-            </analysis>
-
-            <passed>false</passed>
-        "#
-        .unindent();
-
-        let output = parse_assertion_result(&response).unwrap();
-        assert_eq!(
-            output.analysis,
-            Some("Failed to compile:\n- Error 1\n- Error 2".into())
-        );
-        assert_eq!(output.passed, false);
     }
 }

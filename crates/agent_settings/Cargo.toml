@@ -18,7 +18,6 @@ gpui.workspace = true
 indexmap.workspace = true
 language_model.workspace = true
 log.workspace = true
-open_ai = { workspace = true, features = ["schemars"] }
 schemars.workspace = true
 serde.workspace = true
 settings.workspace = true

@@ -10,7 +10,7 @@ use futures::{Future, FutureExt, TryFutureExt};
 use gpui::{
     AnyWindowHandle, App, AppContext, Context, Entity, IntoElement, Task, WeakEntity, Window,
 };
-use language_model::{LanguageModel, LanguageModelRequest, LanguageModelToolSchemaFormat};
+use language_model::LanguageModelToolSchemaFormat;
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -55,10 +55,8 @@ impl Tool for WebSearchTool {
     fn run(
         self: Arc<Self>,
         input: serde_json::Value,
-        _request: Arc<LanguageModelRequest>,
         _project: Entity<Project>,
         _action_log: Entity<ActionLog>,
-        _model: Arc<dyn LanguageModel>,
         _window: Option<AnyWindowHandle>,
         cx: &mut App,
     ) -> ToolResult {

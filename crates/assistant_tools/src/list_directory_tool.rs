@@ -2,7 +2,7 @@ use crate::schema::json_schema_for;
 use anyhow::{Result, anyhow};
 use assistant_tool::{ActionLog, Tool, ToolResult};
 use gpui::{AnyWindowHandle, App, Entity, Task};
-use language_model::{LanguageModel, LanguageModelRequest, LanguageModelToolSchemaFormat};
+use language_model::LanguageModelToolSchemaFormat;
 use project::Project;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -73,10 +73,8 @@ impl Tool for ListDirectoryTool {
     fn run(
         self: Arc<Self>,
         input: serde_json::Value,
-        _request: Arc<LanguageModelRequest>,
         project: Entity<Project>,
         _action_log: Entity<ActionLog>,
-        _model: Arc<dyn LanguageModel>,
         _window: Option<AnyWindowHandle>,
         cx: &mut App,
     ) -> ToolResult {
@@ -164,7 +162,6 @@ mod tests {
     use assistant_tool::Tool;
     use gpui::{AppContext, TestAppContext};
     use indoc::indoc;
-    use language_model::fake_provider::FakeLanguageModel;
     use project::{FakeFs, Project};
     use serde_json::json;
     use settings::SettingsStore;
@@ -217,7 +214,6 @@ mod tests {
 
         let project = Project::test(fs.clone(), [path!("/project").as_ref()], cx).await;
         let action_log = cx.new(|_| ActionLog::new(project.clone()));
-        let model = Arc::new(FakeLanguageModel::default());
         let tool = Arc::new(ListDirectoryTool);
 
         // Test listing root directory
@@ -227,15 +223,8 @@ mod tests {
 
         let result = cx
             .update(|cx| {
-                tool.clone().run(
-                    input,
-                    Arc::default(),
-                    project.clone(),
-                    action_log.clone(),
-                    model.clone(),
-                    None,
-                    cx,
-                )
+                tool.clone()
+                    .run(input, project.clone(), action_log.clone(), None, cx)
             })
             .output
             .await
@@ -262,15 +251,8 @@ mod tests {
 
         let result = cx
             .update(|cx| {
-                tool.clone().run(
-                    input,
-                    Arc::default(),
-                    project.clone(),
-                    action_log.clone(),
-                    model.clone(),
-                    None,
-                    cx,
-                )
+                tool.clone()
+                    .run(input, project.clone(), action_log.clone(), None, cx)
             })
             .output
             .await
@@ -297,15 +279,8 @@ mod tests {
 
         let result = cx
             .update(|cx| {
-                tool.clone().run(
-                    input,
-                    Arc::default(),
-                    project.clone(),
-                    action_log.clone(),
-                    model.clone(),
-                    None,
-                    cx,
-                )
+                tool.clone()
+                    .run(input, project.clone(), action_log.clone(), None, cx)
             })
             .output
             .await
@@ -332,7 +307,6 @@ mod tests {
 
         let project = Project::test(fs.clone(), [path!("/project").as_ref()], cx).await;
         let action_log = cx.new(|_| ActionLog::new(project.clone()));
-        let model = Arc::new(FakeLanguageModel::default());
         let tool = Arc::new(ListDirectoryTool);
 
         let input = json!({
@@ -340,7 +314,7 @@ mod tests {
         });
 
         let result = cx
-            .update(|cx| tool.run(input, Arc::default(), project, action_log, model, None, cx))
+            .update(|cx| tool.run(input, project, action_log, None, cx))
             .output
             .await
             .unwrap();
@@ -364,7 +338,6 @@ mod tests {
 
         let project = Project::test(fs.clone(), [path!("/project").as_ref()], cx).await;
         let action_log = cx.new(|_| ActionLog::new(project.clone()));
-        let model = Arc::new(FakeLanguageModel::default());
         let tool = Arc::new(ListDirectoryTool);
 
         // Test non-existent path
@@ -374,15 +347,8 @@ mod tests {
 
         let result = cx
             .update(|cx| {
-                tool.clone().run(
-                    input,
-                    Arc::default(),
-                    project.clone(),
-                    action_log.clone(),
-                    model.clone(),
-                    None,
-                    cx,
-                )
+                tool.clone()
+                    .run(input, project.clone(), action_log.clone(), None, cx)
             })
             .output
             .await;
@@ -396,7 +362,7 @@ mod tests {
         });
 
         let result = cx
-            .update(|cx| tool.run(input, Arc::default(), project, action_log, model, None, cx))
+            .update(|cx| tool.run(input, project, action_log, None, cx))
             .output
             .await;
 

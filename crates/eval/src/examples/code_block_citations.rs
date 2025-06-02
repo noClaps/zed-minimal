@@ -3,7 +3,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use markdown::PathWithRange;
 
-use crate::example::{Example, ExampleContext, ExampleMetadata, JudgeAssertion, LanguageServer};
+use crate::example::{Example, ExampleContext, ExampleMetadata, LanguageServer};
 
 pub struct CodeBlockCitations;
 
@@ -23,7 +23,6 @@ impl Example for CodeBlockCitations {
             max_assertions: None,
             profile_id: AgentProfileId::default(),
             existing_thread_json: None,
-            max_turns: None,
         }
     }
 
@@ -190,28 +189,6 @@ impl Example for CodeBlockCitations {
         }
 
         Ok(())
-    }
-
-    fn thread_assertions(&self) -> Vec<JudgeAssertion> {
-        vec![
-            JudgeAssertion {
-                id: "trait method bodies are shown".to_string(),
-                description:
-                    "All method bodies of the Tool trait are shown."
-                        .to_string(),
-            },
-            JudgeAssertion {
-                id: "code blocks used".to_string(),
-                description:
-                   "All code snippets are rendered inside markdown code blocks (as opposed to any other formatting besides code blocks)."
-                        .to_string(),
-            },
-            JudgeAssertion {
-              id: "code blocks use backticks".to_string(),
-              description:
-                  format!("All markdown code blocks use backtick fences ({FENCE}) rather than indentation.")
-            }
-        ]
     }
 }
 

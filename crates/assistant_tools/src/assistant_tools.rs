@@ -29,8 +29,6 @@ use language_model::LanguageModelRegistry;
 use move_path_tool::MovePathTool;
 use web_search_tool::WebSearchTool;
 
-pub(crate) use templates::*;
-
 use crate::create_directory_tool::CreateDirectoryTool;
 use crate::delete_path_tool::DeletePathTool;
 use crate::diagnostics_tool::DiagnosticsTool;

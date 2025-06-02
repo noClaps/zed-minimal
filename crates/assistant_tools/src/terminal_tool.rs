@@ -7,7 +7,7 @@ use gpui::{
     WeakEntity, Window,
 };
 use language::LineEnding;
-use language_model::{LanguageModel, LanguageModelRequest, LanguageModelToolSchemaFormat};
+use language_model::LanguageModelToolSchemaFormat;
 use markdown::{Markdown, MarkdownElement, MarkdownStyle};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use project::{Project, terminals::TerminalKind};
@@ -113,10 +113,8 @@ impl Tool for TerminalTool {
     fn run(
         self: Arc<Self>,
         input: serde_json::Value,
-        _request: Arc<LanguageModelRequest>,
         project: Entity<Project>,
         _action_log: Entity<ActionLog>,
-        _model: Arc<dyn LanguageModel>,
         window: Option<AnyWindowHandle>,
         cx: &mut App,
     ) -> ToolResult {
@@ -661,7 +659,6 @@ mod tests {
     use editor::EditorSettings;
     use fs::RealFs;
     use gpui::{BackgroundExecutor, TestAppContext};
-    use language_model::fake_provider::FakeLanguageModel;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use settings::{Settings, SettingsStore};
@@ -702,7 +699,6 @@ mod tests {
         let project: Entity<Project> =
             Project::test(fs, [tree.path().join("project").as_path()], cx).await;
         let action_log = cx.update(|cx| cx.new(|_| ActionLog::new(project.clone())));
-        let model = Arc::new(FakeLanguageModel::default());
 
         let input = TerminalToolInput {
             command: "cat".to_owned(),
@@ -717,10 +713,8 @@ mod tests {
             TerminalTool::run(
                 Arc::new(TerminalTool::new(cx)),
                 serde_json::to_value(input).unwrap(),
-                Arc::default(),
                 project.clone(),
                 action_log.clone(),
-                model,
                 None,
                 cx,
             )
@@ -746,16 +740,13 @@ mod tests {
         let project: Entity<Project> =
             Project::test(fs, [tree.path().join("project").as_path()], cx).await;
         let action_log = cx.update(|cx| cx.new(|_| ActionLog::new(project.clone())));
-        let model = Arc::new(FakeLanguageModel::default());
 
         let check = |input, expected, cx: &mut App| {
             let headless_result = TerminalTool::run(
                 Arc::new(TerminalTool::new(cx)),
                 serde_json::to_value(input).unwrap(),
-                Arc::default(),
                 project.clone(),
                 action_log.clone(),
-                model.clone(),
                 None,
                 cx,
             );

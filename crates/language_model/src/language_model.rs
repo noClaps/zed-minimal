@@ -10,9 +10,8 @@ pub mod fake_provider;
 
 use anyhow::{Context as _, Result};
 use client::Client;
-use futures::FutureExt;
-use futures::{StreamExt, future::BoxFuture, stream::BoxStream};
-use gpui::{AnyElement, AnyView, App, AsyncApp, SharedString, Task, Window};
+use futures::stream::BoxStream;
+use gpui::{AnyElement, AnyView, App, SharedString, Task, Window};
 use http_client::http::{HeaderMap, HeaderValue};
 use icons::IconName;
 use parking_lot::Mutex;
@@ -254,82 +253,6 @@ pub trait LanguageModel: Send + Sync {
     fn max_token_count(&self) -> usize;
     fn max_output_tokens(&self) -> Option<u32> {
         None
-    }
-
-    fn count_tokens(
-        &self,
-        request: LanguageModelRequest,
-        cx: &App,
-    ) -> BoxFuture<'static, Result<usize>>;
-
-    fn stream_completion(
-        &self,
-        request: LanguageModelRequest,
-        cx: &AsyncApp,
-    ) -> BoxFuture<
-        'static,
-        Result<
-            BoxStream<'static, Result<LanguageModelCompletionEvent, LanguageModelCompletionError>>,
-        >,
-    >;
-
-    fn stream_completion_text(
-        &self,
-        request: LanguageModelRequest,
-        cx: &AsyncApp,
-    ) -> BoxFuture<'static, Result<LanguageModelTextStream>> {
-        let future = self.stream_completion(request, cx);
-
-        async move {
-            let events = future.await?;
-            let mut events = events.fuse();
-            let mut message_id = None;
-            let mut first_item_text = None;
-            let last_token_usage = Arc::new(Mutex::new(TokenUsage::default()));
-
-            if let Some(first_event) = events.next().await {
-                match first_event {
-                    Ok(LanguageModelCompletionEvent::StartMessage { message_id: id }) => {
-                        message_id = Some(id.clone());
-                    }
-                    Ok(LanguageModelCompletionEvent::Text(text)) => {
-                        first_item_text = Some(text);
-                    }
-                    _ => (),
-                }
-            }
-
-            let stream = futures::stream::iter(first_item_text.map(Ok))
-                .chain(events.filter_map({
-                    let last_token_usage = last_token_usage.clone();
-                    move |result| {
-                        let last_token_usage = last_token_usage.clone();
-                        async move {
-                            match result {
-                                Ok(LanguageModelCompletionEvent::StatusUpdate { .. }) => None,
-                                Ok(LanguageModelCompletionEvent::StartMessage { .. }) => None,
-                                Ok(LanguageModelCompletionEvent::Text(text)) => Some(Ok(text)),
-                                Ok(LanguageModelCompletionEvent::Thinking { .. }) => None,
-                                Ok(LanguageModelCompletionEvent::Stop(_)) => None,
-                                Ok(LanguageModelCompletionEvent::ToolUse(_)) => None,
-                                Ok(LanguageModelCompletionEvent::UsageUpdate(token_usage)) => {
-                                    *last_token_usage.lock() = token_usage;
-                                    None
-                                }
-                                Err(err) => Some(Err(err)),
-                            }
-                        }
-                    }
-                }))
-                .boxed();
-
-            Ok(LanguageModelTextStream {
-                message_id,
-                stream,
-                last_token_usage,
-            })
-        }
-        .boxed()
     }
 
     fn cache_configuration(&self) -> Option<LanguageModelCacheConfiguration> {

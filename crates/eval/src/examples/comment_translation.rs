@@ -1,4 +1,4 @@
-use crate::example::{Example, ExampleContext, ExampleMetadata, JudgeAssertion};
+use crate::example::{Example, ExampleContext, ExampleMetadata};
 use agent_settings::AgentProfileId;
 use anyhow::Result;
 use assistant_tools::{EditFileMode, EditFileToolInput};
@@ -17,7 +17,6 @@ impl Example for CommentTranslation {
             max_assertions: Some(1),
             profile_id: AgentProfileId::default(),
             existing_thread_json: None,
-            max_turns: None,
         }
     }
 
@@ -49,16 +48,5 @@ impl Example for CommentTranslation {
         cx.assert_eq(create_or_overwrite_count, 0, "no_creation_or_overwrite")?;
 
         Ok(())
-    }
-
-    fn diff_assertions(&self) -> Vec<JudgeAssertion> {
-        vec![JudgeAssertion {
-            id: "comments_translated".to_string(),
-            description: concat!(
-                "- Only `family.rs`, `canvas.rs` and `error.rs` should have changed.\n",
-                "- Their doc comments should have been all translated to Italian."
-            )
-            .into(),
-        }]
     }
 }

@@ -294,64 +294,6 @@ impl ToolUseState {
         self.tool_result_cards.insert(tool_use_id, card);
     }
 
-    pub fn request_tool_use(
-        &mut self,
-        assistant_message_id: MessageId,
-        tool_use: LanguageModelToolUse,
-        metadata: ToolUseMetadata,
-        cx: &App,
-    ) -> Arc<str> {
-        let tool_uses = self
-            .tool_uses_by_assistant_message
-            .entry(assistant_message_id)
-            .or_default();
-
-        let mut existing_tool_use_found = false;
-
-        for existing_tool_use in tool_uses.iter_mut() {
-            if existing_tool_use.id == tool_use.id {
-                *existing_tool_use = tool_use.clone();
-                existing_tool_use_found = true;
-            }
-        }
-
-        if !existing_tool_use_found {
-            tool_uses.push(tool_use.clone());
-        }
-
-        let status = if tool_use.is_input_complete {
-            self.tool_use_metadata_by_id
-                .insert(tool_use.id.clone(), metadata);
-
-            PendingToolUseStatus::Idle
-        } else {
-            PendingToolUseStatus::InputStillStreaming
-        };
-
-        let ui_text: Arc<str> = self
-            .tool_ui_label(
-                &tool_use.name,
-                &tool_use.input,
-                tool_use.is_input_complete,
-                cx,
-            )
-            .into();
-
-        self.pending_tool_uses_by_id.insert(
-            tool_use.id.clone(),
-            PendingToolUse {
-                assistant_message_id,
-                id: tool_use.id,
-                name: tool_use.name.clone(),
-                ui_text: ui_text.clone(),
-                input: tool_use.input,
-                status,
-            },
-        );
-
-        ui_text
-    }
-
     pub fn run_pending_tool(
         &mut self,
         tool_use_id: LanguageModelToolUseId,
@@ -489,11 +431,6 @@ impl ToolUseState {
                 self.pending_tool_uses_by_id.get(&tool_use_id).cloned()
             }
         }
-    }
-
-    pub fn has_tool_results(&self, assistant_message_id: MessageId) -> bool {
-        self.tool_uses_by_assistant_message
-            .contains_key(&assistant_message_id)
     }
 
     pub fn tool_results(

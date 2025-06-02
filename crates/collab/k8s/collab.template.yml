@@ -124,11 +124,6 @@ spec:
                 secretKeyRef:
                   name: livekit
                   key: secret
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: openai
-                  key: api_key
             - name: LLM_CLOSED_BETA_MODEL_NAME
               valueFrom:
                 secretKeyRef:

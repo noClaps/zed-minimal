@@ -3160,7 +3160,6 @@ impl rules_library::InlineAssistDelegate for PromptLibraryInlineAssist {
     fn assist(
         &self,
         prompt_editor: &Entity<Editor>,
-        initial_prompt: Option<String>,
         window: &mut Window,
         cx: &mut Context<RulesLibrary>,
     ) {
@@ -3180,11 +3179,9 @@ impl rules_library::InlineAssistDelegate for PromptLibraryInlineAssist {
                 &prompt_editor,
                 self.workspace.clone(),
                 context_store,
-                project,
                 prompt_store,
                 thread_store,
                 text_thread_store,
-                initial_prompt,
                 window,
                 cx,
             )
