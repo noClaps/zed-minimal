@@ -5,4 +5,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - run: xcode-select -p
+      - run: ls /Applications | grep Xcode
+      - run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
       - run: cargo check
