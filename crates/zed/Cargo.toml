@@ -20,18 +20,14 @@ anyhow.workspace = true
 askpass.workspace = true
 assets.workspace = true
 async-watch.workspace = true
-audio.workspace = true
 auto_update.workspace = true
 auto_update_ui.workspace = true
 backtrace = "0.3"
 breadcrumbs.workspace = true
-call.workspace = true
-channel.workspace = true
 chrono.workspace = true
 clap.workspace = true
 cli.workspace = true
 client.workspace = true
-collab_ui.workspace = true
 collections.workspace = true
 command_palette.workspace = true
 component.workspace = true
@@ -142,7 +138,6 @@ winresource = "0.1"
 ashpd.workspace = true
 
 [dev-dependencies]
-call = { workspace = true, features = ["test-support"] }
 dap = { workspace = true, features = ["test-support"] }
 editor = { workspace = true, features = ["test-support"] }
 gpui = { workspace = true, features = ["test-support"] }

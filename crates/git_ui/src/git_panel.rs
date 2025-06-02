@@ -48,7 +48,7 @@ use serde::{Deserialize, Serialize};
 use settings::{Settings as _, SettingsStore};
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::{collections::HashSet, sync::Arc, time::Duration, usize};
+use std::{sync::Arc, time::Duration, usize};
 use strum::{IntoEnumIterator, VariantNames};
 use time::OffsetDateTime;
 use ui::{
@@ -1504,14 +1504,10 @@ impl GitPanel {
 
         let commit_message = self.custom_or_suggested_commit_message(cx);
 
-        let Some(mut message) = commit_message else {
+        let Some(message) = commit_message else {
             self.commit_editor.read(cx).focus_handle(cx).focus(window);
             return;
         };
-
-        if self.add_coauthors {
-            self.fill_co_authors(&mut message, cx);
-        }
 
         let task = if self.has_staged_changes() {
             // Repository serializes all git operations, so we can just send a commit immediately
@@ -2051,112 +2047,14 @@ impl GitPanel {
         }
     }
 
-    fn potential_co_authors(&self, cx: &App) -> Vec<(String, String)> {
-        let mut new_co_authors = Vec::new();
-        let project = self.project.read(cx);
+    fn potential_co_authors(&self) -> Vec<(String, String)> {
+        let new_co_authors = Vec::new();
 
-        let Some(room) = self
-            .workspace
-            .upgrade()
-            .and_then(|workspace| workspace.read(cx).active_call()?.read(cx).room().cloned())
-        else {
+        let Some(_) = self.workspace.upgrade() else {
             return Vec::default();
         };
 
-        let room = room.read(cx);
-
-        for (peer_id, collaborator) in project.collaborators() {
-            if collaborator.is_host {
-                continue;
-            }
-
-            let Some(participant) = room.remote_participant_for_peer_id(*peer_id) else {
-                continue;
-            };
-            if participant.can_write() && participant.user.email.is_some() {
-                let email = participant.user.email.clone().unwrap();
-
-                new_co_authors.push((
-                    participant
-                        .user
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| participant.user.github_login.clone()),
-                    email,
-                ))
-            }
-        }
-        if !project.is_local() && !project.is_read_only(cx) {
-            if let Some(user) = room.local_participant_user(cx) {
-                if let Some(email) = user.email.clone() {
-                    new_co_authors.push((
-                        user.name
-                            .clone()
-                            .unwrap_or_else(|| user.github_login.clone()),
-                        email.clone(),
-                    ))
-                }
-            }
-        }
         new_co_authors
-    }
-
-    fn toggle_fill_co_authors(
-        &mut self,
-        _: &ToggleFillCoAuthors,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.add_coauthors = !self.add_coauthors;
-        cx.notify();
-    }
-
-    fn fill_co_authors(&mut self, message: &mut String, cx: &mut Context<Self>) {
-        const CO_AUTHOR_PREFIX: &str = "Co-authored-by: ";
-
-        let existing_text = message.to_ascii_lowercase();
-        let lowercase_co_author_prefix = CO_AUTHOR_PREFIX.to_lowercase();
-        let mut ends_with_co_authors = false;
-        let existing_co_authors = existing_text
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                if line.starts_with(&lowercase_co_author_prefix) {
-                    ends_with_co_authors = true;
-                    Some(line)
-                } else {
-                    ends_with_co_authors = false;
-                    None
-                }
-            })
-            .collect::<HashSet<_>>();
-
-        let new_co_authors = self
-            .potential_co_authors(cx)
-            .into_iter()
-            .filter(|(_, email)| {
-                !existing_co_authors
-                    .iter()
-                    .any(|existing| existing.contains(email.as_str()))
-            })
-            .collect::<Vec<_>>();
-
-        if new_co_authors.is_empty() {
-            return;
-        }
-
-        if !ends_with_co_authors {
-            message.push('\n');
-        }
-        for (name, email) in new_co_authors {
-            message.push('\n');
-            message.push_str(CO_AUTHOR_PREFIX);
-            message.push_str(&name);
-            message.push_str(" <");
-            message.push_str(&email);
-            message.push('>');
-        }
-        message.push('\n');
     }
 
     fn schedule_update(
@@ -2626,7 +2524,7 @@ impl GitPanel {
     }
 
     pub(crate) fn render_co_authors(&self, cx: &Context<Self>) -> Option<AnyElement> {
-        let potential_co_authors = self.potential_co_authors(cx);
+        let potential_co_authors = self.potential_co_authors();
 
         let (tooltip_label, icon) = if self.add_coauthors {
             ("Remove co-authored-by", IconName::Person)
@@ -3919,19 +3817,8 @@ impl Render for GitPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let project = self.project.read(cx);
         let has_entries = self.entries.len() > 0;
-        let room = self
-            .workspace
-            .upgrade()
-            .and_then(|workspace| workspace.read(cx).active_call()?.read(cx).room().cloned());
 
         let has_write_access = self.has_write_access(cx);
-
-        let has_co_authors = room.map_or(false, |room| {
-            room.read(cx)
-                .remote_participants()
-                .values()
-                .any(|remote_participant| remote_participant.can_write())
-        });
 
         v_flex()
             .id("git_panel")
@@ -3962,9 +3849,6 @@ impl Render for GitPanel {
             .on_action(cx.listener(Self::focus_changes_list))
             .on_action(cx.listener(Self::focus_editor))
             .on_action(cx.listener(Self::expand_commit_editor))
-            .when(has_write_access && has_co_authors, |git_panel| {
-                git_panel.on_action(cx.listener(Self::toggle_fill_co_authors))
-            })
             .on_hover(cx.listener(move |this, hovered, window, cx| {
                 if *hovered {
                     this.horizontal_scrollbar.show(cx);

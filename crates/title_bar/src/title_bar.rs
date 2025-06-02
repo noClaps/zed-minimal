@@ -1,5 +1,4 @@
 mod application_menu;
-mod collab;
 mod onboarding_banner;
 mod platforms;
 mod title_bar_settings;
@@ -17,7 +16,6 @@ use crate::application_menu::{
 
 use crate::platforms::{platform_linux, platform_mac, platform_windows};
 use auto_update::AutoUpdateStatus;
-use call::ActiveCall;
 use client::{Client, UserStore};
 use gpui::{
     Action, AnyElement, App, Context, Corner, Decorations, Element, Entity, InteractiveElement,
@@ -37,7 +35,7 @@ use ui::{
     IconWithIndicator, Indicator, PopoverMenu, Tooltip, h_flex, prelude::*,
 };
 use util::ResultExt;
-use workspace::{Workspace, notifications::NotifyResultExt};
+use workspace::Workspace;
 use zed_actions::{OpenRecent, OpenRemote};
 
 pub use onboarding_banner::restore_banner;
@@ -225,7 +223,6 @@ impl Render for TitleBar {
                             })
                             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
                     )
-                    .child(self.render_collaborator_list(window, cx))
                     .when(title_bar_settings.show_onboarding_banner, |title_bar| {
                         title_bar.child(self.banner.clone())
                     })
@@ -234,7 +231,6 @@ impl Render for TitleBar {
                             .gap_1()
                             .pr_1()
                             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .children(self.render_call_controls(window, cx))
                             .map(|el| {
                                 let status = self.client.status();
                                 let status = &*status.borrow();
@@ -242,9 +238,6 @@ impl Render for TitleBar {
                                     el.child(self.render_user_menu_button(cx))
                                 } else {
                                     el.children(self.render_connection_status(status, cx))
-                                        .when(TitleBarSettings::get_global(cx).show_sign_in, |el| {
-                                            el.child(self.render_sign_in_button(cx))
-                                        })
                                         .child(self.render_user_menu_button(cx))
                                 }
                             }),
@@ -306,7 +299,6 @@ impl TitleBar {
         let project = workspace.project().clone();
         let user_store = workspace.app_state().user_store.clone();
         let client = workspace.app_state().client.clone();
-        let active_call = ActiveCall::global(cx);
 
         let platform_style = PlatformStyle::platform();
         let application_menu = match platform_style {
@@ -329,7 +321,6 @@ impl TitleBar {
             }),
         );
         subscriptions.push(cx.subscribe(&project, |_, _, _: &project::Event, cx| cx.notify()));
-        subscriptions.push(cx.observe(&active_call, |this, _, cx| this.active_call_changed(cx)));
         subscriptions.push(cx.observe_window_activation(window, Self::window_activation_changed));
         subscriptions.push(cx.observe(&user_store, |_, _, cx| cx.notify()));
 
@@ -597,40 +588,11 @@ impl TitleBar {
     }
 
     fn window_activation_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if window.is_window_active() {
-            ActiveCall::global(cx)
-                .update(cx, |call, cx| call.set_location(Some(&self.project), cx))
-                .detach_and_log_err(cx);
-        } else if cx.active_window().is_none() {
-            ActiveCall::global(cx)
-                .update(cx, |call, cx| call.set_location(None, cx))
-                .detach_and_log_err(cx);
-        }
         self.workspace
             .update(cx, |workspace, cx| {
                 workspace.update_active_view_for_followers(window, cx);
             })
             .ok();
-    }
-
-    fn active_call_changed(&mut self, cx: &mut Context<Self>) {
-        cx.notify();
-    }
-
-    fn share_project(&mut self, cx: &mut Context<Self>) {
-        let active_call = ActiveCall::global(cx);
-        let project = self.project.clone();
-        active_call
-            .update(cx, |call, cx| call.share_project(project, cx))
-            .detach_and_log_err(cx);
-    }
-
-    fn unshare_project(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        let active_call = ActiveCall::global(cx);
-        let project = self.project.clone();
-        active_call
-            .update(cx, |call, cx| call.unshare_project(project, cx))
-            .log_err();
     }
 
     fn render_connection_status(
@@ -679,24 +641,6 @@ impl TitleBar {
             }
             _ => None,
         }
-    }
-
-    pub fn render_sign_in_button(&mut self, _: &mut Context<Self>) -> Button {
-        let client = self.client.clone();
-        Button::new("sign_in", "Sign in")
-            .label_size(LabelSize::Small)
-            .on_click(move |_, window, cx| {
-                let client = client.clone();
-                window
-                    .spawn(cx, async move |cx| {
-                        client
-                            .authenticate_and_connect(true, &cx)
-                            .await
-                            .into_response()
-                            .notify_async_err(cx);
-                    })
-                    .detach();
-            })
     }
 
     pub fn render_user_menu_button(&mut self, cx: &mut Context<Self>) -> impl Element {

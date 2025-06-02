@@ -15,7 +15,6 @@ pub struct WorkspaceSettings {
     pub pane_split_direction_vertical: PaneSplitDirectionVertical,
     pub centered_layout: CenteredLayoutSettings,
     pub confirm_quit: bool,
-    pub show_call_status_icon: bool,
     pub autosave: AutosaveSetting,
     pub restore_on_startup: RestoreOnStartupBehavior,
     pub restore_on_file_reopen: bool,
@@ -141,10 +140,6 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: false
     pub confirm_quit: Option<bool>,
-    /// Whether or not to show the call status icon in the status bar.
-    ///
-    /// Default: true
-    pub show_call_status_icon: Option<bool>,
     /// When to automatically save edited buffers.
     ///
     /// Default: off

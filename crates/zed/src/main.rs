@@ -8,14 +8,13 @@ use anyhow::{Context as _, Result};
 use clap::{Parser, command};
 use cli::FORCE_CLI_MODE_ENV_VAR_NAME;
 use client::{Client, ProxySettings, UserStore, parse_zed_link};
-use collab_ui::channel_view::ChannelView;
 use collections::HashMap;
 use db::kvp::{GLOBAL_KEY_VALUE_STORE, KEY_VALUE_STORE};
 use editor::Editor;
 use extension::ExtensionHostProxy;
 use extension_host::ExtensionStore;
 use fs::{Fs, RealFs};
-use futures::{StreamExt, channel::oneshot, future};
+use futures::{StreamExt, channel::oneshot};
 use git::GitHostingProviderRegistry;
 use gpui::{App, AppContext as _, Application, AsyncApp, UpdateGlobal as _};
 
@@ -43,7 +42,7 @@ use theme::{
     ActiveTheme, IconThemeNotFoundError, SystemAppearance, ThemeNotFoundError, ThemeRegistry,
     ThemeSettings,
 };
-use util::{ConnectionResult, ResultExt, TryFutureExt, maybe};
+use util::{ResultExt, maybe};
 use uuid::Uuid;
 use welcome::{BaseKeymap, FIRST_OPEN, show_welcome_view};
 use workspace::{AppState, SerializedWorkspaceLocation, WorkspaceSettings, WorkspaceStore};
@@ -526,7 +525,6 @@ Error: Running Zed as root or via sudo is unsupported.
         repl::notebook::init(cx);
         diagnostics::init(cx);
 
-        audio::init(Assets, cx);
         workspace::init(app_state.clone(), cx);
         ui_prompt::init(cx);
 
@@ -539,7 +537,6 @@ Error: Running Zed as root or via sudo is unsupported.
         outline_panel::init(cx);
         tasks_ui::init(cx);
         snippets_ui::init(cx);
-        channel::init(&app_state.client.clone(), app_state.user_store.clone(), cx);
         search::init(cx);
         terminal_view::init(cx);
         journal::init(app_state.clone(), cx);
@@ -547,9 +544,7 @@ Error: Running Zed as root or via sudo is unsupported.
         toolchain_selector::init(cx);
         theme_selector::init(cx);
         language_tools::init(cx);
-        call::init(app_state.client.clone(), app_state.user_store.clone(), cx);
         notifications::init(app_state.client.clone(), app_state.user_store.clone(), cx);
-        collab_ui::init(&app_state, cx);
         git_ui::init(cx);
         jj_ui::init(cx);
         feedback::init(cx);
@@ -608,20 +603,6 @@ Error: Running Zed as root or via sudo is unsupported.
         initialize_workspace(app_state.clone(), cx);
 
         cx.activate(true);
-
-        cx.spawn({
-            let client = app_state.client.clone();
-            async move |cx| match authenticate(client, &cx).await {
-                ConnectionResult::Timeout => log::error!("Timeout during initial auth"),
-                ConnectionResult::ConnectionReset => {
-                    log::error!("Connection reset during initial auth")
-                }
-                ConnectionResult::Result(r) => {
-                    r.log_err();
-                }
-            }
-        })
-        .detach();
 
         let urls: Vec<_> = args
             .paths_or_urls
@@ -731,49 +712,7 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
                 if let Some(task) = task {
                     task.await?;
                 }
-                let client = app_state.client.clone();
-                // we continue even if authentication fails as join_channel/ open channel notes will
-                // show a visible error message.
-                match authenticate(client, &cx).await {
-                    ConnectionResult::Timeout => {
-                        log::error!("Timeout during open request handling")
-                    }
-                    ConnectionResult::ConnectionReset => {
-                        log::error!("Connection reset during open request handling")
-                    }
-                    ConnectionResult::Result(r) => r?,
-                };
 
-                if let Some(channel_id) = request.join_channel {
-                    cx.update(|cx| {
-                        workspace::join_channel(
-                            client::ChannelId(channel_id),
-                            app_state.clone(),
-                            None,
-                            cx,
-                        )
-                    })?
-                    .await?;
-                }
-
-                let workspace_window =
-                    workspace::get_any_active_workspace(app_state, cx.clone()).await?;
-                let workspace = workspace_window.entity(cx)?;
-
-                let mut promises = Vec::new();
-                for (channel_id, heading) in request.open_channel_notes {
-                    promises.push(cx.update_window(workspace_window.into(), |_, window, cx| {
-                        ChannelView::open(
-                            client::ChannelId(channel_id),
-                            heading,
-                            workspace.clone(),
-                            window,
-                            cx,
-                        )
-                        .log_err()
-                    })?)
-                }
-                future::join_all(promises).await;
                 anyhow::Ok(())
             })
             .await;
@@ -790,20 +729,6 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
         })
         .detach();
     }
-}
-
-async fn authenticate(client: Arc<Client>, cx: &AsyncApp) -> ConnectionResult<()> {
-    if stdout_is_a_pty() {
-        if client::IMPERSONATE_LOGIN.is_some() {
-            return client.authenticate_and_connect(false, cx).await;
-        } else if client.has_credentials(cx).await {
-            return client.authenticate_and_connect(true, cx).await;
-        }
-    } else if client.has_credentials(cx).await {
-        return client.authenticate_and_connect(true, cx).await;
-    }
-
-    ConnectionResult::Result(Ok(()))
 }
 
 async fn system_id() -> Result<IdType> {

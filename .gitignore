@@ -20,7 +20,6 @@
 .vscode
 .wrangler
 /assets/*licenses.*
-/crates/collab/seed.json
 /crates/theme/schemas/theme.json
 /crates/zed/resources/flatpak/flatpak-cargo-sources.json
 /dev.zed.Zed*.json

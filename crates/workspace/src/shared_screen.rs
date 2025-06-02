@@ -2,11 +2,10 @@ use crate::{
     ItemNavHistory, WorkspaceId,
     item::{Item, ItemEvent},
 };
-use call::{RemoteVideoTrack, RemoteVideoTrackView, Room};
 use client::{User, proto::PeerId};
 use gpui::{
-    AppContext as _, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-    ParentElement, Render, SharedString, Styled, div,
+    AppContext as _, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, Render,
+    SharedString, Styled, div,
 };
 use std::sync::Arc;
 use ui::{Icon, IconName, prelude::*};
@@ -19,37 +18,12 @@ pub struct SharedScreen {
     pub peer_id: PeerId,
     user: Arc<User>,
     nav_history: Option<ItemNavHistory>,
-    view: Entity<RemoteVideoTrackView>,
     focus: FocusHandle,
 }
 
 impl SharedScreen {
-    pub fn new(
-        track: RemoteVideoTrack,
-        peer_id: PeerId,
-        user: Arc<User>,
-        room: Entity<Room>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let my_sid = track.sid();
-        cx.subscribe(&room, move |_, _, ev, cx| match ev {
-            call::room::Event::RemoteVideoTrackUnsubscribed { sid } => {
-                if sid == &my_sid {
-                    cx.emit(Event::Close)
-                }
-            }
-            _ => {}
-        })
-        .detach();
-
-        let view = cx.new(|cx| RemoteVideoTrackView::new(track.clone(), window, cx));
-        cx.subscribe(&view, |_, _, ev, cx| match ev {
-            call::RemoteVideoTrackViewEvent::Close => cx.emit(Event::Close),
-        })
-        .detach();
+    pub fn new(peer_id: PeerId, user: Arc<User>, cx: &mut Context<Self>) -> Self {
         Self {
-            view,
             peer_id,
             user,
             nav_history: Default::default(),
@@ -72,7 +46,6 @@ impl Render for SharedScreen {
             .track_focus(&self.focus)
             .key_context("SharedScreen")
             .size_full()
-            .child(self.view.clone())
     }
 }
 
@@ -113,11 +86,10 @@ impl Item for SharedScreen {
     fn clone_on_split(
         &self,
         _workspace_id: Option<WorkspaceId>,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<Entity<Self>> {
         Some(cx.new(|cx| Self {
-            view: self.view.update(cx, |view, cx| view.clone(window, cx)),
             peer_id: self.peer_id,
             user: self.user.clone(),
             nav_history: Default::default(),
