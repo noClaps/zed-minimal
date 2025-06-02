@@ -58,23 +58,6 @@ impl Render for IconButtonStory {
         "#,
         );
 
-        let with_on_click_button = StoryItem::new(
-            "With `on_click`",
-            IconButton::new("with_on_click_button", IconName::Ai).on_click(
-                |_event, _window, _cx| {
-                    println!("Clicked!");
-                },
-            ),
-        )
-        .description("Displays an icon button which triggers an event on click.")
-        .usage(
-            r#"
-            IconButton::new("with_on_click_button", Icon::Ai).on_click(|_event, _cx| {
-                println!("Clicked!");
-            })
-        "#,
-        );
-
         let with_tooltip_button = StoryItem::new(
             "With `tooltip`",
             IconButton::new("with_tooltip_button", IconName::MessageBubbles)
@@ -108,7 +91,6 @@ impl Render for IconButtonStory {
             selected_button,
             selected_with_selected_icon,
             disabled_button,
-            with_on_click_button,
             with_tooltip_button,
             selected_with_tooltip_button,
         ];

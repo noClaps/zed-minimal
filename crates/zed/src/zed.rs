@@ -9,11 +9,9 @@ mod quick_action_bar;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_only_instance;
 
-use agent::AgentDiffToolbar;
 use anyhow::Context as _;
 pub use app_menus::*;
 use assets::Assets;
-use assistant_context_editor::AgentPanelDelegate;
 use breadcrumbs::Breadcrumbs;
 use client::zed_urls;
 use collections::VecDeque;
@@ -42,7 +40,6 @@ use paths::{
 };
 use project::{DirectoryLister, ProjectItem};
 use project_panel::ProjectPanel;
-use prompt_store::PromptBuilder;
 use quick_action_bar::QuickActionBar;
 use recent_projects::open_ssh_project;
 use release_channel::{AppCommitSha, ReleaseChannel};
@@ -161,11 +158,7 @@ pub fn build_window_options(display_uuid: Option<Uuid>, cx: &mut App) -> WindowO
     }
 }
 
-pub fn initialize_workspace(
-    app_state: Arc<AppState>,
-    prompt_builder: Arc<PromptBuilder>,
-    cx: &mut App,
-) {
+pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
     let mut _on_close_subscription = bind_on_window_closed(cx);
     cx.observe_global::<SettingsStore>(move |cx| {
         _on_close_subscription = bind_on_window_closed(cx);
@@ -260,7 +253,7 @@ pub fn initialize_workspace(
                 .unwrap_or(true)
         });
 
-        initialize_panels(prompt_builder.clone(), window, cx);
+        initialize_panels(window, cx);
         register_actions(app_state.clone(), workspace, window, cx);
 
         workspace.focus_handle(cx).focus(window);
@@ -368,13 +361,7 @@ fn show_software_emulation_warning_if_needed(
     }
 }
 
-fn initialize_panels(
-    prompt_builder: Arc<PromptBuilder>,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) {
-    let prompt_builder = prompt_builder.clone();
-
+fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) {
     cx.spawn_in(window, async move |workspace_handle, cx| {
         let project_panel = ProjectPanel::load(workspace_handle.clone(), cx.clone());
         let outline_panel = OutlinePanel::load(workspace_handle.clone(), cx.clone());
@@ -431,40 +418,6 @@ fn initialize_panels(
             let app_state = workspace.app_state().clone();
             let git_panel = cx.new(|cx| GitPanel::new(entity, project, app_state, window, cx));
             workspace.add_panel(git_panel, window, cx);
-        })?;
-
-        let is_assistant2_enabled = !cfg!(test);
-        let agent_panel = if is_assistant2_enabled {
-            let agent_panel =
-                agent::AgentPanel::load(workspace_handle.clone(), prompt_builder, cx.clone())
-                    .await?;
-
-            Some(agent_panel)
-        } else {
-            None
-        };
-
-        workspace_handle.update_in(cx, |workspace, window, cx| {
-            if let Some(agent_panel) = agent_panel {
-                workspace.add_panel(agent_panel, window, cx);
-            }
-
-            // Register the actions that are shared between `assistant` and `assistant2`.
-            //
-            // We need to do this here instead of within the individual `init`
-            // functions so that we only register the actions once.
-            //
-            // Once we ship `assistant2` we can push this back down into `agent::agent_panel::init`.
-            if is_assistant2_enabled {
-                <dyn AgentPanelDelegate>::set_global(
-                    Arc::new(agent::ConcreteAssistantPanelDelegate),
-                    cx,
-                );
-
-                workspace
-                    .register_action(agent::AgentPanel::toggle_focus)
-                    .register_action(agent::InlineAssistant::inline_assist);
-            }
         })?;
 
         anyhow::Ok(())
@@ -919,8 +872,6 @@ fn initialize_pane(
             toolbar.add_item(migration_banner, window, cx);
             let project_diff_toolbar = cx.new(|cx| ProjectDiffToolbar::new(workspace, cx));
             toolbar.add_item(project_diff_toolbar, window, cx);
-            let agent_diff_toolbar = cx.new(AgentDiffToolbar::new);
-            toolbar.add_item(agent_diff_toolbar, window, cx);
         })
     });
 }
@@ -4273,19 +4224,6 @@ mod tests {
             outline_panel::init(cx);
             terminal_view::init(cx);
             image_viewer::init(cx);
-            language_model::init(app_state.client.clone(), cx);
-            language_models::init(app_state.user_store.clone(), app_state.client.clone(), cx);
-            web_search::init(cx);
-            web_search_providers::init(app_state.client.clone(), cx);
-            let prompt_builder = PromptBuilder::load(app_state.fs.clone(), false, cx);
-            agent::init(
-                app_state.fs.clone(),
-                app_state.client.clone(),
-                prompt_builder.clone(),
-                app_state.languages.clone(),
-                false,
-                cx,
-            );
             repl::init(app_state.fs.clone(), cx);
             repl::notebook::init(cx);
             tasks_ui::init(cx);
@@ -4294,7 +4232,7 @@ mod tests {
             );
             project::debugger::dap_store::DapStore::init(&app_state.client.clone().into(), cx);
             debugger_ui::init(cx);
-            initialize_workspace(app_state.clone(), prompt_builder, cx);
+            initialize_workspace(app_state.clone(), cx);
             search::init(cx);
             app_state
         })

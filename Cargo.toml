@@ -2,15 +2,8 @@
 resolver = "2"
 members = [
     "crates/activity_indicator",
-    "crates/agent",
-    "crates/agent_settings",
     "crates/askpass",
     "crates/assets",
-    "crates/assistant_context_editor",
-    "crates/assistant_slash_command",
-    "crates/assistant_slash_commands",
-    "crates/assistant_tool",
-    "crates/assistant_tools",
     "crates/audio",
     "crates/auto_update",
     "crates/auto_update_helper",
@@ -74,8 +67,6 @@ members = [
     "crates/journal",
     "crates/language",
     "crates/language_extension",
-    "crates/language_model",
-    "crates/language_models",
     "crates/language_selector",
     "crates/language_tools",
     "crates/languages",
@@ -99,7 +90,6 @@ members = [
     "crates/project",
     "crates/project_panel",
     "crates/project_symbols",
-    "crates/prompt_store",
     "crates/proto",
     "crates/recent_projects",
     "crates/refineable",
@@ -112,7 +102,6 @@ members = [
     "crates/rich_text",
     "crates/rope",
     "crates/rpc",
-    "crates/rules_library",
     "crates/schema_generator",
     "crates/search",
     "crates/semantic_index",
@@ -152,8 +141,6 @@ members = [
     "crates/util_macros",
     "crates/vim",
     "crates/vim_mode_setting",
-    "crates/web_search",
-    "crates/web_search_providers",
     "crates/welcome",
     "crates/workspace",
     "crates/worktree",
@@ -195,16 +182,9 @@ edition = "2024"
 #
 
 activity_indicator = { path = "crates/activity_indicator" }
-agent = { path = "crates/agent" }
-agent_settings = { path = "crates/agent_settings" }
 ai = { path = "crates/ai" }
 askpass = { path = "crates/askpass" }
 assets = { path = "crates/assets" }
-assistant_context_editor = { path = "crates/assistant_context_editor" }
-assistant_slash_command = { path = "crates/assistant_slash_command" }
-assistant_slash_commands = { path = "crates/assistant_slash_commands" }
-assistant_tool = { path = "crates/assistant_tool" }
-assistant_tools = { path = "crates/assistant_tools" }
 audio = { path = "crates/audio" }
 auto_update = { path = "crates/auto_update" }
 auto_update_helper = { path = "crates/auto_update_helper" }
@@ -266,8 +246,6 @@ jj_ui = { path = "crates/jj_ui" }
 journal = { path = "crates/journal" }
 language = { path = "crates/language" }
 language_extension = { path = "crates/language_extension" }
-language_model = { path = "crates/language_model" }
-language_models = { path = "crates/language_models" }
 language_selector = { path = "crates/language_selector" }
 language_tools = { path = "crates/language_tools" }
 languages = { path = "crates/languages" }
@@ -293,7 +271,6 @@ prettier = { path = "crates/prettier" }
 project = { path = "crates/project" }
 project_panel = { path = "crates/project_panel" }
 project_symbols = { path = "crates/project_symbols" }
-prompt_store = { path = "crates/prompt_store" }
 proto = { path = "crates/proto" }
 recent_projects = { path = "crates/recent_projects" }
 refineable = { path = "crates/refineable" }
@@ -305,7 +282,6 @@ reqwest_client = { path = "crates/reqwest_client" }
 rich_text = { path = "crates/rich_text" }
 rope = { path = "crates/rope" }
 rpc = { path = "crates/rpc" }
-rules_library = { path = "crates/rules_library" }
 search = { path = "crates/search" }
 semantic_index = { path = "crates/semantic_index" }
 semantic_version = { path = "crates/semantic_version" }
@@ -344,8 +320,6 @@ util = { path = "crates/util" }
 util_macros = { path = "crates/util_macros" }
 vim = { path = "crates/vim" }
 vim_mode_setting = { path = "crates/vim_mode_setting" }
-web_search = { path = "crates/web_search" }
-web_search_providers = { path = "crates/web_search_providers" }
 welcome = { path = "crates/welcome" }
 workspace = { path = "crates/workspace" }
 worktree = { path = "crates/worktree" }

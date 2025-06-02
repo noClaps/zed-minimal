@@ -6,8 +6,7 @@ mod ids;
 mod instance;
 mod tool_metrics;
 
-use assertions::{AssertionsReport, display_error_row};
-use instance::{ExampleInstance, JudgeOutput, RunOutput, run_git};
+use instance::{ExampleInstance, run_git};
 pub(crate) use tool_metrics::*;
 
 use ::fs::RealFs;
@@ -20,11 +19,9 @@ use gpui::http_client::read_proxy_from_env;
 use gpui::{App, AppContext, Application, Entity, SemanticVersion, UpdateGlobal};
 use gpui_tokio::Tokio;
 use language::LanguageRegistry;
-use language_model::{ConfiguredModel, LanguageModel, LanguageModelRegistry, SelectedModel};
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
 use project::Project;
 use project::project_settings::ProjectSettings;
-use prompt_store::PromptBuilder;
 use release_channel::AppVersion;
 use reqwest_client::ReqwestClient;
 use settings::{Settings, SettingsStore};
@@ -33,7 +30,6 @@ use std::collections::VecDeque;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use util::ResultExt as _;
 
@@ -122,8 +118,6 @@ fn main() {
                 run_id = run_id,
             );
         }
-
-        let mut cumulative_tool_metrics = ToolMetrics::default();
 
         let agent_model = load_model(&args.model, cx).unwrap();
         let judge_model = load_model(&args.judge_model, cx).unwrap();
@@ -267,35 +261,16 @@ fn main() {
             let results_by_example_name = Rc::new(RefCell::new(HashMap::default()));
 
             future::join_all((0..args.concurrency).map(|_| {
-                let app_state = app_state.clone();
-                let model = agent_model.model.clone();
-                let judge_model = judge_model.model.clone();
-                let zed_commit_sha = zed_commit_sha.clone();
-                let zed_branch_name = zed_branch_name.clone();
-                let run_id = run_id.clone();
                 let examples = examples.clone();
                 let results = results_by_example_name.clone();
-                cx.spawn(async move |cx| {
+                cx.spawn(async move |_| {
                     loop {
                         let Some(mut example) = examples.borrow_mut().pop_front() else {
                             break;
                         };
                         let result = async {
                             example.setup().await?;
-                            let run_output = cx
-                                .update(|cx| example.run(model.clone(), app_state.clone(), cx))?
-                                .await?;
-                            let judge_output = judge_example(
-                                example.clone(),
-                                judge_model.clone(),
-                                &zed_commit_sha,
-                                &zed_branch_name,
-                                &run_id,
-                                &run_output,
-                                enable_telemetry,
-                            )
-                            .await;
-                            anyhow::Ok((run_output, judge_output))
+                            anyhow::Ok(())
                         }
                         .await;
                         results
@@ -307,12 +282,6 @@ fn main() {
                 })
             }))
             .await;
-
-            print_report(
-                &mut results_by_example_name.borrow_mut(),
-                &mut cumulative_tool_metrics,
-                &run_dir,
-            )?;
 
             app_state.client.telemetry().flush_events().await;
 
@@ -329,9 +298,6 @@ pub struct AgentAppState {
     pub user_store: Entity<UserStore>,
     pub fs: Arc<dyn fs::Fs>,
     pub node_runtime: NodeRuntime,
-
-    // Additional fields not present in `workspace::AppState`.
-    pub prompt_builder: Arc<PromptBuilder>,
 }
 
 pub fn init(cx: &mut App) -> Arc<AgentAppState> {
@@ -415,22 +381,8 @@ pub fn init(cx: &mut App) -> Arc<AgentAppState> {
     language::init(cx);
     debug_adapter_extension::init(extension_host_proxy.clone(), cx);
     language_extension::init(extension_host_proxy.clone(), languages.clone());
-    language_model::init(client.clone(), cx);
-    language_models::init(user_store.clone(), client.clone(), cx);
     languages::init(languages.clone(), node_runtime.clone(), cx);
-    prompt_store::init(cx);
     terminal_view::init(cx);
-    let stdout_is_a_pty = false;
-    let prompt_builder = PromptBuilder::load(fs.clone(), stdout_is_a_pty, cx);
-    agent::init(
-        fs.clone(),
-        client.clone(),
-        prompt_builder.clone(),
-        languages.clone(),
-        true,
-        cx,
-    );
-    assistant_tools::init(client.http_client(), cx);
 
     SettingsStore::update_global(cx, |store, cx| {
         store.set_user_settings(include_str!("../runner_settings.json"), cx)
@@ -443,7 +395,6 @@ pub fn init(cx: &mut App) -> Arc<AgentAppState> {
         user_store,
         fs,
         node_runtime,
-        prompt_builder,
     })
 }
 
@@ -501,229 +452,4 @@ pub fn git_branch_for_path(repo_path: &Path) -> String {
                 .unwrap_or_else(|_| "unknown".to_string())
         }
     }
-}
-
-async fn judge_example(
-    example: ExampleInstance,
-    model: Arc<dyn LanguageModel>,
-    zed_commit_sha: &str,
-    zed_branch_name: &str,
-    run_id: &str,
-    run_output: &RunOutput,
-    enable_telemetry: bool,
-) -> JudgeOutput {
-    let judge_output = example.judge().await;
-
-    if enable_telemetry {
-        telemetry::event!(
-            "Agent Example Evaluated",
-            zed_commit_sha = zed_commit_sha,
-            zed_branch_name = zed_branch_name,
-            run_id = run_id,
-            example_name = example.name.clone(),
-            example_repetition = example.repetition,
-            diff_evaluation = judge_output.diff.clone(),
-            thread_evaluation = judge_output.thread.clone(),
-            tool_metrics = run_output.tool_metrics,
-            response_count = run_output.response_count,
-            token_usage = run_output.token_usage,
-            model = model.telemetry_id(),
-            model_provider = model.provider_id().to_string(),
-            repository_url = example.repo_url(),
-            repository_revision = example.revision(),
-            diagnostic_summary_before = run_output.diagnostic_summary_before,
-            diagnostic_summary_after = run_output.diagnostic_summary_after,
-            diagnostics_before = run_output.diagnostics_before,
-            diagnostics_after = run_output.diagnostics_after,
-        );
-    }
-
-    judge_output
-}
-
-const HEADER_WIDTH: usize = 65;
-
-fn print_h1(header: &str) {
-    println!("\n\n{:=^HEADER_WIDTH$}", "");
-    println!("{:^HEADER_WIDTH$}", header);
-    println!("{:=^HEADER_WIDTH$}\n", "");
-}
-
-fn print_h2(header: &str) {
-    println!("\n{:-^HEADER_WIDTH$}", "");
-    println!("{:^HEADER_WIDTH$}", header);
-    println!("{:-^HEADER_WIDTH$}\n", "");
-}
-
-fn print_report(
-    results_by_example_name: &mut HashMap<
-        String,
-        Vec<(ExampleInstance, anyhow::Result<(RunOutput, JudgeOutput)>)>,
-    >,
-    cumulative_tool_metrics: &mut ToolMetrics,
-    run_dir: &Path,
-) -> anyhow::Result<()> {
-    print_h1("EVAL RESULTS");
-
-    let mut diff_scores = Vec::new();
-    let mut thread_scores = Vec::new();
-    let mut programmatic_scores = Vec::new();
-    let mut error_count = 0;
-
-    for (example_name, results) in results_by_example_name.iter_mut() {
-        print_h2(example_name);
-
-        results.sort_unstable_by_key(|(example, _)| example.repetition);
-        let mut example_cumulative_tool_metrics = ToolMetrics::default();
-
-        let mut table_rows = String::new();
-
-        for (example, result) in results.iter() {
-            match result {
-                Err(err) => {
-                    display_error_row(&mut table_rows, example.repetition, err.to_string())?;
-                    error_count += 1;
-                    programmatic_scores.push(0.0);
-                    diff_scores.push(0.0);
-                    thread_scores.push(0.0);
-                }
-                Ok((run_output, judge_output)) => {
-                    cumulative_tool_metrics.merge(&run_output.tool_metrics);
-                    example_cumulative_tool_metrics.merge(&run_output.tool_metrics);
-
-                    if run_output.programmatic_assertions.total_count() > 0 {
-                        for assertion in &run_output.programmatic_assertions.ran {
-                            assertions::display_table_row(
-                                &mut table_rows,
-                                example.repetition,
-                                assertion,
-                            )?;
-                        }
-
-                        programmatic_scores
-                            .push(run_output.programmatic_assertions.passed_percentage())
-                    }
-
-                    if !judge_output.diff.is_empty() {
-                        diff_scores.push(judge_output.diff.passed_percentage());
-
-                        for assertion in &judge_output.diff.ran {
-                            assertions::display_table_row(
-                                &mut table_rows,
-                                example.repetition,
-                                assertion,
-                            )?;
-                        }
-                    }
-
-                    if !judge_output.thread.is_empty() {
-                        thread_scores.push(judge_output.thread.passed_percentage());
-
-                        for assertion in &judge_output.thread.ran {
-                            assertions::display_table_row(
-                                &mut table_rows,
-                                example.repetition,
-                                assertion,
-                            )?;
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut all_asserts = Vec::new();
-
-        if !table_rows.is_empty() {
-            assertions::print_table_header();
-            print!("{}", table_rows);
-
-            assertions::print_table_divider();
-
-            for (example, result) in results.iter() {
-                if let Ok((run_output, judge_output)) = result {
-                    let asserts = [
-                        run_output.programmatic_assertions.clone(),
-                        judge_output.diff.clone(),
-                        judge_output.thread.clone(),
-                    ];
-                    all_asserts.extend_from_slice(&asserts);
-                    assertions::print_table_round_summary(
-                        &example.repetition.to_string(),
-                        asserts.iter(),
-                    )
-                } else if let Err(err) = result {
-                    let assert = AssertionsReport::error(err.to_string());
-                    all_asserts.push(assert.clone());
-                    assertions::print_table_round_summary(
-                        &example.repetition.to_string(),
-                        [assert].iter(),
-                    )
-                }
-            }
-
-            assertions::print_table_divider();
-
-            assertions::print_table_round_summary("avg", all_asserts.iter());
-
-            assertions::print_table_footer();
-        }
-
-        if !example_cumulative_tool_metrics.is_empty() {
-            println!("{}", &example_cumulative_tool_metrics);
-        }
-    }
-
-    if results_by_example_name.len() > 1 {
-        print_h1("AGGREGATE");
-
-        if error_count > 0 {
-            println!("\n{error_count} examples failed to run!");
-        }
-
-        let programmatic_score_count = programmatic_scores.len();
-        if programmatic_score_count > 0 {
-            let average_programmatic_score = (programmatic_scores.into_iter().sum::<f32>()
-                / (programmatic_score_count as f32))
-                .floor();
-            println!("Average programmatic score: {average_programmatic_score}%");
-        }
-
-        let diff_score_count = diff_scores.len();
-        if diff_score_count > 0 {
-            let average_diff_score =
-                (diff_scores.into_iter().sum::<f32>() / (diff_score_count as f32)).floor();
-            println!("Average diff score: {average_diff_score}%");
-        }
-
-        let thread_score_count = thread_scores.len();
-
-        if thread_score_count > 0 {
-            let average_thread_score =
-                (thread_scores.into_iter().sum::<f32>() / (thread_score_count as f32)).floor();
-            println!("Average thread score: {average_thread_score}%");
-        }
-
-        println!("");
-
-        print_h2("CUMULATIVE TOOL METRICS");
-        println!("{}", cumulative_tool_metrics);
-    }
-
-    let explorer_output_path = run_dir.join("overview.html");
-    let mut json_paths: Vec<PathBuf> = results_by_example_name
-        .values()
-        .flat_map(|results| {
-            results.iter().map(|(example, _)| {
-                let absolute_path = run_dir.join(example.run_directory.join("last.messages.json"));
-                let cwd = std::env::current_dir().expect("Can't get current dir");
-                pathdiff::diff_paths(&absolute_path, cwd).unwrap_or_else(|| absolute_path.clone())
-            })
-        })
-        .collect::<Vec<_>>();
-    json_paths.sort();
-    if let Err(err) = explorer::generate_explorer_html(&json_paths, &explorer_output_path) {
-        eprintln!("Failed to generate explorer HTML: {}", err);
-    }
-
-    Ok(())
 }

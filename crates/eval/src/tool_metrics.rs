@@ -8,28 +8,6 @@ pub struct ToolMetrics {
     pub failure_counts: HashMap<Arc<str>, u32>,
 }
 
-impl ToolMetrics {
-    pub fn insert(&mut self, tool_name: Arc<str>, succeeded: bool) {
-        *self.use_counts.entry(tool_name.clone()).or_insert(0) += 1;
-        if !succeeded {
-            *self.failure_counts.entry(tool_name).or_insert(0) += 1;
-        }
-    }
-
-    pub fn merge(&mut self, other: &ToolMetrics) {
-        for (tool_name, use_count) in &other.use_counts {
-            *self.use_counts.entry(tool_name.clone()).or_insert(0) += use_count;
-        }
-        for (tool_name, failure_count) in &other.failure_counts {
-            *self.failure_counts.entry(tool_name.clone()).or_insert(0) += failure_count;
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.use_counts.is_empty() && self.failure_counts.is_empty()
-    }
-}
-
 impl Display for ToolMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut failure_rates: Vec<(Arc<str>, f64)> = Vec::new();

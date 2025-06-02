@@ -9,7 +9,6 @@ use crate::{branch_picker, picker_prompt, render_remote_button};
 use crate::{
     git_panel_settings::GitPanelSettings, git_status_icon, repository_selector::RepositorySelector,
 };
-use agent_settings::AgentSettings;
 use anyhow::Context as _;
 use askpass::AskPassDelegate;
 use db::kvp::KEY_VALUE_STORE;
@@ -26,15 +25,13 @@ use git::status::StageStatus;
 use git::{Amend, ToggleStaged, repository::RepoPath, status::FileStatus};
 use git::{ExpandCommitEditor, RestoreTrackedFiles, StageAll, TrashUntrackedFiles, UnstageAll};
 use gpui::{
-    Action, Animation, AnimationExt as _, Axis, ClickEvent, Corner, DismissEvent, Entity,
-    EventEmitter, FocusHandle, Focusable, KeyContext, ListHorizontalSizingBehavior,
-    ListSizingBehavior, Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent, Point,
-    PromptLevel, ScrollStrategy, Subscription, Task, Transformation, UniformListScrollHandle,
-    WeakEntity, actions, anchored, deferred, percentage, uniform_list,
+    Action, Axis, ClickEvent, Corner, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
+    KeyContext, ListHorizontalSizingBehavior, ListSizingBehavior, Modifiers, ModifiersChangedEvent,
+    MouseButton, MouseDownEvent, Point, PromptLevel, ScrollStrategy, Subscription, Task,
+    UniformListScrollHandle, WeakEntity, actions, anchored, deferred, uniform_list,
 };
 use itertools::Itertools;
 use language::{Buffer, File};
-use language_model::{ConfiguredModel, LanguageModel, LanguageModelRegistry};
 use menu::{Confirm, SecondaryConfirm, SelectFirst, SelectLast, SelectNext, SelectPrevious};
 use multi_buffer::ExcerptInfo;
 use notifications::status_toast::{StatusToast, ToastIcon};
@@ -351,7 +348,6 @@ pub struct GitPanel {
     context_menu: Option<(Entity<ContextMenu>, Point<Pixels>, Subscription)>,
     modal_open: bool,
     show_placeholders: bool,
-    _settings_subscription: Subscription,
 }
 
 const MAX_PANEL_EDITOR_LINES: usize = 6;
@@ -477,14 +473,6 @@ impl GitPanel {
             hide_task: None,
         };
 
-        let mut assistant_enabled = AgentSettings::get_global(cx).enabled;
-        let _settings_subscription = cx.observe_global::<SettingsStore>(move |_, cx| {
-            if assistant_enabled != AgentSettings::get_global(cx).enabled {
-                assistant_enabled = AgentSettings::get_global(cx).enabled;
-                cx.notify();
-            }
-        });
-
         let mut git_panel = Self {
             active_repository,
             commit_editor,
@@ -520,7 +508,6 @@ impl GitPanel {
             entry_count: 0,
             horizontal_scrollbar,
             vertical_scrollbar,
-            _settings_subscription,
         };
         git_panel.schedule_update(false, window, cx);
         git_panel
@@ -2638,60 +2625,6 @@ impl GitPanel {
             .anchor(Corner::TopRight)
     }
 
-    pub(crate) fn render_generate_commit_message_button(
-        &self,
-        cx: &Context<Self>,
-    ) -> Option<AnyElement> {
-        current_language_model(cx).is_some().then(|| {
-            if self.generate_commit_message_task.is_some() {
-                return h_flex()
-                    .gap_1()
-                    .child(
-                        Icon::new(IconName::ArrowCircle)
-                            .size(IconSize::XSmall)
-                            .color(Color::Info)
-                            .with_animation(
-                                "arrow-circle",
-                                Animation::new(Duration::from_secs(2)).repeat(),
-                                |icon, delta| {
-                                    icon.transform(Transformation::rotate(percentage(delta)))
-                                },
-                            ),
-                    )
-                    .child(
-                        Label::new("Generating Commit...")
-                            .size(LabelSize::Small)
-                            .color(Color::Muted),
-                    )
-                    .into_any_element();
-            }
-
-            let can_commit = self.can_commit();
-            let editor_focus_handle = self.commit_editor.focus_handle(cx);
-            IconButton::new("generate-commit-message", IconName::AiEdit)
-                .shape(ui::IconButtonShape::Square)
-                .icon_color(Color::Muted)
-                .tooltip(move |window, cx| {
-                    if can_commit {
-                        Tooltip::for_action_in(
-                            "Generate Commit Message",
-                            &git::GenerateCommitMessage,
-                            &editor_focus_handle,
-                            window,
-                            cx,
-                        )
-                    } else {
-                        Tooltip::simple("No changes to commit", cx)
-                    }
-                })
-                .disabled(!can_commit)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.generate_commit_message(cx);
-                }))
-                .into_any_element()
-        })
-    }
-
     pub(crate) fn render_co_authors(&self, cx: &Context<Self>) -> Option<AnyElement> {
         let potential_co_authors = self.potential_co_authors(cx);
 
@@ -2968,10 +2901,6 @@ impl GitPanel {
                             .h(footer_size)
                             .flex_none()
                             .justify_between()
-                            .child(
-                                self.render_generate_commit_message_button(cx)
-                                    .unwrap_or_else(|| div().into_any_element()),
-                            )
                             .child(
                                 h_flex()
                                     .gap_0p5()
@@ -3986,18 +3915,6 @@ impl GitPanel {
     }
 }
 
-fn current_language_model(cx: &Context<'_, GitPanel>) -> Option<Arc<dyn LanguageModel>> {
-    agent_settings::AgentSettings::get_global(cx)
-        .enabled
-        .then(|| {
-            let ConfiguredModel { provider, model } =
-                LanguageModelRegistry::read_global(cx).commit_message_model()?;
-
-            provider.is_authenticated(cx).then(|| model)
-        })
-        .flatten()
-}
-
 impl Render for GitPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let project = self.project.read(cx);
@@ -4710,7 +4627,6 @@ mod tests {
         cx.update(|cx| {
             let settings_store = SettingsStore::test(cx);
             cx.set_global(settings_store);
-            AgentSettings::register(cx);
             WorktreeSettings::register(cx);
             workspace::init_settings(cx);
             theme::init(LoadThemes::JustBase, cx);
