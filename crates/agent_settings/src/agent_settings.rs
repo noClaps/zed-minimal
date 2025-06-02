@@ -572,7 +572,7 @@ impl JsonSchema for LanguageModelProviderSetting {
 
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> Schema {
         schemars::schema::SchemaObject {
-            enum_values: Some(vec!["zed.dev".into(), "copilot_chat".into()]),
+            enum_values: Some(vec!["zed.dev".into()]),
             ..Default::default()
         }
         .into()

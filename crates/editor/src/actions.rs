@@ -247,7 +247,6 @@ actions!(
     editor,
     [
         AcceptEditPrediction,
-        AcceptPartialCopilotSuggestion,
         AcceptPartialEditPrediction,
         AddSelectionAbove,
         AddSelectionBelow,

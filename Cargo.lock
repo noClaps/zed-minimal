@@ -3228,47 +3228,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "copilot"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-std",
- "chrono",
- "client",
- "clock",
- "collections",
- "command_palette_hooks",
- "ctor",
- "editor",
- "fs",
- "futures 0.3.31",
- "gpui",
- "http_client",
- "indoc",
- "inline_completion",
- "itertools 0.14.0",
- "language",
- "log",
- "lsp",
- "menu",
- "node_runtime",
- "parking_lot",
- "paths",
- "project",
- "rpc",
- "serde",
- "serde_json",
- "settings",
- "task",
- "theme",
- "ui",
- "util",
- "workspace",
- "workspace-hack",
- "zlog",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7971,7 +7930,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "client",
- "copilot",
  "editor",
  "feature_flags",
  "fs",
@@ -8694,14 +8652,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "client",
- "collections",
- "copilot",
  "editor",
  "futures 0.3.31",
  "gpui",
  "http_client",
  "language_model",
- "log",
  "project",
  "proto",
  "schemars",
@@ -8742,7 +8697,6 @@ dependencies = [
  "anyhow",
  "client",
  "collections",
- "copilot",
  "editor",
  "futures 0.3.31",
  "gpui",
@@ -19413,7 +19367,6 @@ dependencies = [
  "collections",
  "command_palette",
  "component",
- "copilot",
  "dap",
  "dap_adapters",
  "db",

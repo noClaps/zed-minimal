@@ -4,10 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsSources};
 
-use crate::provider::{
-    cloud::{self, ZedDotDevSettings},
-    copilot_chat::CopilotChatSettings,
-};
+use crate::provider::cloud::{self, ZedDotDevSettings};
 
 /// Initializes the language model settings.
 pub fn init(cx: &mut App) {
@@ -17,23 +14,18 @@ pub fn init(cx: &mut App) {
 #[derive(Default)]
 pub struct AllLanguageModelSettings {
     pub zed_dot_dev: ZedDotDevSettings,
-    pub copilot_chat: CopilotChatSettings,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct AllLanguageModelSettingsContent {
     #[serde(rename = "zed.dev")]
     pub zed_dot_dev: Option<ZedDotDevSettingsContent>,
-    pub copilot_chat: Option<CopilotChatSettingsContent>,
 }
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ZedDotDevSettingsContent {
     available_models: Option<Vec<cloud::AvailableModel>>,
 }
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct CopilotChatSettingsContent {}
 
 impl settings::Settings for AllLanguageModelSettings {
     const KEY: Option<&'static str> = Some("language_models");

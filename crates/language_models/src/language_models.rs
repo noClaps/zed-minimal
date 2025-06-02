@@ -9,7 +9,6 @@ mod settings;
 pub mod ui;
 
 use crate::provider::cloud::CloudLanguageModelProvider;
-use crate::provider::copilot_chat::CopilotChatLanguageModelProvider;
 pub use crate::settings::*;
 
 pub fn init(user_store: Entity<UserStore>, client: Arc<Client>, cx: &mut App) {
@@ -30,5 +29,4 @@ fn register_language_model_providers(
         CloudLanguageModelProvider::new(user_store.clone(), client.clone(), cx),
         cx,
     );
-    registry.register_provider(CopilotChatLanguageModelProvider::new(cx), cx);
 }

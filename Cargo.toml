@@ -29,7 +29,6 @@ members = [
     "crates/command_palette_hooks",
     "crates/component",
     "crates/context_server",
-    "crates/copilot",
     "crates/credentials_provider",
     "crates/dap",
     "crates/dap_adapters",
@@ -225,7 +224,6 @@ command_palette = { path = "crates/command_palette" }
 command_palette_hooks = { path = "crates/command_palette_hooks" }
 component = { path = "crates/component" }
 context_server = { path = "crates/context_server" }
-copilot = { path = "crates/copilot" }
 credentials_provider = { path = "crates/credentials_provider" }
 dap = { path = "crates/dap" }
 dap_adapters = { path = "crates/dap_adapters" }

@@ -14,13 +14,10 @@ path = "src/language_models.rs"
 [dependencies]
 anyhow.workspace = true
 client.workspace = true
-collections.workspace = true
-copilot.workspace = true
 futures.workspace = true
 gpui.workspace = true
 http_client.workspace = true
 language_model.workspace = true
-log.workspace = true
 proto.workspace = true
 schemars.workspace = true
 serde.workspace = true

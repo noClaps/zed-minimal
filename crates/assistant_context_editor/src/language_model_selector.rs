@@ -167,7 +167,7 @@ impl LanguageModelPickerDelegate {
             .collect::<Vec<_>>();
 
         cx.spawn(async move |_cx| {
-            for (provider_id, provider_name, authenticate_task) in authenticate_all_providers {
+            for (_, provider_name, authenticate_task) in authenticate_all_providers {
                 if let Err(err) = authenticate_task.await {
                     if matches!(err, AuthenticateError::CredentialsNotFound) {
                         // Since we're authenticating these providers in the
@@ -182,17 +182,10 @@ impl LanguageModelPickerDelegate {
                         // Ideally these should have more clear failure modes
                         // that we know are safe to ignore here, like what we do
                         // with `CredentialsNotFound` above.
-                        match provider_id.0.as_ref() {
-                            "copilot_chat" => {
-                                // Copilot Chat returns an error if Copilot is not enabled, so we don't log those errors.
-                            }
-                            _ => {
-                                log::error!(
-                                    "Failed to authenticate provider: {}: {err}",
-                                    provider_name.0
-                                );
-                            }
-                        }
+                        log::error!(
+                            "Failed to authenticate provider: {}: {err}",
+                            provider_name.0
+                        );
                     }
                 }
             }
@@ -687,23 +680,5 @@ mod tests {
                 i
             );
         }
-    }
-
-    #[gpui::test]
-    fn test_exclude_recommended_models(_cx: &mut TestAppContext) {
-        let recommended_models = create_models(vec![]);
-        let all_models = create_models(vec![("copilot", "o3")]);
-
-        let grouped_models = GroupedModels::new(all_models, recommended_models);
-
-        let actual_other_models = grouped_models
-            .other
-            .values()
-            .flatten()
-            .cloned()
-            .collect::<Vec<_>>();
-
-        // Recommended models should not appear in "other"
-        assert_models_eq(actual_other_models, vec!["copilot/o3"]);
     }
 }

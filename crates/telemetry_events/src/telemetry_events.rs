@@ -122,10 +122,6 @@ pub struct EditorEvent {
     pub file_extension: Option<String>,
     /// Whether the user is in vim mode or not
     pub vim_mode: bool,
-    /// Whether the user has copilot enabled or not
-    pub copilot_enabled: bool,
-    /// Whether the user has copilot enabled for the language of the file opened or saved
-    pub copilot_enabled_for_language: bool,
     /// Whether the client is opening/saving a local file or a remote file via SSH
     #[serde(default)]
     pub is_via_ssh: bool,
@@ -133,7 +129,7 @@ pub struct EditorEvent {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InlineCompletionEvent {
-    /// Provider of the completion suggestion (e.g. copilot)
+    /// Provider of the completion suggestion
     pub provider: String,
     pub suggestion_accepted: bool,
     pub file_extension: Option<String>,
