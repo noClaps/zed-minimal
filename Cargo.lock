@@ -527,7 +527,6 @@ dependencies = [
  "serde_json",
  "settings",
  "smallvec",
- "smol",
  "telemetry_events",
  "text",
  "theme",
@@ -641,7 +640,6 @@ dependencies = [
  "agent_settings",
  "anyhow",
  "assistant_tool",
- "async-watch",
  "buffer_diff",
  "chrono",
  "client",
@@ -655,7 +653,6 @@ dependencies = [
  "futures 0.3.31",
  "gpui",
  "gpui_tokio",
- "handlebars 4.5.0",
  "html_to_markdown",
  "http_client",
  "indoc",
@@ -671,7 +668,6 @@ dependencies = [
  "portable-pty",
  "pretty_assertions",
  "project",
- "prompt_store",
  "rand 0.8.5",
  "regex",
  "reqwest_client",
@@ -681,8 +677,6 @@ dependencies = [
  "serde_json",
  "settings",
  "smallvec",
- "streaming_diff",
- "strsim",
  "task",
  "tempfile",
  "terminal",
@@ -1900,27 +1894,12 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
-dependencies = [
- "bit-vec 0.6.3",
-]
-
-[[package]]
-name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
 dependencies = [
- "bit-vec 0.8.0",
+ "bit-vec",
 ]
-
-[[package]]
-name = "bit-vec"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bit-vec"
@@ -4956,8 +4935,6 @@ dependencies = [
  "smol",
  "telemetry",
  "terminal_view",
- "toml 0.8.20",
- "unindent",
  "util",
  "uuid",
  "workspace-hack",
@@ -5165,22 +5142,11 @@ checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
 
 [[package]]
 name = "fancy-regex"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "531e46835a22af56d1e3b66f04844bed63158bc094a628bec1d321d9b4c44bf2"
-dependencies = [
- "bit-set 0.5.3",
- "regex-automata 0.4.9",
- "regex-syntax 0.8.5",
-]
-
-[[package]]
-name = "fancy-regex"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
 dependencies = [
- "bit-set 0.8.0",
+ "bit-set",
  "regex-automata 0.4.9",
  "regex-syntax 0.8.5",
 ]
@@ -6064,7 +6030,6 @@ dependencies = [
  "workspace",
  "workspace-hack",
  "zed_actions",
- "zed_llm_client",
  "zlog",
 ]
 
@@ -8503,7 +8468,7 @@ dependencies = [
  "base64 0.22.1",
  "bytecount",
  "email_address",
- "fancy-regex 0.14.0",
+ "fancy-regex",
  "fraction",
  "idna",
  "itoa",
@@ -8736,30 +8701,19 @@ dependencies = [
  "client",
  "collections",
  "copilot",
- "credentials_provider",
  "editor",
- "fs",
  "futures 0.3.31",
  "gpui",
- "gpui_tokio",
  "http_client",
  "language_model",
  "log",
- "menu",
- "partial-json-fixer",
  "project",
  "proto",
- "release_channel",
  "schemars",
  "serde",
  "serde_json",
  "settings",
  "smol",
- "strum 0.27.1",
- "theme",
- "thiserror 2.0.12",
- "tiktoken-rs",
- "tokio",
  "ui",
  "util",
  "workspace-hack",
@@ -9861,7 +9815,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b977c445f26e49757f9aca3631c3b8b836942cb278d69a92e7b80d3b24da632"
 dependencies = [
  "arrayvec",
- "bit-set 0.8.0",
+ "bit-set",
  "bitflags 2.9.0",
  "cfg_aliases 0.2.1",
  "codespan-reporting 0.12.0",
@@ -10819,12 +10773,6 @@ dependencies = [
  "smallvec",
  "windows-targets 0.52.6",
 ]
-
-[[package]]
-name = "partial-json-fixer"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35ffd90b3f3b6477db7478016b9efb1b7e9d38eafd095f0542fe0ec2ea884a13"
 
 [[package]]
 name = "password-hash"
@@ -11872,7 +11820,7 @@ dependencies = [
  "dap",
  "dap_adapters",
  "extension",
- "fancy-regex 0.14.0",
+ "fancy-regex",
  "fs",
  "futures 0.3.31",
  "fuzzy",
@@ -13272,7 +13220,6 @@ dependencies = [
  "language",
  "language_model",
  "log",
- "menu",
  "picker",
  "prompt_store",
  "release_channel",
@@ -13284,7 +13231,6 @@ dependencies = [
  "util",
  "workspace",
  "workspace-hack",
- "zed_actions",
 ]
 
 [[package]]
@@ -13961,7 +13907,6 @@ dependencies = [
  "heed",
  "http_client",
  "language",
- "language_model",
  "languages",
  "log",
  "parking_lot",
@@ -15742,21 +15687,6 @@ dependencies = [
  "flate2",
  "jpeg-decoder",
  "weezl",
-]
-
-[[package]]
-name = "tiktoken-rs"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25563eeba904d770acf527e8b370fe9a5547bacd20ff84a0b6c3bc41288e5625"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "bstr",
- "fancy-regex 0.13.0",
- "lazy_static",
- "regex",
- "rustc-hash 1.1.0",
 ]
 
 [[package]]
@@ -19004,8 +18934,8 @@ dependencies = [
  "base64 0.22.1",
  "base64ct",
  "bigdecimal",
- "bit-set 0.8.0",
- "bit-vec 0.8.0",
+ "bit-set",
+ "bit-vec",
  "bitflags 2.9.0",
  "bstr",
  "bytemuck",
