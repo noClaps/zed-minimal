@@ -14,5 +14,5 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - run: which brew
+      - run: brew install cmake
       - run: cargo check
