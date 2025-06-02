@@ -1895,12 +1895,6 @@ impl ContextEditor {
                     .bg(cx.theme().colors().editor_background)
                     .justify_between()
                     .child(
-                        h_flex()
-                            .gap_3()
-                            .child(Icon::new(IconName::ZedAssistant).color(Color::Accent))
-                            .child(Label::new("Zed AI is here! Get started by signing in →")),
-                    )
-                    .child(
                         Button::new("sign-in", "Sign in")
                             .size(ButtonSize::Compact)
                             .style(ButtonStyle::Filled)

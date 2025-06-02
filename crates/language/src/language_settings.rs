@@ -212,16 +212,6 @@ impl LanguageSettings {
 pub enum EditPredictionProvider {
     #[default]
     None,
-    Zed,
-}
-
-impl EditPredictionProvider {
-    pub fn is_zed(&self) -> bool {
-        match self {
-            EditPredictionProvider::Zed => true,
-            EditPredictionProvider::None => false,
-        }
-    }
 }
 
 /// The settings for edit predictions.

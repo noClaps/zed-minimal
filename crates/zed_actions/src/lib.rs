@@ -337,7 +337,6 @@ pub mod outline {
     pub static TOGGLE_OUTLINE: OnceLock<fn(AnyView, &mut Window, &mut App)> = OnceLock::new();
 }
 
-actions!(zed_predict_onboarding, [OpenZedPredictOnboarding]);
 actions!(git_onboarding, [OpenGitIntegrationOnboarding]);
 
 actions!(debugger, [ToggleEnableBreakpoint, UnsetBreakpoint]);

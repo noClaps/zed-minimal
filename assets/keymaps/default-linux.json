@@ -39,9 +39,7 @@
       "f7": "debugger::StepOver",
       "cmd-f11": "debugger::StepInto",
       "shift-f11": "debugger::StepOut",
-      "f11": "zed::ToggleFullScreen",
-      "ctrl-alt-z": "edit_prediction::RateCompletions",
-      "ctrl-shift-i": "edit_prediction::ToggleMenu"
+      "f11": "zed::ToggleFullScreen"
     }
   },
   {
@@ -997,12 +995,6 @@
       "ctrl-shift-r": "terminal::RerunTask",
       "ctrl-alt-r": "terminal::RerunTask",
       "alt-t": "terminal::RerunTask"
-    }
-  },
-  {
-    "context": "ZedPredictModal",
-    "bindings": {
-      "escape": "menu::Cancel"
     }
   },
   {

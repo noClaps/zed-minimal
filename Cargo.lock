@@ -7931,9 +7931,7 @@ name = "inline_completion_button"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "client",
  "editor",
- "feature_flags",
  "fs",
  "futures 0.3.31",
  "gpui",
@@ -7951,9 +7949,6 @@ dependencies = [
  "ui",
  "workspace",
  "workspace-hack",
- "zed_actions",
- "zed_llm_client",
- "zeta",
 ]
 
 [[package]]
@@ -8633,7 +8628,6 @@ dependencies = [
  "futures 0.3.31",
  "gpui",
  "http_client",
- "icons",
  "image",
  "parking_lot",
  "proto",
@@ -17751,7 +17745,6 @@ dependencies = [
  "fuzzy",
  "gpui",
  "install_cli",
- "language",
  "picker",
  "project",
  "schemars",
@@ -19476,7 +19469,6 @@ dependencies = [
  "workspace",
  "workspace-hack",
  "zed_actions",
- "zeta",
  "zlog",
  "zlog_settings",
 ]
@@ -19713,61 +19705,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
-]
-
-[[package]]
-name = "zeta"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arrayvec",
- "call",
- "client",
- "clock",
- "collections",
- "command_palette_hooks",
- "ctor",
- "db",
- "editor",
- "feature_flags",
- "fs",
- "futures 0.3.31",
- "gpui",
- "http_client",
- "indoc",
- "inline_completion",
- "language",
- "language_model",
- "log",
- "menu",
- "migrator",
- "paths",
- "postage",
- "project",
- "proto",
- "regex",
- "release_channel",
- "reqwest_client",
- "rpc",
- "serde",
- "serde_json",
- "settings",
- "telemetry",
- "telemetry_events",
- "theme",
- "thiserror 2.0.12",
- "tree-sitter-go",
- "tree-sitter-rust",
- "ui",
- "unindent",
- "util",
- "uuid",
- "workspace",
- "workspace-hack",
- "worktree",
- "zed_actions",
- "zed_llm_client",
- "zlog",
 ]
 
 [[package]]

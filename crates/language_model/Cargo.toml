@@ -23,7 +23,6 @@ collections.workspace = true
 futures.workspace = true
 gpui.workspace = true
 http_client.workspace = true
-icons.workspace = true
 image.workspace = true
 parking_lot.workspace = true
 proto.workspace = true

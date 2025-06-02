@@ -349,32 +349,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rename_string_action() {
-        assert_migrate_keymap(
-            r#"
-                [
-                    {
-                        "bindings": {
-                            "cmd-1": "inline_completion::ToggleMenu"
-                        }
-                    }
-                ]
-            "#,
-            Some(
-                r#"
-                [
-                    {
-                        "bindings": {
-                            "cmd-1": "edit_prediction::ToggleMenu"
-                        }
-                    }
-                ]
-            "#,
-            ),
-        )
-    }
-
-    #[test]
     fn test_rename_context_key() {
         assert_migrate_keymap(
             r#"

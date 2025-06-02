@@ -10,7 +10,6 @@ use strum::{EnumIter, EnumString, IntoStaticStr};
 pub enum IconName {
     Ai,
     AiEdit,
-    AiZed,
     ArrowCircle,
     ArrowDown,
     ArrowDownFromLine,
@@ -240,15 +239,8 @@ pub enum IconName {
     WholeWord,
     X,
     XCircle,
-    ZedAssistant,
-    ZedAssistantFilled,
     ZedBurnMode,
     ZedBurnModeOn,
-    ZedPredict,
-    ZedPredictDisabled,
-    ZedPredictDown,
-    ZedPredictError,
-    ZedPredictUp,
 }
 
 impl IconName {

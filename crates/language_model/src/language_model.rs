@@ -13,7 +13,6 @@ use client::Client;
 use futures::stream::BoxStream;
 use gpui::{AnyElement, AnyView, App, SharedString, Task, Window};
 use http_client::http::{HeaderMap, HeaderValue};
-use icons::IconName;
 use parking_lot::Mutex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -288,9 +287,6 @@ pub enum AuthenticateError {
 pub trait LanguageModelProvider: 'static {
     fn id(&self) -> LanguageModelProviderId;
     fn name(&self) -> LanguageModelProviderName;
-    fn icon(&self) -> IconName {
-        IconName::ZedAssistant
-    }
     fn default_model(&self, cx: &App) -> Option<Arc<dyn LanguageModel>>;
     fn default_fast_model(&self, cx: &App) -> Option<Arc<dyn LanguageModel>>;
     fn provided_models(&self, cx: &App) -> Vec<Arc<dyn LanguageModel>>;

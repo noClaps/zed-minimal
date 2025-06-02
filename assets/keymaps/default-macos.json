@@ -47,9 +47,7 @@
       "alt-cmd-h": "zed::HideOthers",
       "cmd-m": "zed::Minimize",
       "fn-f": "zed::ToggleFullScreen",
-      "ctrl-cmd-f": "zed::ToggleFullScreen",
-      "ctrl-cmd-z": "edit_prediction::RateCompletions",
-      "ctrl-cmd-i": "edit_prediction::ToggleMenu"
+      "ctrl-cmd-f": "zed::ToggleFullScreen"
     }
   },
   {
@@ -1066,33 +1064,6 @@
       "ctrl-alt-left": "pane::SplitLeft",
       "ctrl-alt-right": "pane::SplitRight",
       "cmd-alt-r": "terminal::RerunTask"
-    }
-  },
-  {
-    "context": "RateCompletionModal",
-    "use_key_equivalents": true,
-    "bindings": {
-      "cmd-shift-enter": "zeta::ThumbsUpActiveCompletion",
-      "cmd-shift-backspace": "zeta::ThumbsDownActiveCompletion",
-      "shift-down": "zeta::NextEdit",
-      "shift-up": "zeta::PreviousEdit",
-      "right": "zeta::PreviewCompletion"
-    }
-  },
-  {
-    "context": "RateCompletionModal > Editor",
-    "use_key_equivalents": true,
-    "bindings": {
-      "escape": "zeta::FocusCompletions",
-      "cmd-shift-enter": "zeta::ThumbsUpActiveCompletion",
-      "cmd-shift-backspace": "zeta::ThumbsDownActiveCompletion"
-    }
-  },
-  {
-    "context": "ZedPredictModal",
-    "use_key_equivalents": true,
-    "bindings": {
-      "escape": "menu::Cancel"
     }
   },
   {

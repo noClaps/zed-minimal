@@ -165,7 +165,7 @@ impl SlashCommand for ContextServerSlashCommand {
                 Ok(SlashCommandOutput {
                     sections: vec![SlashCommandOutputSection {
                         range: 0..(prompt.len()),
-                        icon: IconName::ZedAssistant,
+                        icon: IconName::CircleOff,
                         label: SharedString::from(
                             result
                                 .description
