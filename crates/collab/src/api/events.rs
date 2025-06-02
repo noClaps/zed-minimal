@@ -662,7 +662,6 @@ fn for_snowflake(
                     "welcome page: install cli" => "Welcome CLI Installed".to_string(),
                     "welcome page: open" => "Welcome Page Opened".to_string(),
                     "welcome page: open extensions" => "Welcome Extensions Page Opened".to_string(),
-                    "welcome page: sign in to copilot" => "Welcome Copilot Signed In".to_string(),
                     "welcome page: toggle diagnostic telemetry" => {
                         "Welcome Diagnostic Telemetry Toggled".to_string()
                     }

@@ -350,12 +350,6 @@ pub fn debug_adapters_dir() -> &'static PathBuf {
     DEBUG_ADAPTERS_DIR.get_or_init(|| data_dir().join("debug_adapters"))
 }
 
-/// Returns the path to the Copilot directory.
-pub fn copilot_dir() -> &'static PathBuf {
-    static COPILOT_DIR: OnceLock<PathBuf> = OnceLock::new();
-    COPILOT_DIR.get_or_init(|| data_dir().join("copilot"))
-}
-
 /// Returns the path to the default Prettier directory.
 pub fn default_prettier_dir() -> &'static PathBuf {
     static DEFAULT_PRETTIER_DIR: OnceLock<PathBuf> = OnceLock::new();

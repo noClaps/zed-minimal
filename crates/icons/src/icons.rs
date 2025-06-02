@@ -59,10 +59,6 @@ pub enum IconName {
     Command,
     Context,
     Control,
-    Copilot,
-    CopilotDisabled,
-    CopilotError,
-    CopilotInit,
     Copy,
     CountdownTimer,
     Crosshair,
@@ -253,7 +249,6 @@ pub enum IconName {
     ZedPredictDown,
     ZedPredictError,
     ZedPredictUp,
-    ZedXCopilot,
 }
 
 impl IconName {

@@ -1310,7 +1310,7 @@
     "Shell Script": [".env.*"]
   },
   // Settings for which version of Node.js and NPM to use when installing
-  // language servers and Copilot.
+  // language servers.
   //
   // Note: changing this setting currently requires restarting Zed.
   "node": {

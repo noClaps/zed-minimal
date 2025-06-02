@@ -1,5 +1,5 @@
 /// Stores and updates all data received from LSP <a href="https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_inlayHint">textDocument/inlayHint</a> requests.
-/// Has nothing to do with other inlays, e.g. copilot suggestions — those are stored elsewhere.
+/// Has nothing to do with other inlays — those are stored elsewhere.
 /// On every update, cache may query for more inlay hints and update inlays on the screen.
 ///
 /// Inlays stored on screen are in [`crate::display_map::inlay_map`] and this cache is the only way to update any inlay hint data in the visible hints in the inlay map.
