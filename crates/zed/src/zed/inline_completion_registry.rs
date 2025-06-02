@@ -7,7 +7,6 @@ use language::language_settings::{EditPredictionProvider, all_language_settings}
 use settings::SettingsStore;
 use smol::stream::StreamExt;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
-use supermaven::{Supermaven, SupermavenCompletionProvider};
 use ui::Window;
 use util::ResultExt;
 use workspace::Workspace;
@@ -127,9 +126,7 @@ pub fn init(client: Arc<Client>, user_store: Entity<UserStore>, cx: &mut App) {
                                 })
                                 .ok();
                         }
-                        EditPredictionProvider::None
-                        | EditPredictionProvider::Copilot
-                        | EditPredictionProvider::Supermaven => {}
+                        EditPredictionProvider::None | EditPredictionProvider::Copilot => {}
                     }
                 }
             }
@@ -232,12 +229,6 @@ fn assign_edit_prediction_provider(
                     }
                 }
                 let provider = cx.new(|_| CopilotCompletionProvider::new(copilot));
-                editor.set_edit_prediction_provider(Some(provider), window, cx);
-            }
-        }
-        EditPredictionProvider::Supermaven => {
-            if let Some(supermaven) = Supermaven::global(cx) {
-                let provider = cx.new(|_| SupermavenCompletionProvider::new(supermaven));
                 editor.set_edit_prediction_provider(Some(provider), window, cx);
             }
         }
