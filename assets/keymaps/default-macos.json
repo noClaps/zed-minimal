@@ -926,15 +926,6 @@
     }
   },
   {
-    "context": "ConfigureContextServerModal > Editor",
-    "use_key_equivalents": true,
-    "bindings": {
-      "escape": "menu::Cancel",
-      "enter": "editor::Newline",
-      "cmd-enter": "menu::Confirm"
-    }
-  },
-  {
     "context": "Diagnostics",
     "use_key_equivalents": true,
     "bindings": {

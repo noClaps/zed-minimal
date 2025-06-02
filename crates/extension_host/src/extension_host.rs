@@ -14,10 +14,9 @@ use collections::{BTreeMap, BTreeSet, HashMap, HashSet, btree_map};
 pub use extension::ExtensionManifest;
 use extension::extension_builder::{CompileExtensionOptions, ExtensionBuilder};
 use extension::{
-    ExtensionContextServerProxy, ExtensionDebugAdapterProviderProxy, ExtensionEvents,
-    ExtensionGrammarProxy, ExtensionHostProxy, ExtensionIndexedDocsProviderProxy,
-    ExtensionLanguageProxy, ExtensionLanguageServerProxy, ExtensionSlashCommandProxy,
-    ExtensionSnippetProxy, ExtensionThemeProxy,
+    ExtensionDebugAdapterProviderProxy, ExtensionEvents, ExtensionGrammarProxy, ExtensionHostProxy,
+    ExtensionIndexedDocsProviderProxy, ExtensionLanguageProxy, ExtensionLanguageServerProxy,
+    ExtensionSlashCommandProxy, ExtensionSnippetProxy, ExtensionThemeProxy,
 };
 use fs::{Fs, RemoveOptions};
 use futures::{
@@ -1131,10 +1130,6 @@ impl ExtensionStore {
                         .remove_language_server(&language, language_server_name);
                 }
             }
-
-            for (server_id, _) in extension.manifest.context_servers.iter() {
-                self.proxy.unregister_context_server(server_id.clone(), cx);
-            }
         }
 
         self.wasm_extensions
@@ -1318,11 +1313,6 @@ impl ExtensionStore {
                                 requires_argument: slash_command.requires_argument,
                             },
                         );
-                    }
-
-                    for (id, _context_server_entry) in &manifest.context_servers {
-                        this.proxy
-                            .register_context_server(extension.clone(), id.clone(), cx);
                     }
 
                     for (provider_id, _provider) in &manifest.indexed_docs_providers {

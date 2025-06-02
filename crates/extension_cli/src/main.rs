@@ -140,10 +140,6 @@ fn extension_provides(manifest: &ExtensionManifest) -> BTreeSet<ExtensionProvide
         provides.insert(ExtensionProvides::LanguageServers);
     }
 
-    if !manifest.context_servers.is_empty() {
-        provides.insert(ExtensionProvides::ContextServers);
-    }
-
     if !manifest.indexed_docs_providers.is_empty() {
         provides.insert(ExtensionProvides::IndexedDocsProviders);
     }

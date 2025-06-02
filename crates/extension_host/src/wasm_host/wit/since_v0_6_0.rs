@@ -319,21 +319,6 @@ impl From<SlashCommandArgumentCompletion> for extension::SlashCommandArgumentCom
     }
 }
 
-impl TryFrom<ContextServerConfiguration> for extension::ContextServerConfiguration {
-    type Error = anyhow::Error;
-
-    fn try_from(value: ContextServerConfiguration) -> Result<Self, Self::Error> {
-        let settings_schema: serde_json::Value = serde_json::from_str(&value.settings_schema)
-            .context("Failed to parse settings_schema")?;
-
-        Ok(Self {
-            installation_instructions: value.installation_instructions,
-            default_settings: value.default_settings,
-            settings_schema,
-        })
-    }
-}
-
 impl HostKeyValueStore for WasmState {
     async fn insert(
         &mut self,
@@ -697,9 +682,6 @@ impl process::Host for WasmState {
 #[async_trait]
 impl slash_command::Host for WasmState {}
 
-#[async_trait]
-impl context_server::Host for WasmState {}
-
 impl dap::Host for WasmState {
     async fn resolve_tcp_template(
         &mut self,
@@ -769,26 +751,6 @@ impl ExtensionImports for WasmState {
                             }),
                             settings: settings.settings,
                             initialization_options: settings.initialization_options,
-                        })?)
-                    }
-                    "context_servers" => {
-                        let configuration = key
-                            .and_then(|key| {
-                                ProjectSettings::get(location, cx)
-                                    .context_servers
-                                    .get(key.as_str())
-                            })
-                            .cloned()
-                            .unwrap_or_default();
-                        Ok(serde_json::to_string(&settings::ContextServerSettings {
-                            command: configuration.command.map(|command| {
-                                settings::CommandSettings {
-                                    path: Some(command.path),
-                                    arguments: Some(command.args),
-                                    env: command.env.map(|env| env.into_iter().collect()),
-                                }
-                            }),
-                            settings: configuration.settings,
                         })?)
                     }
                     _ => {

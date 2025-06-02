@@ -157,7 +157,6 @@ async fn test_extension_store(cx: &mut TestAppContext) {
                         .into_iter()
                         .collect(),
                         language_servers: BTreeMap::default(),
-                        context_servers: BTreeMap::default(),
                         slash_commands: BTreeMap::default(),
                         indexed_docs_providers: BTreeMap::default(),
                         snippets: None,
@@ -187,7 +186,6 @@ async fn test_extension_store(cx: &mut TestAppContext) {
                         languages: Default::default(),
                         grammars: BTreeMap::default(),
                         language_servers: BTreeMap::default(),
-                        context_servers: BTreeMap::default(),
                         slash_commands: BTreeMap::default(),
                         indexed_docs_providers: BTreeMap::default(),
                         snippets: None,
@@ -362,7 +360,6 @@ async fn test_extension_store(cx: &mut TestAppContext) {
                 languages: Default::default(),
                 grammars: BTreeMap::default(),
                 language_servers: BTreeMap::default(),
-                context_servers: BTreeMap::default(),
                 slash_commands: BTreeMap::default(),
                 indexed_docs_providers: BTreeMap::default(),
                 snippets: None,

@@ -55,9 +55,6 @@ pub fn init(cx: &mut App) {
                         ExtensionCategoryFilter::LanguageServers => {
                             ExtensionProvides::LanguageServers
                         }
-                        ExtensionCategoryFilter::ContextServers => {
-                            ExtensionProvides::ContextServers
-                        }
                         ExtensionCategoryFilter::SlashCommands => ExtensionProvides::SlashCommands,
                         ExtensionCategoryFilter::IndexedDocsProviders => {
                             ExtensionProvides::IndexedDocsProviders
@@ -167,7 +164,6 @@ fn extension_provides_label(provides: ExtensionProvides) -> &'static str {
         ExtensionProvides::Languages => "Languages",
         ExtensionProvides::Grammars => "Grammars",
         ExtensionProvides::LanguageServers => "Language Servers",
-        ExtensionProvides::ContextServers => "MCP Servers",
         ExtensionProvides::SlashCommands => "Slash Commands",
         ExtensionProvides::IndexedDocsProviders => "Indexed Docs Providers",
         ExtensionProvides::Snippets => "Snippets",
@@ -530,8 +526,6 @@ impl ExtensionsPage {
 
         let repository_url = extension.repository.clone();
 
-        let can_configure = !extension.context_servers.is_empty();
-
         ExtensionCard::new()
             .child(
                 h_flex()
@@ -578,36 +572,7 @@ impl ExtensionsPage {
                                     })
                                     .color(Color::Accent)
                                     .disabled(matches!(status, ExtensionStatus::Removing)),
-                            )
-                            .when(can_configure, |this| {
-                                this.child(
-                                    Button::new(
-                                        SharedString::from(format!("configure-{}", extension.id)),
-                                        "Configure",
-                                    )
-
-
-                                    .on_click({
-                                        let manifest = Arc::new(extension.clone());
-                                        move |_, _, cx| {
-                                            if let Some(events) =
-                                                extension::ExtensionEvents::try_global(cx)
-                                            {
-                                                events.update(cx, |this, cx| {
-                                                    this.emit(
-                                                        extension::Event::ConfigureExtensionRequested(
-                                                            manifest.clone(),
-                                                        ),
-                                                        cx,
-                                                    )
-                                                });
-                                            }
-                                        }
-                                    })
-                                    .color(Color::Accent)
-                                    .disabled(matches!(status, ExtensionStatus::Installing)),
-                                )
-                            }),
+                            ),
                     ),
             )
             .child(
@@ -917,11 +882,6 @@ impl ExtensionsPage {
             };
         }
 
-        let is_configurable = extension
-            .manifest
-            .provides
-            .contains(&ExtensionProvides::ContextServers);
-
         match status.clone() {
             ExtensionStatus::NotInstalled => ExtensionCardButtons {
                 install_or_uninstall: Button::new(
@@ -955,13 +915,7 @@ impl ExtensionsPage {
                     "Uninstall",
                 )
                 .disabled(true),
-                configure: is_configurable.then(|| {
-                    Button::new(
-                        SharedString::from(format!("configure-{}", extension.id)),
-                        "Configure",
-                    )
-                    .disabled(true)
-                }),
+                configure: None,
                 upgrade: Some(
                     Button::new(SharedString::from(extension.id.clone()), "Upgrade").disabled(true),
                 ),
@@ -980,31 +934,7 @@ impl ExtensionsPage {
                         });
                     }
                 }),
-                configure: is_configurable.then(|| {
-                    Button::new(
-                        SharedString::from(format!("configure-{}", extension.id)),
-                        "Configure",
-                    )
-                    .on_click({
-                        let extension_id = extension.id.clone();
-                        move |_, _, cx| {
-                            if let Some(manifest) = ExtensionStore::global(cx)
-                                .read(cx)
-                                .extension_manifest_for_id(&extension_id)
-                                .cloned()
-                            {
-                                if let Some(events) = extension::ExtensionEvents::try_global(cx) {
-                                    events.update(cx, |this, cx| {
-                                        this.emit(
-                                            extension::Event::ConfigureExtensionRequested(manifest),
-                                            cx,
-                                        )
-                                    });
-                                }
-                            }
-                        }
-                    })
-                }),
+                configure: None,
                 upgrade: if installed_version == extension.manifest.version {
                     None
                 } else {
@@ -1049,13 +979,7 @@ impl ExtensionsPage {
                     "Uninstall",
                 )
                 .disabled(true),
-                configure: is_configurable.then(|| {
-                    Button::new(
-                        SharedString::from(format!("configure-{}", extension.id)),
-                        "Configure",
-                    )
-                    .disabled(true)
-                }),
+                configure: None,
                 upgrade: None,
             },
         }

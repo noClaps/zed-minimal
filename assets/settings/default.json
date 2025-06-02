@@ -735,7 +735,6 @@
     "profiles": {
       "write": {
         "name": "Write",
-        "enable_all_context_servers": true,
         "tools": {
           "copy_path": true,
           "create_directory": true,
@@ -757,8 +756,6 @@
       },
       "ask": {
         "name": "Ask",
-        // We don't know which of the context server tools are safe for the "Ask" profile, so we don't enable them by default.
-        // "enable_all_context_servers": true,
         "tools": {
           "contents": true,
           "diagnostics": true,
@@ -775,7 +772,6 @@
       },
       "minimal": {
         "name": "Minimal",
-        "enable_all_context_servers": false,
         "tools": {}
       }
     },
@@ -1672,8 +1668,6 @@
   "ssh_connections": [],
   // Whether to read ~/.ssh/config for ssh connection sources.
   "read_ssh_config": true,
-  // Configures context servers for use by the agent.
-  "context_servers": {},
   "debugger": {
     "stepping_granularity": "line",
     "save_breakpoints": true,

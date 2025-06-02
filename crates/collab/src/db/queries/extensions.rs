@@ -305,11 +305,6 @@ impl Database {
                                 .provides
                                 .contains(&ExtensionProvides::LanguageServers),
                         ),
-                        provides_context_servers: ActiveValue::Set(
-                            version
-                                .provides
-                                .contains(&ExtensionProvides::ContextServers),
-                        ),
                         provides_slash_commands: ActiveValue::Set(
                             version.provides.contains(&ExtensionProvides::SlashCommands),
                         ),
@@ -413,10 +408,6 @@ fn apply_provides_filter(
 
     if provides_filter.contains(&ExtensionProvides::LanguageServers) {
         condition = condition.add(extension_version::Column::ProvidesLanguageServers.eq(true));
-    }
-
-    if provides_filter.contains(&ExtensionProvides::ContextServers) {
-        condition = condition.add(extension_version::Column::ProvidesContextServers.eq(true));
     }
 
     if provides_filter.contains(&ExtensionProvides::SlashCommands) {

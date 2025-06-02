@@ -2554,7 +2554,6 @@ dependencies = [
  "collab_ui",
  "collections",
  "command_palette_hooks",
- "context_server",
  "ctor",
  "dap",
  "dap_adapters",
@@ -2828,27 +2827,6 @@ name = "constant_time_eq"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
-
-[[package]]
-name = "context_server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "collections",
- "futures 0.3.31",
- "gpui",
- "log",
- "parking_lot",
- "postage",
- "schemars",
- "serde",
- "serde_json",
- "smol",
- "url",
- "util",
- "workspace-hack",
-]
 
 [[package]]
 name = "convert_case"
@@ -11230,7 +11208,6 @@ dependencies = [
  "client",
  "clock",
  "collections",
- "context_server",
  "dap",
  "dap_adapters",
  "extension",

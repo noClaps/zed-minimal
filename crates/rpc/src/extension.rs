@@ -41,7 +41,6 @@ pub enum ExtensionProvides {
     Languages,
     Grammars,
     LanguageServers,
-    ContextServers,
     SlashCommands,
     IndexedDocsProviders,
     Snippets,

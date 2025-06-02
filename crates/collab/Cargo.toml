@@ -84,7 +84,6 @@ client = { workspace = true, features = ["test-support"] }
 collab_ui = { workspace = true, features = ["test-support"] }
 collections = { workspace = true, features = ["test-support"] }
 command_palette_hooks.workspace = true
-context_server.workspace = true
 ctor.workspace = true
 dap = { workspace = true, features = ["test-support"] }
 dap_adapters = { workspace = true, features = ["test-support"] }

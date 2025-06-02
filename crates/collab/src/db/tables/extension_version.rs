@@ -23,7 +23,6 @@ pub struct Model {
     pub provides_languages: bool,
     pub provides_grammars: bool,
     pub provides_language_servers: bool,
-    pub provides_context_servers: bool,
     pub provides_slash_commands: bool,
     pub provides_indexed_docs_providers: bool,
     pub provides_snippets: bool,
@@ -50,10 +49,6 @@ impl Model {
 
         if self.provides_language_servers {
             provides.insert(ExtensionProvides::LanguageServers);
-        }
-
-        if self.provides_context_servers {
-            provides.insert(ExtensionProvides::ContextServers);
         }
 
         if self.provides_slash_commands {

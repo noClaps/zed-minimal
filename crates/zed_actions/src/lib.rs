@@ -49,7 +49,6 @@ pub enum ExtensionCategoryFilter {
     Languages,
     Grammars,
     LanguageServers,
-    ContextServers,
     SlashCommands,
     IndexedDocsProviders,
     Snippets,
