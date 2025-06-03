@@ -7,7 +7,6 @@ pub mod pane;
 pub mod pane_group;
 mod persistence;
 pub mod searchable;
-pub mod shared_screen;
 mod status_bar;
 pub mod tasks;
 mod theme_preview;
