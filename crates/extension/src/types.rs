@@ -1,12 +1,10 @@
 mod dap;
 mod lsp;
-mod slash_command;
 
 use std::ops::Range;
 
 pub use dap::*;
 pub use lsp::*;
-pub use slash_command::*;
 
 /// A list of environment variables.
 pub type EnvVars = Vec<(String, String)>;

@@ -1,9 +1,6 @@
-use crate::wasm_host::wit::since_v0_6_0::{
-    dap::{
-        StartDebuggingRequestArguments, StartDebuggingRequestArgumentsRequest, TcpArguments,
-        TcpArgumentsTemplate,
-    },
-    slash_command::SlashCommandOutputSection,
+use crate::wasm_host::wit::since_v0_6_0::dap::{
+    StartDebuggingRequestArguments, StartDebuggingRequestArgumentsRequest, TcpArguments,
+    TcpArgumentsTemplate,
 };
 use crate::wasm_host::wit::{CompletionKind, CompletionLabelDetails, InsertTextFormat, SymbolKind};
 use crate::wasm_host::{WasmState, wit::ToWasmtimeResult};
@@ -276,45 +273,6 @@ impl From<extension::SymbolKind> for SymbolKind {
             extension::SymbolKind::Operator => Self::Operator,
             extension::SymbolKind::TypeParameter => Self::TypeParameter,
             extension::SymbolKind::Other(value) => Self::Other(value),
-        }
-    }
-}
-
-impl From<extension::SlashCommand> for SlashCommand {
-    fn from(value: extension::SlashCommand) -> Self {
-        Self {
-            name: value.name,
-            description: value.description,
-            tooltip_text: value.tooltip_text,
-            requires_argument: value.requires_argument,
-        }
-    }
-}
-
-impl From<SlashCommandOutput> for extension::SlashCommandOutput {
-    fn from(value: SlashCommandOutput) -> Self {
-        Self {
-            text: value.text,
-            sections: value.sections.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl From<SlashCommandOutputSection> for extension::SlashCommandOutputSection {
-    fn from(value: SlashCommandOutputSection) -> Self {
-        Self {
-            range: value.range.start as usize..value.range.end as usize,
-            label: value.label,
-        }
-    }
-}
-
-impl From<SlashCommandArgumentCompletion> for extension::SlashCommandArgumentCompletion {
-    fn from(value: SlashCommandArgumentCompletion) -> Self {
-        Self {
-            label: value.label,
-            new_text: value.new_text,
-            run_command: value.run_command,
         }
     }
 }
@@ -678,9 +636,6 @@ impl process::Host for WasmState {
         .to_wasmtime_result()
     }
 }
-
-#[async_trait]
-impl slash_command::Host for WasmState {}
 
 impl dap::Host for WasmState {
     async fn resolve_tcp_template(

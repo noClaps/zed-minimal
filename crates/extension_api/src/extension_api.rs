@@ -32,9 +32,6 @@ pub use wit::{
         npm_package_latest_version,
     },
     zed::extension::platform::{Architecture, Os, current_platform},
-    zed::extension::slash_command::{
-        SlashCommand, SlashCommandArgumentCompletion, SlashCommandOutput, SlashCommandOutputSection,
-    },
 };
 
 // Undocumented WIT re-exports.
@@ -134,25 +131,6 @@ pub trait Extension: Send + Sync {
         _symbol: Symbol,
     ) -> Option<CodeLabel> {
         None
-    }
-
-    /// Returns the completions that should be shown when completing the provided slash command with the given query.
-    fn complete_slash_command_argument(
-        &self,
-        _command: SlashCommand,
-        _args: Vec<String>,
-    ) -> Result<Vec<SlashCommandArgumentCompletion>, String> {
-        Ok(Vec::new())
-    }
-
-    /// Returns the output from running the provided slash command.
-    fn run_slash_command(
-        &self,
-        _command: SlashCommand,
-        _args: Vec<String>,
-        _worktree: Option<&Worktree>,
-    ) -> Result<SlashCommandOutput, String> {
-        Err("`run_slash_command` not implemented".to_string())
     }
 
     /// Returns a list of package names as suggestions to be included in the
@@ -328,21 +306,6 @@ impl wit::Guest for Component {
             }
         }
         Ok(labels)
-    }
-
-    fn complete_slash_command_argument(
-        command: SlashCommand,
-        args: Vec<String>,
-    ) -> Result<Vec<SlashCommandArgumentCompletion>, String> {
-        extension().complete_slash_command_argument(command, args)
-    }
-
-    fn run_slash_command(
-        command: SlashCommand,
-        args: Vec<String>,
-        worktree: Option<&Worktree>,
-    ) -> Result<SlashCommandOutput, String> {
-        extension().run_slash_command(command, args, worktree)
     }
 
     fn suggest_docs_packages(provider: String) -> Result<Vec<String>, String> {

@@ -78,8 +78,6 @@ pub struct ExtensionManifest {
     #[serde(default)]
     pub language_servers: BTreeMap<LanguageServerName, LanguageServerManifestEntry>,
     #[serde(default)]
-    pub slash_commands: BTreeMap<Arc<str>, SlashCommandManifestEntry>,
-    #[serde(default)]
     pub indexed_docs_providers: BTreeMap<Arc<str>, IndexedDocsProviderEntry>,
     #[serde(default)]
     pub snippets: Option<PathBuf>,
@@ -195,12 +193,6 @@ impl LanguageServerManifestEntry {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct SlashCommandManifestEntry {
-    pub description: String,
-    pub requires_argument: bool,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct IndexedDocsProviderEntry {}
 
 impl ExtensionManifest {
@@ -266,7 +258,6 @@ fn manifest_from_old_manifest(
             .map(|grammar_name| (grammar_name, Default::default()))
             .collect(),
         language_servers: Default::default(),
-        slash_commands: BTreeMap::default(),
         indexed_docs_providers: BTreeMap::default(),
         snippets: None,
         capabilities: Vec::new(),
@@ -293,7 +284,6 @@ mod tests {
             languages: vec![],
             grammars: BTreeMap::default(),
             language_servers: BTreeMap::default(),
-            slash_commands: BTreeMap::default(),
             indexed_docs_providers: BTreeMap::default(),
             snippets: None,
             capabilities: vec![],

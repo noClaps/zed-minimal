@@ -36,7 +36,6 @@ workspace-members = [
     "perplexity",
     "zed_proto",
     "zed_ruff",
-    "slash_commands_example",
     "zed_snippets",
     "zed_test_extension",
     "zed_toml",

@@ -25,11 +25,10 @@ use wasmtime::{
 #[cfg(test)]
 pub use latest::CodeLabelSpanLiteral;
 pub use latest::{
-    CodeLabel, CodeLabelSpan, Command, DebugAdapterBinary, ExtensionProject, Range, SlashCommand,
+    CodeLabel, CodeLabelSpan, Command, DebugAdapterBinary, ExtensionProject, Range,
     zed::extension::lsp::{
         Completion, CompletionKind, CompletionLabelDetails, InsertTextFormat, Symbol, SymbolKind,
     },
-    zed::extension::slash_command::{SlashCommandArgumentCompletion, SlashCommandOutput},
 };
 pub use since_v0_0_4::LanguageServerConfig;
 
@@ -699,81 +698,6 @@ impl Extension {
                         .collect()
                 })),
             Extension::V0_0_1(_) | Extension::V0_0_4(_) => Ok(Ok(Vec::new())),
-        }
-    }
-
-    pub async fn call_complete_slash_command_argument(
-        &self,
-        store: &mut Store<WasmState>,
-        command: &SlashCommand,
-        arguments: &[String],
-    ) -> Result<Result<Vec<SlashCommandArgumentCompletion>, String>> {
-        match self {
-            Extension::V0_6_0(ext) => {
-                ext.call_complete_slash_command_argument(store, command, arguments)
-                    .await
-            }
-            Extension::V0_5_0(ext) => {
-                ext.call_complete_slash_command_argument(store, command, arguments)
-                    .await
-            }
-            Extension::V0_4_0(ext) => {
-                ext.call_complete_slash_command_argument(store, command, arguments)
-                    .await
-            }
-            Extension::V0_3_0(ext) => {
-                ext.call_complete_slash_command_argument(store, command, arguments)
-                    .await
-            }
-            Extension::V0_2_0(ext) => {
-                ext.call_complete_slash_command_argument(store, command, arguments)
-                    .await
-            }
-            Extension::V0_1_0(ext) => {
-                ext.call_complete_slash_command_argument(store, command, arguments)
-                    .await
-            }
-            Extension::V0_0_1(_) | Extension::V0_0_4(_) | Extension::V0_0_6(_) => {
-                Ok(Ok(Vec::new()))
-            }
-        }
-    }
-
-    pub async fn call_run_slash_command(
-        &self,
-        store: &mut Store<WasmState>,
-        command: &SlashCommand,
-        arguments: &[String],
-        resource: Option<Resource<Arc<dyn WorktreeDelegate>>>,
-    ) -> Result<Result<SlashCommandOutput, String>> {
-        match self {
-            Extension::V0_6_0(ext) => {
-                ext.call_run_slash_command(store, command, arguments, resource)
-                    .await
-            }
-            Extension::V0_5_0(ext) => {
-                ext.call_run_slash_command(store, command, arguments, resource)
-                    .await
-            }
-            Extension::V0_4_0(ext) => {
-                ext.call_run_slash_command(store, command, arguments, resource)
-                    .await
-            }
-            Extension::V0_3_0(ext) => {
-                ext.call_run_slash_command(store, command, arguments, resource)
-                    .await
-            }
-            Extension::V0_2_0(ext) => {
-                ext.call_run_slash_command(store, command, arguments, resource)
-                    .await
-            }
-            Extension::V0_1_0(ext) => {
-                ext.call_run_slash_command(store, command, arguments, resource)
-                    .await
-            }
-            Extension::V0_0_1(_) | Extension::V0_0_4(_) | Extension::V0_0_6(_) => {
-                anyhow::bail!("`run_slash_command` not available prior to v0.1.0");
-            }
         }
     }
 

@@ -196,8 +196,6 @@ pub enum IconName {
     Settings,
     SettingsAlt,
     Shift,
-    Slash,
-    SlashSquare,
     Sliders,
     SlidersVertical,
     Snip,

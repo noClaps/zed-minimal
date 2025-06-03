@@ -16,7 +16,7 @@ use extension::extension_builder::{CompileExtensionOptions, ExtensionBuilder};
 use extension::{
     ExtensionDebugAdapterProviderProxy, ExtensionEvents, ExtensionGrammarProxy, ExtensionHostProxy,
     ExtensionIndexedDocsProviderProxy, ExtensionLanguageProxy, ExtensionLanguageServerProxy,
-    ExtensionSlashCommandProxy, ExtensionSnippetProxy, ExtensionThemeProxy,
+    ExtensionSnippetProxy, ExtensionThemeProxy,
 };
 use fs::{Fs, RemoveOptions};
 use futures::{
@@ -1298,21 +1298,6 @@ impl ExtensionStore {
                                 language.clone(),
                             );
                         }
-                    }
-
-                    for (slash_command_name, slash_command) in &manifest.slash_commands {
-                        this.proxy.register_slash_command(
-                            extension.clone(),
-                            extension::SlashCommand {
-                                name: slash_command_name.to_string(),
-                                description: slash_command.description.to_string(),
-                                // We don't currently expose this as a configurable option, as it currently drives
-                                // the `menu_text` on the `SlashCommand` trait, which is not used for slash commands
-                                // defined in extensions, as they are not able to be added to the menu.
-                                tooltip_text: String::new(),
-                                requires_argument: slash_command.requires_argument,
-                            },
-                        );
                     }
 
                     for (provider_id, _provider) in &manifest.indexed_docs_providers {

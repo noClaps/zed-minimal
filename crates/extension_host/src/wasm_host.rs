@@ -5,8 +5,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use extension::{
     CodeLabel, Command, Completion, DebugAdapterBinary, DebugTaskDefinition, ExtensionHostProxy,
-    KeyValueStoreDelegate, SlashCommand, SlashCommandArgumentCompletion, SlashCommandOutput,
-    Symbol, WorktreeDelegate,
+    KeyValueStoreDelegate, Symbol, WorktreeDelegate,
 };
 use fs::{Fs, normalize_path};
 use futures::future::LocalBoxFuture;
@@ -240,51 +239,6 @@ impl extension::Extension for WasmExtension {
                     .into_iter()
                     .map(|label| label.map(Into::into))
                     .collect())
-            }
-            .boxed()
-        })
-        .await
-    }
-
-    async fn complete_slash_command_argument(
-        &self,
-        command: SlashCommand,
-        arguments: Vec<String>,
-    ) -> Result<Vec<SlashCommandArgumentCompletion>> {
-        self.call(|extension, store| {
-            async move {
-                let completions = extension
-                    .call_complete_slash_command_argument(store, &command.into(), &arguments)
-                    .await?
-                    .map_err(|err| anyhow!("{err}"))?;
-
-                Ok(completions.into_iter().map(Into::into).collect())
-            }
-            .boxed()
-        })
-        .await
-    }
-
-    async fn run_slash_command(
-        &self,
-        command: SlashCommand,
-        arguments: Vec<String>,
-        delegate: Option<Arc<dyn WorktreeDelegate>>,
-    ) -> Result<SlashCommandOutput> {
-        self.call(|extension, store| {
-            async move {
-                let resource = if let Some(delegate) = delegate {
-                    Some(store.data_mut().table().push(delegate)?)
-                } else {
-                    None
-                };
-
-                let output = extension
-                    .call_run_slash_command(store, &command.into(), &arguments, resource)
-                    .await?
-                    .map_err(|err| anyhow!("{err}"))?;
-
-                Ok(output.into())
             }
             .boxed()
         })
