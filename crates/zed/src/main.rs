@@ -553,6 +553,7 @@ Error: Running Zed as root or via sudo is unsupported.
         settings_ui::init(cx);
         extensions_ui::init(cx);
         inspector_ui::init(app_state.clone(), cx);
+        title_bar::init(cx);
 
         cx.observe_global::<SettingsStore>({
             let fs = fs.clone();
