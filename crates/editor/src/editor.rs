@@ -121,7 +121,7 @@ use markdown::Markdown;
 use mouse_context_menu::MouseContextMenu;
 use persistence::DB;
 use project::{
-    BreakpointWithPosition, ProjectPath,
+    BreakpointWithPosition, CompletionResponse, ProjectPath,
     debugger::{
         breakpoint_store::{
             BreakpointEditAction, BreakpointSessionState, BreakpointState, BreakpointStore,
@@ -984,7 +984,7 @@ pub struct Editor {
     context_menu: RefCell<Option<CodeContextMenu>>,
     context_menu_options: Option<ContextMenuOptions>,
     mouse_context_menu: Option<MouseContextMenu>,
-    completion_tasks: Vec<(CompletionId, Task<Option<()>>)>,
+    completion_tasks: Vec<(CompletionId, Task<()>)>,
     inline_blame_popover: Option<InlineBlamePopover>,
     signature_help_state: SignatureHelpState,
     auto_signature_help: Option<bool>,
@@ -1196,7 +1196,7 @@ impl Default for SelectionHistoryMode {
 
 struct DeferredSelectionEffectsState {
     changed: bool,
-    show_completions: bool,
+    should_update_completions: bool,
     autoscroll: Option<Autoscroll>,
     old_cursor_position: Anchor,
     history_entry: SelectionHistoryEntry,
@@ -2631,7 +2631,7 @@ impl Editor {
         &mut self,
         local: bool,
         old_cursor_position: &Anchor,
-        show_completions: bool,
+        should_update_completions: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -2694,14 +2694,7 @@ impl Editor {
 
         if local {
             let new_cursor_position = self.selections.newest_anchor().head();
-            let mut context_menu = self.context_menu.borrow_mut();
-            let completion_menu = match context_menu.as_ref() {
-                Some(CodeContextMenu::Completions(menu)) => Some(menu),
-                _ => {
-                    *context_menu = None;
-                    None
-                }
-            };
+
             if let Some(buffer_id) = new_cursor_position.buffer_id {
                 if !self.registered_buffers.contains_key(&buffer_id) {
                     if let Some(project) = self.project.as_ref() {
@@ -2718,50 +2711,40 @@ impl Editor {
                 }
             }
 
-            if let Some(completion_menu) = completion_menu {
-                let cursor_position = new_cursor_position.to_offset(buffer);
-                let (word_range, kind) =
-                    buffer.surrounding_word(completion_menu.initial_position, true);
-                if kind == Some(CharKind::Word)
-                    && word_range.to_inclusive().contains(&cursor_position)
-                {
-                    let mut completion_menu = completion_menu.clone();
-                    drop(context_menu);
-
-                    let query = Self::completion_query(buffer, cursor_position);
-                    let completion_provider = self.completion_provider.clone();
-                    cx.spawn_in(window, async move |this, cx| {
-                        completion_menu
-                            .filter(query.as_deref(), completion_provider, this.clone(), cx)
-                            .await;
-
-                        this.update(cx, |this, cx| {
-                            let mut context_menu = this.context_menu.borrow_mut();
-                            let Some(CodeContextMenu::Completions(menu)) = context_menu.as_ref()
-                            else {
-                                return;
-                            };
-
-                            if menu.id > completion_menu.id {
-                                return;
-                            }
-
-                            *context_menu = Some(CodeContextMenu::Completions(completion_menu));
-                            drop(context_menu);
-                            cx.notify();
-                        })
-                    })
-                    .detach();
-
-                    if show_completions {
-                        self.show_completions(&ShowCompletions { trigger: None }, window, cx);
-                    }
-                } else {
-                    drop(context_menu);
-                    self.hide_context_menu(window, cx);
+            let mut context_menu = self.context_menu.borrow_mut();
+            let completion_menu = match context_menu.as_ref() {
+                Some(CodeContextMenu::Completions(menu)) => Some(menu),
+                Some(CodeContextMenu::CodeActions(_)) => {
+                    *context_menu = None;
+                    None
                 }
-            } else {
-                drop(context_menu);
+                None => None,
+            };
+            let completion_position = completion_menu.map(|menu| menu.initial_position);
+            drop(context_menu);
+
+            if should_update_completions {
+                if let Some(completion_position) = completion_position {
+                    let new_cursor_offset = new_cursor_position.to_offset(buffer);
+                    let position_matches =
+                        new_cursor_offset == completion_position.to_offset(buffer);
+                    let continue_showing = if position_matches {
+                        let (word_range, kind) = buffer.surrounding_word(new_cursor_offset, true);
+                        if let Some(CharKind::Word) = kind {
+                            word_range.start < new_cursor_offset
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    if continue_showing {
+                        self.show_completions(&ShowCompletions { trigger: None }, window, cx);
+                    } else {
+                        self.hide_context_menu(window, cx);
+                    }
+                }
             }
 
             hide_hover(self, cx);
@@ -2955,7 +2938,7 @@ impl Editor {
         self.change_selections_inner(true, autoscroll, window, cx, change)
     }
 
-    pub(crate) fn change_selections_without_showing_completions<R>(
+    pub(crate) fn change_selections_without_updating_completions<R>(
         &mut self,
         autoscroll: Option<Autoscroll>,
         window: &mut Window,
@@ -2967,7 +2950,7 @@ impl Editor {
 
     fn change_selections_inner<R>(
         &mut self,
-        show_completions: bool,
+        should_update_completions: bool,
         autoscroll: Option<Autoscroll>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -2975,14 +2958,14 @@ impl Editor {
     ) -> R {
         if let Some(state) = &mut self.deferred_selection_effects_state {
             state.autoscroll = autoscroll.or(state.autoscroll);
-            state.show_completions = show_completions;
+            state.should_update_completions = should_update_completions;
             let (changed, result) = self.selections.change_with(cx, change);
             state.changed |= changed;
             return result;
         }
         let mut state = DeferredSelectionEffectsState {
             changed: false,
-            show_completions,
+            should_update_completions,
             autoscroll,
             old_cursor_position: self.selections.newest_anchor().head(),
             history_entry: SelectionHistoryEntry {
@@ -3042,7 +3025,7 @@ impl Editor {
             self.selections_did_change(
                 true,
                 &old_cursor_position,
-                state.show_completions,
+                state.should_update_completions,
                 window,
                 cx,
             );
@@ -3953,7 +3936,7 @@ impl Editor {
             }
 
             let had_active_inline_completion = this.has_active_inline_completion();
-            this.change_selections_without_showing_completions(
+            this.change_selections_without_updating_completions(
                 Some(Autoscroll::fit()),
                 window,
                 cx,
@@ -4999,7 +4982,7 @@ impl Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_completions_menu(true, None, window, cx);
+        self.open_or_update_completions_menu(true, None, window, cx);
     }
 
     pub fn show_completions(
@@ -5008,10 +4991,10 @@ impl Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_completions_menu(false, options.trigger.as_deref(), window, cx);
+        self.open_or_update_completions_menu(false, options.trigger.as_deref(), window, cx);
     }
 
-    fn open_completions_menu(
+    fn open_or_update_completions_menu(
         &mut self,
         ignore_completion_provider: bool,
         trigger: Option<&str>,
@@ -5019,9 +5002,6 @@ impl Editor {
         cx: &mut Context<Self>,
     ) {
         if self.pending_rename.is_some() {
-            return;
-        }
-        if !self.snippet_stack.is_empty() && self.context_menu.borrow().as_ref().is_some() {
             return;
         }
 
@@ -5036,11 +5016,52 @@ impl Editor {
                 return;
             };
         let buffer_snapshot = buffer.read(cx).snapshot();
-        let show_completion_documentation = buffer_snapshot
-            .settings_at(buffer_position, cx)
-            .show_completion_documentation;
 
-        let query = Self::completion_query(&self.buffer.read(cx).read(cx), position);
+        let query: Option<Arc<String>> =
+            Self::completion_query(&self.buffer.read(cx).read(cx), position)
+                .map(|query| query.into());
+
+        let provider = if ignore_completion_provider {
+            None
+        } else {
+            self.completion_provider.clone()
+        };
+
+        let sort_completions = provider
+            .as_ref()
+            .map_or(false, |provider| provider.sort_completions());
+
+        let filter_completions = provider
+            .as_ref()
+            .map_or(true, |provider| provider.filter_completions());
+
+        // When `is_incomplete` is false, can filter completions instead of re-querying when the
+        // current query is a suffix of the initial query.
+        if let Some(CodeContextMenu::Completions(menu)) = self.context_menu.borrow_mut().as_mut() {
+            if !menu.is_incomplete && filter_completions {
+                // If the new query is a suffix of the old query (typing more characters) and
+                // the previous result was complete, the existing completions can be filtered.
+                //
+                // Note that this is always true for snippet completions.
+                let query_matches = match (&menu.initial_query, &query) {
+                    (Some(initial_query), Some(query)) => query.starts_with(initial_query.as_ref()),
+                    (None, _) => true,
+                    _ => false,
+                };
+                if query_matches {
+                    let position_matches = if menu.initial_position == position {
+                        true
+                    } else {
+                        let snapshot = self.buffer.read(cx).read(cx);
+                        menu.initial_position.to_offset(&snapshot) == position.to_offset(&snapshot)
+                    };
+                    if position_matches {
+                        menu.filter(query.clone(), provider.clone(), window, cx);
+                        return;
+                    }
+                }
+            }
+        };
 
         let trigger_kind = match trigger {
             Some(trigger) if buffer.read(cx).completion_triggers().contains(trigger) => {
@@ -5059,14 +5080,14 @@ impl Editor {
             trigger_kind,
         };
 
-        let (old_range, word_kind) = buffer_snapshot.surrounding_word(buffer_position);
-        let (old_range, word_to_exclude) = if word_kind == Some(CharKind::Word) {
+        let (replace_range, word_kind) = buffer_snapshot.surrounding_word(buffer_position);
+        let (replace_range, word_to_exclude) = if word_kind == Some(CharKind::Word) {
             let word_to_exclude = buffer_snapshot
-                .text_for_range(old_range.clone())
+                .text_for_range(replace_range.clone())
                 .collect::<String>();
             (
-                buffer_snapshot.anchor_before(old_range.start)
-                    ..buffer_snapshot.anchor_after(old_range.end),
+                buffer_snapshot.anchor_before(replace_range.start)
+                    ..buffer_snapshot.anchor_after(replace_range.end),
                 Some(word_to_exclude),
             )
         } else {
@@ -5079,6 +5100,10 @@ impl Editor {
 
         let completion_settings =
             language_settings(language.clone(), buffer_snapshot.file(), cx).completions;
+
+        let show_completion_documentation = buffer_snapshot
+            .settings_at(buffer_position, cx)
+            .show_completion_documentation;
 
         // The document can be large, so stay in reasonable bounds when searching for words,
         // otherwise completion pop-up might be slow to appear.
@@ -5095,18 +5120,13 @@ impl Editor {
         let word_search_range = buffer_snapshot.point_to_offset(min_word_search)
             ..buffer_snapshot.point_to_offset(max_word_search);
 
-        let provider = if ignore_completion_provider {
-            None
-        } else {
-            self.completion_provider.clone()
-        };
         let skip_digits = query
             .as_ref()
             .map_or(true, |query| !query.chars().any(|c| c.is_digit(10)));
 
-        let (mut words, provided_completions) = match &provider {
+        let (mut words, provider_responses) = match &provider {
             Some(provider) => {
-                let completions = provider.completions(
+                let provider_responses = provider.completions(
                     position.excerpt_id,
                     &buffer,
                     buffer_position,
@@ -5127,7 +5147,7 @@ impl Editor {
                         }),
                 };
 
-                (words, completions)
+                (words, provider_responses)
             }
             None => (
                 cx.background_spawn(async move {
@@ -5137,137 +5157,165 @@ impl Editor {
                         skip_digits,
                     })
                 }),
-                Task::ready(Ok(None)),
+                Task::ready(Ok(Vec::new())),
             ),
         };
-
-        let sort_completions = provider
-            .as_ref()
-            .map_or(false, |provider| provider.sort_completions());
-
-        let filter_completions = provider
-            .as_ref()
-            .map_or(true, |provider| provider.filter_completions());
 
         let snippet_sort_order = EditorSettings::get_global(cx).snippet_sort_order;
 
         let id = post_inc(&mut self.next_completion_id);
         let task = cx.spawn_in(window, async move |editor, cx| {
-            async move {
-                editor.update(cx, |this, _| {
-                    this.completion_tasks.retain(|(task_id, _)| *task_id >= id);
-                })?;
+            let Ok(()) = editor.update(cx, |this, _| {
+                this.completion_tasks.retain(|(task_id, _)| *task_id >= id);
+            }) else {
+                return;
+            };
 
-                let mut completions = Vec::new();
-                if let Some(provided_completions) = provided_completions.await.log_err().flatten() {
-                    completions.extend(provided_completions);
+            // TODO: Ideally completions from different sources would be selectively re-queried, so
+            // that having one source with `is_incomplete: true` doesn't cause all to be re-queried.
+            let mut completions = Vec::new();
+            let mut is_incomplete = false;
+            if let Some(provider_responses) = provider_responses.await.log_err() {
+                if !provider_responses.is_empty() {
+                    for response in provider_responses {
+                        completions.extend(response.completions);
+                        is_incomplete = is_incomplete || response.is_incomplete;
+                    }
                     if completion_settings.words == WordsCompletionMode::Fallback {
                         words = Task::ready(BTreeMap::default());
                     }
                 }
+            }
 
-                let mut words = words.await;
-                if let Some(word_to_exclude) = &word_to_exclude {
-                    words.remove(word_to_exclude);
-                }
-                for lsp_completion in &completions {
-                    words.remove(&lsp_completion.new_text);
-                }
-                completions.extend(words.into_iter().map(|(word, word_range)| Completion {
-                    replace_range: old_range.clone(),
-                    new_text: word.clone(),
-                    label: CodeLabel::plain(word, None),
-                    icon_path: None,
-                    documentation: None,
-                    source: CompletionSource::BufferWord {
-                        word_range,
-                        resolved: false,
-                    },
-                    insert_text_mode: Some(InsertTextMode::AS_IS),
-                    confirm: None,
-                }));
+            let mut words = words.await;
+            if let Some(word_to_exclude) = &word_to_exclude {
+                words.remove(word_to_exclude);
+            }
+            for lsp_completion in &completions {
+                words.remove(&lsp_completion.new_text);
+            }
+            completions.extend(words.into_iter().map(|(word, word_range)| Completion {
+                replace_range: replace_range.clone(),
+                new_text: word.clone(),
+                label: CodeLabel::plain(word, None),
+                icon_path: None,
+                documentation: None,
+                source: CompletionSource::BufferWord {
+                    word_range,
+                    resolved: false,
+                },
+                insert_text_mode: Some(InsertTextMode::AS_IS),
+                confirm: None,
+            }));
 
-                let menu = if completions.is_empty() {
-                    None
-                } else {
-                    let mut menu = editor.update(cx, |editor, cx| {
-                        let languages = editor
-                            .workspace
-                            .as_ref()
-                            .and_then(|(workspace, _)| workspace.upgrade())
-                            .map(|workspace| workspace.read(cx).app_state().languages.clone());
-                        CompletionsMenu::new(
-                            id,
-                            sort_completions,
-                            show_completion_documentation,
-                            ignore_completion_provider,
-                            position,
-                            buffer.clone(),
-                            completions.into(),
-                            snippet_sort_order,
-                            languages,
-                            language,
-                            cx,
-                        )
-                    })?;
-
-                    menu.filter(
-                        if filter_completions {
-                            query.as_deref()
-                        } else {
-                            None
-                        },
-                        provider,
-                        editor.clone(),
+            let menu = if completions.is_empty() {
+                None
+            } else {
+                let Ok((mut menu, matches_task)) = editor.update(cx, |editor, cx| {
+                    let languages = editor
+                        .workspace
+                        .as_ref()
+                        .and_then(|(workspace, _)| workspace.upgrade())
+                        .map(|workspace| workspace.read(cx).app_state().languages.clone());
+                    let menu = CompletionsMenu::new(
+                        id,
+                        sort_completions,
+                        show_completion_documentation,
+                        ignore_completion_provider,
+                        position,
+                        query.clone(),
+                        is_incomplete,
+                        buffer.clone(),
+                        completions.into(),
+                        snippet_sort_order,
+                        languages,
+                        language,
                         cx,
-                    )
-                    .await;
+                    );
 
-                    menu.visible().then_some(menu)
+                    let query = if filter_completions { query } else { None };
+                    let matches_task = if let Some(query) = query {
+                        menu.do_async_filtering(query, cx)
+                    } else {
+                        Task::ready(menu.unfiltered_matches())
+                    };
+                    (menu, matches_task)
+                }) else {
+                    return;
                 };
 
-                editor.update_in(cx, |editor, window, cx| {
+                let matches = matches_task.await;
+
+                let Ok(()) = editor.update_in(cx, |editor, window, cx| {
+                    // Newer menu already set, so exit.
                     match editor.context_menu.borrow().as_ref() {
-                        None => {}
                         Some(CodeContextMenu::Completions(prev_menu)) => {
                             if prev_menu.id > id {
                                 return;
                             }
                         }
-                        _ => return,
+                        _ => {}
+                    };
+
+                    // Only valid to take prev_menu because it the new menu is immediately set
+                    // below, or the menu is hidden.
+                    match editor.context_menu.borrow_mut().take() {
+                        Some(CodeContextMenu::Completions(prev_menu)) => {
+                            let position_matches =
+                                if prev_menu.initial_position == menu.initial_position {
+                                    true
+                                } else {
+                                    let snapshot = editor.buffer.read(cx).read(cx);
+                                    prev_menu.initial_position.to_offset(&snapshot)
+                                        == menu.initial_position.to_offset(&snapshot)
+                                };
+                            if position_matches {
+                                // Preserve markdown cache before `set_filter_results` because it will
+                                // try to populate the documentation cache.
+                                menu.preserve_markdown_cache(prev_menu);
+                            }
+                        }
+                        _ => {}
+                    };
+
+                    menu.set_filter_results(matches, provider, window, cx);
+                }) else {
+                    return;
+                };
+
+                menu.visible().then_some(menu)
+            };
+
+            editor
+                .update_in(cx, |editor, window, cx| {
+                    if editor.focus_handle.is_focused(window) {
+                        if let Some(menu) = menu {
+                            *editor.context_menu.borrow_mut() =
+                                Some(CodeContextMenu::Completions(menu));
+
+                            crate::hover_popover::hide_hover(editor, cx);
+                            if editor.show_edit_predictions_in_menu() {
+                                editor.update_visible_inline_completion(window, cx);
+                            } else {
+                                editor.discard_inline_completion(false, cx);
+                            }
+
+                            cx.notify();
+                            return;
+                        }
                     }
 
-                    if editor.focus_handle.is_focused(window) && menu.is_some() {
-                        let mut menu = menu.unwrap();
-                        menu.resolve_visible_completions(editor.completion_provider.as_deref(), cx);
-                        crate::hover_popover::hide_hover(editor, cx);
-                        *editor.context_menu.borrow_mut() =
-                            Some(CodeContextMenu::Completions(menu));
-
-                        if editor.show_edit_predictions_in_menu() {
-                            editor.update_visible_inline_completion(window, cx);
-                        } else {
-                            editor.discard_inline_completion(false, cx);
-                        }
-
-                        cx.notify();
-                    } else if editor.completion_tasks.len() <= 1 {
-                        // If there are no more completion tasks and the last menu was
-                        // empty, we should hide it.
+                    if editor.completion_tasks.len() <= 1 {
+                        // If there are no more completion tasks and the last menu was empty, we should hide it.
                         let was_hidden = editor.hide_context_menu(window, cx).is_none();
-                        // If it was already hidden and we don't show inline
-                        // completions in the menu, we should also show the
-                        // inline-completion when available.
+                        // If it was already hidden and we don't show inline completions in the menu, we should
+                        // also show the inline-completion when available.
                         if was_hidden && editor.show_edit_predictions_in_menu() {
                             editor.update_visible_inline_completion(window, cx);
                         }
                     }
-                })?;
-
-                anyhow::Ok(())
-            }
-            .log_err()
-            .await
+                })
+                .ok();
         });
 
         self.completion_tasks.push((id, task));
@@ -5287,17 +5335,16 @@ impl Editor {
     pub fn with_completions_menu_matching_id<R>(
         &self,
         id: CompletionId,
-        on_absent: impl FnOnce() -> R,
-        on_match: impl FnOnce(&mut CompletionsMenu) -> R,
+        f: impl FnOnce(Option<&mut CompletionsMenu>) -> R,
     ) -> R {
         let mut context_menu = self.context_menu.borrow_mut();
         let Some(CodeContextMenu::Completions(completions_menu)) = &mut *context_menu else {
-            return on_absent();
+            return f(None);
         };
         if completions_menu.id != id {
-            return on_absent();
+            return f(None);
         }
-        on_match(completions_menu)
+        f(Some(completions_menu))
     }
 
     pub fn confirm_completion(
@@ -5370,7 +5417,7 @@ impl Editor {
             .clone();
         cx.stop_propagation();
 
-        let buffer_handle = completions_menu.buffer;
+        let buffer_handle = completions_menu.buffer.clone();
 
         let CompletionEdit {
             new_text,
@@ -5458,9 +5505,18 @@ impl Editor {
             }
         }
 
+        let mut common_prefix_len = 0;
+        for (a, b) in old_text.chars().zip(new_text.chars()) {
+            if a == b {
+                common_prefix_len += a.len_utf8();
+            } else {
+                break;
+            }
+        }
+
         cx.emit(EditorEvent::InputHandled {
             utf16_range_to_replace: None,
-            text: new_text.clone().into(),
+            text: new_text[common_prefix_len..].into(),
         });
 
         self.transact(window, cx, |this, window, cx| {
@@ -8804,7 +8860,10 @@ impl Editor {
                 .iter()
                 .cloned()
                 .map(|range| (range, snippet_text.clone()));
-            buffer.edit(edits, Some(AutoindentMode::EachLine), cx);
+            let autoindent_mode = AutoindentMode::Block {
+                original_indent_columns: Vec::new(),
+            };
+            buffer.edit(edits, Some(autoindent_mode), cx);
 
             let snapshot = &*buffer.read(cx);
             let snippet = &snippet;
@@ -8833,7 +8892,9 @@ impl Editor {
                             })
                         })
                         .collect::<Vec<_>>();
-                    tabstop_ranges.sort_unstable_by(|a, b| a.start.cmp(&b.start, snapshot));
+                    // Sort in reverse order so that the first range is the newest created
+                    // selection. Completions will use it and autoscroll will prioritize it.
+                    tabstop_ranges.sort_unstable_by(|a, b| b.start.cmp(&a.start, snapshot));
 
                     Tabstop {
                         is_end_tabstop,
@@ -8961,7 +9022,7 @@ impl Editor {
             }
             if let Some(current_ranges) = snippet.ranges.get(snippet.active_index) {
                 self.change_selections(Some(Autoscroll::fit()), window, cx, |s| {
-                    s.select_anchor_ranges(current_ranges.iter().cloned())
+                    s.select_ranges(current_ranges.iter().cloned())
                 });
 
                 if let Some(choices) = &snippet.choices[snippet.active_index] {
@@ -20108,7 +20169,7 @@ pub trait CompletionProvider {
         trigger: CompletionContext,
         window: &mut Window,
         cx: &mut Context<Editor>,
-    ) -> Task<Result<Option<Vec<Completion>>>>;
+    ) -> Task<Result<Vec<CompletionResponse>>>;
 
     fn resolve_completions(
         &self,
@@ -20217,7 +20278,7 @@ fn snippet_completions(
     buffer: &Entity<Buffer>,
     buffer_position: text::Anchor,
     cx: &mut App,
-) -> Task<Result<Vec<Completion>>> {
+) -> Task<Result<CompletionResponse>> {
     let languages = buffer.read(cx).languages_at(buffer_position);
     let snippet_store = project.snippets().read(cx);
 
@@ -20236,7 +20297,10 @@ fn snippet_completions(
         .collect();
 
     if scopes.is_empty() {
-        return Task::ready(Ok(vec![]));
+        return Task::ready(Ok(CompletionResponse {
+            completions: vec![],
+            is_incomplete: false,
+        }));
     }
 
     let snapshot = buffer.read(cx).text_snapshot();
@@ -20246,7 +20310,8 @@ fn snippet_completions(
     let executor = cx.background_executor().clone();
 
     cx.background_spawn(async move {
-        let mut all_results: Vec<Completion> = Vec::new();
+        let mut is_incomplete = false;
+        let mut completions: Vec<Completion> = Vec::new();
         for (scope, snippets) in scopes.into_iter() {
             let classifier = CharClassifier::new(Some(scope)).for_completion(true);
             let mut last_word = chars
@@ -20256,7 +20321,10 @@ fn snippet_completions(
             last_word = last_word.chars().rev().collect();
 
             if last_word.is_empty() {
-                return Ok(vec![]);
+                return Ok(CompletionResponse {
+                    completions: vec![],
+                    is_incomplete: true,
+                });
             }
 
             let as_offset = text::ToOffset::to_offset(&buffer_position, &snapshot);
@@ -20277,15 +20345,20 @@ fn snippet_completions(
                 })
                 .collect::<Vec<StringMatchCandidate>>();
 
+            const MAX_RESULTS: usize = 100;
             let mut matches = fuzzy::match_strings(
                 &candidates,
                 &last_word,
                 last_word.chars().any(|c| c.is_uppercase()),
-                100,
+                MAX_RESULTS,
                 &Default::default(),
                 executor.clone(),
             )
             .await;
+
+            if matches.len() >= MAX_RESULTS {
+                is_incomplete = true;
+            }
 
             // Remove all candidates where the query's start does not match the start of any word in the candidate
             if let Some(query_start) = last_word.chars().next() {
@@ -20306,76 +20379,72 @@ fn snippet_completions(
                 .map(|m| m.string)
                 .collect::<HashSet<_>>();
 
-            let mut result: Vec<Completion> = snippets
-                .iter()
-                .filter_map(|snippet| {
-                    let matching_prefix = snippet
-                        .prefix
-                        .iter()
-                        .find(|prefix| matched_strings.contains(*prefix))?;
-                    let start = as_offset - last_word.len();
-                    let start = snapshot.anchor_before(start);
-                    let range = start..buffer_position;
-                    let lsp_start = to_lsp(&start);
-                    let lsp_range = lsp::Range {
-                        start: lsp_start,
-                        end: lsp_end,
-                    };
-                    Some(Completion {
-                        replace_range: range,
-                        new_text: snippet.body.clone(),
-                        source: CompletionSource::Lsp {
-                            insert_range: None,
-                            server_id: LanguageServerId(usize::MAX),
-                            resolved: true,
-                            lsp_completion: Box::new(lsp::CompletionItem {
-                                label: snippet.prefix.first().unwrap().clone(),
-                                kind: Some(CompletionItemKind::SNIPPET),
-                                label_details: snippet.description.as_ref().map(|description| {
-                                    lsp::CompletionItemLabelDetails {
-                                        detail: Some(description.clone()),
-                                        description: None,
-                                    }
-                                }),
-                                insert_text_format: Some(InsertTextFormat::SNIPPET),
-                                text_edit: Some(lsp::CompletionTextEdit::InsertAndReplace(
-                                    lsp::InsertReplaceEdit {
-                                        new_text: snippet.body.clone(),
-                                        insert: lsp_range,
-                                        replace: lsp_range,
-                                    },
-                                )),
-                                filter_text: Some(snippet.body.clone()),
-                                sort_text: Some(char::MAX.to_string()),
-                                ..lsp::CompletionItem::default()
+            completions.extend(snippets.iter().filter_map(|snippet| {
+                let matching_prefix = snippet
+                    .prefix
+                    .iter()
+                    .find(|prefix| matched_strings.contains(*prefix))?;
+                let start = as_offset - last_word.len();
+                let start = snapshot.anchor_before(start);
+                let range = start..buffer_position;
+                let lsp_start = to_lsp(&start);
+                let lsp_range = lsp::Range {
+                    start: lsp_start,
+                    end: lsp_end,
+                };
+                Some(Completion {
+                    replace_range: range,
+                    new_text: snippet.body.clone(),
+                    source: CompletionSource::Lsp {
+                        insert_range: None,
+                        server_id: LanguageServerId(usize::MAX),
+                        resolved: true,
+                        lsp_completion: Box::new(lsp::CompletionItem {
+                            label: snippet.prefix.first().unwrap().clone(),
+                            kind: Some(CompletionItemKind::SNIPPET),
+                            label_details: snippet.description.as_ref().map(|description| {
+                                lsp::CompletionItemLabelDetails {
+                                    detail: Some(description.clone()),
+                                    description: None,
+                                }
                             }),
-                            lsp_defaults: None,
-                        },
-                        label: CodeLabel {
-                            text: matching_prefix.clone(),
-                            runs: Vec::new(),
-                            filter_range: 0..matching_prefix.len(),
-                        },
-                        icon_path: None,
-                        documentation: Some(
-                            CompletionDocumentation::SingleLineAndMultiLinePlainText {
-                                single_line: snippet.name.clone().into(),
-                                plain_text: snippet
-                                    .description
-                                    .clone()
-                                    .map(|description| description.into()),
-                            },
-                        ),
-                        insert_text_mode: None,
-                        confirm: None,
-                    })
+                            insert_text_format: Some(InsertTextFormat::SNIPPET),
+                            text_edit: Some(lsp::CompletionTextEdit::InsertAndReplace(
+                                lsp::InsertReplaceEdit {
+                                    new_text: snippet.body.clone(),
+                                    insert: lsp_range,
+                                    replace: lsp_range,
+                                },
+                            )),
+                            filter_text: Some(snippet.body.clone()),
+                            sort_text: Some(char::MAX.to_string()),
+                            ..lsp::CompletionItem::default()
+                        }),
+                        lsp_defaults: None,
+                    },
+                    label: CodeLabel {
+                        text: matching_prefix.clone(),
+                        runs: Vec::new(),
+                        filter_range: 0..matching_prefix.len(),
+                    },
+                    icon_path: None,
+                    documentation: Some(CompletionDocumentation::SingleLineAndMultiLinePlainText {
+                        single_line: snippet.name.clone().into(),
+                        plain_text: snippet
+                            .description
+                            .clone()
+                            .map(|description| description.into()),
+                    }),
+                    insert_text_mode: None,
+                    confirm: None,
                 })
-                .collect();
-
-            all_results.append(&mut result);
+            }))
         }
 
-        Ok(all_results)
+        Ok(CompletionResponse {
+            completions,
+            is_incomplete,
+        })
     })
 }
 
@@ -20388,25 +20457,17 @@ impl CompletionProvider for Entity<Project> {
         options: CompletionContext,
         _window: &mut Window,
         cx: &mut Context<Editor>,
-    ) -> Task<Result<Option<Vec<Completion>>>> {
+    ) -> Task<Result<Vec<CompletionResponse>>> {
         self.update(cx, |project, cx| {
             let snippets = snippet_completions(project, buffer, buffer_position, cx);
             let project_completions = project.completions(buffer, buffer_position, options, cx);
             cx.background_spawn(async move {
-                let snippets_completions = snippets.await?;
-                match project_completions.await? {
-                    Some(mut completions) => {
-                        completions.extend(snippets_completions);
-                        Ok(Some(completions))
-                    }
-                    None => {
-                        if snippets_completions.is_empty() {
-                            Ok(None)
-                        } else {
-                            Ok(Some(snippets_completions))
-                        }
-                    }
+                let mut responses = project_completions.await?;
+                let snippets = snippets.await?;
+                if !snippets.completions.is_empty() {
+                    responses.push(snippets);
                 }
+                Ok(responses)
             })
         })
     }

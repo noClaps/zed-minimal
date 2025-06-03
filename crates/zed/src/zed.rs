@@ -47,8 +47,10 @@ use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
     DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings,
-    SettingsStore, initial_debug_tasks_content, initial_project_settings_content,
-    initial_tasks_content, update_settings_file,
+    SettingsStore, SettingsStore, VIM_KEYMAP_PATH, initial_debug_tasks_content,
+    initial_local_debug_tasks_content, initial_project_settings_content,
+    initial_project_settings_content, initial_tasks_content, initial_tasks_content,
+    update_settings_file, update_settings_file,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{self, AtomicBool};
@@ -653,6 +655,14 @@ fn register_actions(
             open_settings_file(
                 paths::tasks_file(),
                 || settings::initial_tasks_content().as_ref().into(),
+                window,
+                cx,
+            );
+        })
+        .register_action(move |_: &mut Workspace, _: &OpenDebugTasks, window, cx| {
+            open_settings_file(
+                paths::debug_scenarios_file(),
+                || settings::initial_debug_tasks_content().as_ref().into(),
                 window,
                 cx,
             );
@@ -1397,7 +1407,7 @@ fn open_project_debug_tasks_file(
     open_local_file(
         workspace,
         local_debug_file_relative_path(),
-        initial_debug_tasks_content(),
+        initial_local_debug_tasks_content(),
         window,
         cx,
     )
