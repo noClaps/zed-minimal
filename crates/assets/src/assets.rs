@@ -6,7 +6,6 @@ use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
 #[folder = "../../assets"]
-#[include = "fonts/**/*"]
 #[include = "icons/**/*"]
 #[include = "images/**/*"]
 #[include = "themes/**/*"]
@@ -51,15 +50,5 @@ impl Assets {
         }
 
         cx.text_system().add_fonts(embedded_fonts)
-    }
-
-    pub fn load_test_fonts(&self, cx: &App) {
-        cx.text_system()
-            .add_fonts(vec![
-                self.load("fonts/plex-mono/ZedPlexMono-Regular.ttf")
-                    .unwrap()
-                    .unwrap(),
-            ])
-            .unwrap()
     }
 }

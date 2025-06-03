@@ -3577,7 +3577,6 @@ mod tests {
         let settings = SettingsStore::test(cx);
         cx.set_global(settings);
         theme::init(theme::LoadThemes::JustBase, cx);
-        assets::Assets.load_test_fonts(cx);
     }
 
     impl Block {

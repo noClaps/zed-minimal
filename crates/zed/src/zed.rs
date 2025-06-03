@@ -4072,18 +4072,6 @@ mod tests {
 
     #[gpui::test]
     fn test_bundled_settings_and_themes(cx: &mut App) {
-        cx.text_system()
-            .add_fonts(vec![
-                Assets
-                    .load("fonts/plex-mono/ZedPlexMono-Regular.ttf")
-                    .unwrap()
-                    .unwrap(),
-                Assets
-                    .load("fonts/plex-sans/ZedPlexSans-Regular.ttf")
-                    .unwrap()
-                    .unwrap(),
-            ])
-            .unwrap();
         let themes = ThemeRegistry::default();
         settings::init(cx);
         theme::init(theme::LoadThemes::JustBase, cx);
