@@ -1827,7 +1827,6 @@ mod tests {
     fn test_vscode_import(cx: &mut App) {
         let mut store = SettingsStore::new(cx);
         store.register_setting::<UserSettings>(cx);
-        store.register_setting::<JournalSettings>(cx);
         store.register_setting::<LanguageSettings>(cx);
         store.register_setting::<MultiKeySettings>(cx);
 
@@ -1888,27 +1887,6 @@ mod tests {
                 "user": {
                     "staff": true,
                     "age": 37
-                }
-            }
-            "#
-            .unindent(),
-            cx,
-        );
-
-        // custom enum
-        check_vscode_import(
-            &mut store,
-            r#"{
-                "journal": {
-                "hour_format": "hour12"
-                }
-            }
-            "#
-            .unindent(),
-            r#"{ "time_format": "24" }"#.to_owned(),
-            r#"{
-                "journal": {
-                "hour_format": "hour24"
                 }
             }
             "#
@@ -2089,42 +2067,11 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Deserialize)]
-    struct JournalSettings {
-        pub path: String,
-        pub hour_format: HourFormat,
-    }
-
     #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
     #[serde(rename_all = "snake_case")]
     enum HourFormat {
         Hour12,
         Hour24,
-    }
-
-    #[derive(Clone, Default, Debug, Serialize, Deserialize, JsonSchema)]
-    #[schemars(deny_unknown_fields)]
-    struct JournalSettingsJson {
-        pub path: Option<String>,
-        pub hour_format: Option<HourFormat>,
-    }
-
-    impl Settings for JournalSettings {
-        const KEY: Option<&'static str> = Some("journal");
-
-        type FileContent = JournalSettingsJson;
-
-        fn load(sources: SettingsSources<Self::FileContent>, _: &mut App) -> Result<Self> {
-            sources.json_merge()
-        }
-
-        fn import_from_vscode(vscode: &VsCodeSettings, current: &mut Self::FileContent) {
-            vscode.enum_setting("time_format", &mut current.hour_format, |s| match s {
-                "12" => Some(HourFormat::Hour12),
-                "24" => Some(HourFormat::Hour24),
-                _ => None,
-            });
-        }
     }
 
     #[gpui::test]

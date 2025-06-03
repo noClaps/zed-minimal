@@ -7230,23 +7230,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "journal"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "editor",
- "gpui",
- "log",
- "schemars",
- "serde",
- "settings",
- "shellexpand 2.1.2",
- "workspace",
- "workspace-hack",
-]
-
-[[package]]
 name = "jpeg-decoder"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17340,7 +17323,6 @@ dependencies = [
  "inspector_ui",
  "install_cli",
  "jj_ui",
- "journal",
  "language",
  "language_extension",
  "language_selector",
