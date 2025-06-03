@@ -17,14 +17,6 @@ pub fn run_package_conformity(_args: PackageConformityArgs) -> Result<()> {
     let mut non_workspace_dependencies = BTreeMap::new();
 
     for package in workspace.workspace_packages() {
-        let is_extension = package
-            .manifest_path
-            .parent()
-            .and_then(|parent| parent.parent())
-            .map_or(false, |grandparent_dir| {
-                grandparent_dir.ends_with("extensions")
-            });
-
         let cargo_toml = read_cargo_toml(&package.manifest_path)?;
 
         let is_using_workspace_lints = cargo_toml.lints.map_or(false, |lints| lints.workspace);
@@ -33,11 +25,6 @@ pub fn run_package_conformity(_args: PackageConformityArgs) -> Result<()> {
                 "{package:?} is not using workspace lints",
                 package = package.name
             );
-        }
-
-        // Extensions should not use workspace dependencies.
-        if is_extension || package.name == "zed_extension_api" {
-            continue;
         }
 
         // Ignore `workspace-hack`, as it produces a lot of false positives.

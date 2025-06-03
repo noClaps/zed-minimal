@@ -5,7 +5,6 @@ members = [
     "crates/askpass",
     "crates/assets",
     "crates/auto_update",
-    "crates/auto_update_helper",
     "crates/auto_update_ui",
     "crates/breadcrumbs",
     "crates/buffer_diff",
@@ -25,10 +24,8 @@ members = [
     "crates/debugger_ui",
     "crates/diagnostics",
     "crates/editor",
-    "crates/eval",
     "crates/extension",
     "crates/extension_api",
-    "crates/extension_cli",
     "crates/extension_host",
     "crates/extensions_ui",
     "crates/feature_flags",
@@ -45,12 +42,10 @@ members = [
     "crates/gpui",
     "crates/gpui_macros",
     "crates/gpui_tokio",
-    "crates/html_to_markdown",
     "crates/http_client",
     "crates/http_client_tls",
     "crates/icons",
     "crates/image_viewer",
-    "crates/indexed_docs",
     "crates/inline_completion",
     "crates/inline_completion_button",
     "crates/inspector_ui",
@@ -84,15 +79,11 @@ members = [
     "crates/refineable/derive_refineable",
     "crates/release_channel",
     "crates/remote",
-    "crates/remote_server",
     "crates/repl",
     "crates/reqwest_client",
-    "crates/rich_text",
     "crates/rope",
     "crates/rpc",
-    "crates/schema_generator",
     "crates/search",
-    "crates/semantic_index",
     "crates/semantic_version",
     "crates/session",
     "crates/settings",
@@ -103,8 +94,6 @@ members = [
     "crates/sqlez",
     "crates/sqlez_macros",
     "crates/story",
-    "crates/storybook",
-    "crates/streaming_diff",
     "crates/sum_tree",
     "crates/tab_switcher",
     "crates/task",
@@ -116,7 +105,6 @@ members = [
     "crates/text",
     "crates/theme",
     "crates/theme_extension",
-    "crates/theme_importer",
     "crates/theme_selector",
     "crates/time_format",
     "crates/title_bar",
@@ -134,19 +122,6 @@ members = [
     "crates/zed_actions",
     "crates/zlog",
     "crates/zlog_settings",
-
-    #
-    # Extensions
-    #
-
-    "extensions/emmet",
-    "extensions/glsl",
-    "extensions/html",
-    "extensions/proto",
-    "extensions/ruff",
-    "extensions/snippets",
-    "extensions/test-extension",
-    "extensions/toml",
 
     #
     # Tooling
@@ -172,7 +147,6 @@ ai = { path = "crates/ai" }
 askpass = { path = "crates/askpass" }
 assets = { path = "crates/assets" }
 auto_update = { path = "crates/auto_update" }
-auto_update_helper = { path = "crates/auto_update_helper" }
 auto_update_ui = { path = "crates/auto_update_ui" }
 breadcrumbs = { path = "crates/breadcrumbs" }
 buffer_diff = { path = "crates/buffer_diff" }
@@ -211,12 +185,10 @@ gpui = { path = "crates/gpui", default-features = false, features = [
 ] }
 gpui_macros = { path = "crates/gpui_macros" }
 gpui_tokio = { path = "crates/gpui_tokio" }
-html_to_markdown = { path = "crates/html_to_markdown" }
 http_client = { path = "crates/http_client" }
 http_client_tls = { path = "crates/http_client_tls" }
 icons = { path = "crates/icons" }
 image_viewer = { path = "crates/image_viewer" }
-indexed_docs = { path = "crates/indexed_docs" }
 inline_completion = { path = "crates/inline_completion" }
 inline_completion_button = { path = "crates/inline_completion_button" }
 inspector_ui = { path = "crates/inspector_ui" }
@@ -251,14 +223,11 @@ recent_projects = { path = "crates/recent_projects" }
 refineable = { path = "crates/refineable" }
 release_channel = { path = "crates/release_channel" }
 remote = { path = "crates/remote" }
-remote_server = { path = "crates/remote_server" }
 repl = { path = "crates/repl" }
 reqwest_client = { path = "crates/reqwest_client" }
-rich_text = { path = "crates/rich_text" }
 rope = { path = "crates/rope" }
 rpc = { path = "crates/rpc" }
 search = { path = "crates/search" }
-semantic_index = { path = "crates/semantic_index" }
 semantic_version = { path = "crates/semantic_version" }
 session = { path = "crates/session" }
 settings = { path = "crates/settings" }
@@ -269,8 +238,6 @@ snippets_ui = { path = "crates/snippets_ui" }
 sqlez = { path = "crates/sqlez" }
 sqlez_macros = { path = "crates/sqlez_macros" }
 story = { path = "crates/story" }
-storybook = { path = "crates/storybook" }
-streaming_diff = { path = "crates/streaming_diff" }
 sum_tree = { path = "crates/sum_tree" }
 tab_switcher = { path = "crates/tab_switcher" }
 task = { path = "crates/task" }
@@ -282,7 +249,6 @@ terminal_view = { path = "crates/terminal_view" }
 text = { path = "crates/text" }
 theme = { path = "crates/theme" }
 theme_extension = { path = "crates/theme_extension" }
-theme_importer = { path = "crates/theme_importer" }
 theme_selector = { path = "crates/theme_selector" }
 time_format = { path = "crates/time_format" }
 title_bar = { path = "crates/title_bar" }
@@ -616,7 +582,6 @@ breadcrumbs = { codegen-units = 1 }
 collections = { codegen-units = 1 }
 command_palette = { codegen-units = 1 }
 command_palette_hooks = { codegen-units = 1 }
-extension_cli = { codegen-units = 1 }
 feature_flags = { codegen-units = 1 }
 file_icons = { codegen-units = 1 }
 fsevent = { codegen-units = 1 }
@@ -632,7 +597,6 @@ project_symbols = { codegen-units = 1 }
 refineable = { codegen-units = 1 }
 release_channel = { codegen-units = 1 }
 reqwest_client = { codegen-units = 1 }
-rich_text = { codegen-units = 1 }
 semantic_version = { codegen-units = 1 }
 session = { codegen-units = 1 }
 snippet = { codegen-units = 1 }
