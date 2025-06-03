@@ -40,7 +40,8 @@
   },
   "file_types": {
     "Dockerfile": ["Dockerfile*[!dockerignore]"],
-    "Git Ignore": ["dockerignore"]
+    "Git Ignore": ["dockerignore"],
+    "JSONC": ["*.json"]
   },
   "hard_tabs": false,
   "formatter": "auto",
