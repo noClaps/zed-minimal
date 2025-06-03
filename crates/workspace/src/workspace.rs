@@ -530,20 +530,6 @@ impl ProjectItemRegistry {
         };
         open_project_item
     }
-
-    fn build_item<T: project::ProjectItem>(
-        &self,
-        item: Entity<T>,
-        project: Entity<Project>,
-        pane: Option<&Pane>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Option<Box<dyn ItemHandle>> {
-        let build = self
-            .build_project_item_fns_by_type
-            .get(&TypeId::of::<T>())?;
-        Some(build(item.into_any(), project, pane, window, cx))
-    }
 }
 
 type WorkspaceItemBuilder =
@@ -735,7 +721,6 @@ pub struct WorkspaceStore {
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub enum CollaboratorId {
     PeerId(PeerId),
-    Agent,
 }
 
 impl From<PeerId> for CollaboratorId {
@@ -1066,10 +1051,6 @@ impl Workspace {
                             })
                         },
                     );
-                }
-
-                project::Event::AgentLocationChanged => {
-                    this.handle_agent_location_changed(window, cx)
                 }
 
                 _ => {}
@@ -3935,10 +3916,6 @@ impl Workspace {
                 })?;
                 Ok(())
             })),
-            CollaboratorId::Agent => {
-                self.leader_updated(leader_id, window, cx)?;
-                Some(Task::ready(Ok(())))
-            }
         }
     }
 
@@ -3968,7 +3945,6 @@ impl Workspace {
                         None
                     }
                 }
-                CollaboratorId::Agent => Some(CollaboratorId::Agent),
             }
         } else {
             None
@@ -3985,31 +3961,6 @@ impl Workspace {
         if self.unfollow_in_pane(&pane, window, cx) == Some(leader_id) {
             return;
         }
-        if let Some(task) = self.start_following(leader_id, window, cx) {
-            task.detach_and_log_err(cx)
-        }
-    }
-
-    pub fn follow(
-        &mut self,
-        leader_id: impl Into<CollaboratorId>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let leader_id = leader_id.into();
-
-        if let CollaboratorId::PeerId(_) = leader_id {
-            return;
-        }
-
-        // if you're already following, find the right pane and focus it.
-        if let Some(follower_state) = self.follower_states.get(&leader_id) {
-            window.focus(&follower_state.pane().focus_handle(cx));
-
-            return;
-        }
-
-        // Otherwise, follow.
         if let Some(task) = self.start_following(leader_id, window, cx) {
             task.detach_and_log_err(cx)
         }
@@ -4170,7 +4121,7 @@ impl Workspace {
             .and_then(|pane| self.leader_for_pane(&pane));
         let leader_peer_id = match leader_id {
             Some(CollaboratorId::PeerId(peer_id)) => Some(peer_id),
-            Some(CollaboratorId::Agent) | None => None,
+            None => None,
         };
 
         let item_handle = item.to_followable_item_handle(cx)?;
@@ -4385,68 +4336,6 @@ impl Workspace {
         Ok(())
     }
 
-    fn handle_agent_location_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(follower_state) = self.follower_states.get_mut(&CollaboratorId::Agent) else {
-            return;
-        };
-
-        if let Some(agent_location) = self.project.read(cx).agent_location() {
-            let buffer_entity_id = agent_location.buffer.entity_id();
-            let view_id = ViewId {
-                creator: CollaboratorId::Agent,
-                id: buffer_entity_id.as_u64(),
-            };
-            follower_state.active_view_id = Some(view_id);
-
-            let item = match follower_state.items_by_leader_view_id.entry(view_id) {
-                hash_map::Entry::Occupied(entry) => Some(entry.into_mut()),
-                hash_map::Entry::Vacant(entry) => {
-                    let existing_view =
-                        follower_state
-                            .center_pane
-                            .read(cx)
-                            .items()
-                            .find_map(|item| {
-                                let item = item.to_followable_item_handle(cx)?;
-                                if item.is_singleton(cx)
-                                    && item.project_item_model_ids(cx).as_slice()
-                                        == [buffer_entity_id]
-                                {
-                                    Some(item)
-                                } else {
-                                    None
-                                }
-                            });
-                    let view = existing_view.or_else(|| {
-                        agent_location.buffer.upgrade().and_then(|buffer| {
-                            cx.update_default_global(|registry: &mut ProjectItemRegistry, cx| {
-                                registry.build_item(buffer, self.project.clone(), None, window, cx)
-                            })?
-                            .to_followable_item_handle(cx)
-                        })
-                    });
-
-                    if let Some(view) = view {
-                        Some(entry.insert(FollowerView { view }))
-                    } else {
-                        None
-                    }
-                }
-            };
-
-            if let Some(item) = item {
-                item.view
-                    .set_leader_id(Some(CollaboratorId::Agent), window, cx);
-                item.view
-                    .update_agent_location(agent_location.position, window, cx);
-            }
-        } else {
-            follower_state.active_view_id = None;
-        }
-
-        self.leader_updated(CollaboratorId::Agent, window, cx);
-    }
-
     pub fn update_active_view_for_followers(&mut self, window: &mut Window, cx: &mut App) {
         let mut update = proto::UpdateActiveView::default();
         if window.is_window_active() {
@@ -4459,7 +4348,7 @@ impl Workspace {
                         .and_then(|pane| self.leader_for_pane(&pane));
                     let leader_peer_id = match leader_id {
                         Some(CollaboratorId::PeerId(peer_id)) => Some(peer_id),
-                        Some(CollaboratorId::Agent) | None => None,
+                        None => None,
                     };
 
                     if let Some(item) = item.to_followable_item_handle(cx) {
@@ -4541,54 +4430,23 @@ impl Workspace {
         cx.notify();
 
         let leader_id = leader_id.into();
-        let (panel_id, item) = match leader_id {
-            CollaboratorId::Agent => (None, self.active_item_for_agent()?),
-            _ => unreachable!(),
-        };
 
         let state = self.follower_states.get(&leader_id)?;
         let mut transfer_focus = state.center_pane.read(cx).has_focus(window, cx);
-        let pane;
-        if let Some(panel_id) = panel_id {
-            pane = self
-                .activate_panel_for_proto_id(panel_id, window, cx)?
-                .pane(cx)?;
-            let state = self.follower_states.get_mut(&leader_id)?;
-            state.dock_pane = Some(pane.clone());
-        } else {
-            pane = state.center_pane.clone();
-            let state = self.follower_states.get_mut(&leader_id)?;
-            if let Some(dock_pane) = state.dock_pane.take() {
-                transfer_focus |= dock_pane.focus_handle(cx).contains_focused(window, cx);
-            }
+        let pane = state.center_pane.clone();
+        let state = self.follower_states.get_mut(&leader_id)?;
+        if let Some(dock_pane) = state.dock_pane.take() {
+            transfer_focus |= dock_pane.focus_handle(cx).contains_focused(window, cx);
         }
 
         pane.update(cx, |pane, cx| {
             let focus_active_item = pane.has_focus(window, cx) || transfer_focus;
-            if let Some(index) = pane.index_for_item(item.as_ref()) {
-                pane.activate_item(index, false, false, window, cx);
-            } else {
-                pane.add_item(item.boxed_clone(), false, false, None, window, cx)
-            }
-
             if focus_active_item {
                 pane.focus_active_item(window, cx)
             }
         });
 
-        Some(item)
-    }
-
-    fn active_item_for_agent(&self) -> Option<Box<dyn ItemHandle>> {
-        let state = self.follower_states.get(&CollaboratorId::Agent)?;
-        let active_view_id = state.active_view_id?;
-        Some(
-            state
-                .items_by_leader_view_id
-                .get(&active_view_id)?
-                .view
-                .boxed_clone(),
-        )
+        None
     }
 
     pub fn on_window_activation_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -5269,30 +5127,17 @@ impl Workspace {
             .clamp(0.0, Self::MAX_PADDING)
     }
 
-    fn render_dock(
-        &self,
-        position: DockPosition,
-        dock: &Entity<Dock>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Option<Div> {
+    fn render_dock(&self, position: DockPosition, dock: &Entity<Dock>) -> Option<Div> {
         if self.zoomed_position == Some(position) {
             return None;
         }
-
-        let leader_border = dock.read(cx).active_panel().and_then(|panel| {
-            let pane = panel.pane(cx)?;
-            let follower_states = &self.follower_states;
-            leader_border_for_pane(follower_states, &pane, window, cx)
-        });
 
         Some(
             div()
                 .flex()
                 .flex_none()
                 .overflow_hidden()
-                .child(dock.clone())
-                .children(leader_border),
+                .child(dock.clone()),
         )
     }
 
@@ -5351,36 +5196,6 @@ impl Workspace {
             cx.propagate();
         }
     }
-}
-
-fn leader_border_for_pane(
-    follower_states: &HashMap<CollaboratorId, FollowerState>,
-    pane: &Entity<Pane>,
-    _: &Window,
-    cx: &App,
-) -> Option<Div> {
-    let (leader_id, _follower_state) = follower_states.iter().find_map(|(leader_id, state)| {
-        if state.pane() == pane {
-            Some((*leader_id, state))
-        } else {
-            None
-        }
-    })?;
-
-    let mut leader_color = match leader_id {
-        CollaboratorId::Agent => cx.theme().players().agent().cursor,
-        _ => unreachable!(),
-    };
-    leader_color.fade_out(0.3);
-    Some(
-        div()
-            .absolute()
-            .size_full()
-            .left_0()
-            .top_0()
-            .border_2()
-            .border_color(leader_color),
-    )
 }
 
 fn window_bounds_env_override() -> Option<Bounds<Pixels>> {
@@ -5731,8 +5546,6 @@ impl Render for Workspace {
                                                     .children(self.render_dock(
                                                         DockPosition::Left,
                                                         &self.left_dock,
-                                                        window,
-                                                        cx,
                                                     ))
                                                     .child(
                                                         div()
@@ -5777,15 +5590,11 @@ impl Render for Workspace {
                                                     .children(self.render_dock(
                                                         DockPosition::Right,
                                                         &self.right_dock,
-                                                        window,
-                                                        cx,
                                                     )),
                                             )
                                             .child(div().w_full().children(self.render_dock(
                                                 DockPosition::Bottom,
                                                 &self.bottom_dock,
-                                                window,
-                                                cx
                                             ))),
 
                                         BottomDockLayout::LeftAligned => div()
@@ -5803,7 +5612,7 @@ impl Render for Workspace {
                                                             .flex()
                                                             .flex_row()
                                                             .flex_1()
-                                                            .children(self.render_dock(DockPosition::Left, &self.left_dock, window, cx))
+                                                            .children(self.render_dock(DockPosition::Left, &self.left_dock))
                                                             .child(
                                                                 div()
                                                                     .flex()
@@ -5834,14 +5643,12 @@ impl Render for Workspace {
                                                     .child(
                                                         div()
                                                             .w_full()
-                                                            .children(self.render_dock(DockPosition::Bottom, &self.bottom_dock, window, cx))
+                                                            .children(self.render_dock(DockPosition::Bottom, &self.bottom_dock))
                                                     ),
                                             )
                                             .children(self.render_dock(
                                                 DockPosition::Right,
                                                 &self.right_dock,
-                                                window,
-                                                cx,
                                             )),
 
                                         BottomDockLayout::RightAligned => div()
@@ -5851,8 +5658,6 @@ impl Render for Workspace {
                                             .children(self.render_dock(
                                                 DockPosition::Left,
                                                 &self.left_dock,
-                                                window,
-                                                cx,
                                             ))
                                             .child(
                                                 div()
@@ -5891,12 +5696,12 @@ impl Render for Workspace {
                                                                             .when_some(paddings.1, |this, p| this.child(p.border_l_1())),
                                                                     )
                                                             )
-                                                            .children(self.render_dock(DockPosition::Right, &self.right_dock, window, cx))
+                                                            .children(self.render_dock(DockPosition::Right, &self.right_dock))
                                                     )
                                                     .child(
                                                         div()
                                                             .w_full()
-                                                            .children(self.render_dock(DockPosition::Bottom, &self.bottom_dock, window, cx))
+                                                            .children(self.render_dock(DockPosition::Bottom, &self.bottom_dock))
                                                     ),
                                             ),
 
@@ -5907,8 +5712,6 @@ impl Render for Workspace {
                                             .children(self.render_dock(
                                                 DockPosition::Left,
                                                 &self.left_dock,
-                                                window,
-                                                cx,
                                             ))
                                             .child(
                                                 div()
@@ -5942,15 +5745,11 @@ impl Render for Workspace {
                                                     .children(self.render_dock(
                                                         DockPosition::Bottom,
                                                         &self.bottom_dock,
-                                                        window,
-                                                        cx,
                                                     )),
                                             )
                                             .children(self.render_dock(
                                                 DockPosition::Right,
                                                 &self.right_dock,
-                                                window,
-                                                cx,
                                             )),
                                     }
                                 })
@@ -6103,14 +5902,11 @@ impl ViewId {
     }
 
     pub(crate) fn to_proto(self) -> Option<proto::ViewId> {
-        if let CollaboratorId::PeerId(peer_id) = self.creator {
-            Some(proto::ViewId {
-                creator: Some(peer_id),
-                id: self.id,
-            })
-        } else {
-            None
-        }
+        let CollaboratorId::PeerId(peer_id) = self.creator;
+        Some(proto::ViewId {
+            creator: Some(peer_id),
+            id: self.id,
+        })
     }
 }
 

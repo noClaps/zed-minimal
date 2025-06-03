@@ -485,8 +485,6 @@ pub enum CodeBlockKind {
     Indented,
     /// "Fenced" means "surrounded by triple backticks."
     /// There can optionally be either a language after the backticks (like in traditional Markdown)
-    /// or, if an agent is specifying a path for a source location in the project, it can be a PathRange,
-    /// e.g. ```path/to/foo.rs#L123-456 instead of ```rust
     Fenced,
     FencedLang(SharedString),
     FencedSrc(PathWithRange),

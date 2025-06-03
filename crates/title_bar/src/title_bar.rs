@@ -29,12 +29,11 @@ use std::sync::Arc;
 use theme::ActiveTheme;
 use title_bar_settings::TitleBarSettings;
 use ui::{
-    Avatar, Button, ButtonLike, ButtonStyle, ContextMenu, Icon, IconName, IconSize,
-    IconWithIndicator, Indicator, PopoverMenu, Tooltip, h_flex, prelude::*,
+    Avatar, Button, ButtonLike, ButtonStyle, ContextMenu, Icon, IconName, IconSize, PopoverMenu,
+    Tooltip, h_flex, prelude::*,
 };
-use util::ResultExt;
 use workspace::Workspace;
-use zed_actions::{OpenRecent, OpenRemote};
+use zed_actions::OpenRecent;
 
 #[cfg(feature = "stories")]
 pub use stories::*;
@@ -202,9 +201,7 @@ impl Render for TitleBar {
                                             .when(
                                                 title_bar_settings.show_project_items,
                                                 |title_bar| {
-                                                    title_bar
-                                                        .children(self.render_project_host(cx))
-                                                        .child(self.render_project_name(cx))
+                                                    title_bar.child(self.render_project_name(cx))
                                                 },
                                             )
                                             .when(
@@ -345,134 +342,6 @@ impl TitleBar {
     pub fn platform_style(mut self, style: PlatformStyle) -> Self {
         self.platform_style = style;
         self
-    }
-
-    fn render_ssh_project_host(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let options = self.project.read(cx).ssh_connection_options(cx)?;
-        let host: SharedString = options.connection_string().into();
-
-        let nickname = options
-            .nickname
-            .clone()
-            .map(|nick| nick.into())
-            .unwrap_or_else(|| host.clone());
-
-        let (indicator_color, meta) = match self.project.read(cx).ssh_connection_state(cx)? {
-            remote::ConnectionState::Connecting => (Color::Info, format!("Connecting to: {host}")),
-            remote::ConnectionState::Connected => (Color::Success, format!("Connected to: {host}")),
-            remote::ConnectionState::HeartbeatMissed => (
-                Color::Warning,
-                format!("Connection attempt to {host} missed. Retrying..."),
-            ),
-            remote::ConnectionState::Reconnecting => (
-                Color::Warning,
-                format!("Lost connection to {host}. Reconnecting..."),
-            ),
-            remote::ConnectionState::Disconnected => {
-                (Color::Error, format!("Disconnected from {host}"))
-            }
-        };
-
-        let icon_color = match self.project.read(cx).ssh_connection_state(cx)? {
-            remote::ConnectionState::Connecting => Color::Info,
-            remote::ConnectionState::Connected => Color::Default,
-            remote::ConnectionState::HeartbeatMissed => Color::Warning,
-            remote::ConnectionState::Reconnecting => Color::Warning,
-            remote::ConnectionState::Disconnected => Color::Error,
-        };
-
-        let meta = SharedString::from(meta);
-
-        Some(
-            ButtonLike::new("ssh-server-icon")
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .max_w_32()
-                        .child(
-                            IconWithIndicator::new(
-                                Icon::new(IconName::Server)
-                                    .size(IconSize::XSmall)
-                                    .color(icon_color),
-                                Some(Indicator::dot().color(indicator_color)),
-                            )
-                            .indicator_border_color(Some(cx.theme().colors().title_bar_background))
-                            .into_any_element(),
-                        )
-                        .child(
-                            Label::new(nickname.clone())
-                                .size(LabelSize::Small)
-                                .truncate(),
-                        ),
-                )
-                .tooltip(move |window, cx| {
-                    Tooltip::with_meta(
-                        "Remote Project",
-                        Some(&OpenRemote {
-                            from_existing_connection: false,
-                        }),
-                        meta.clone(),
-                        window,
-                        cx,
-                    )
-                })
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(
-                        OpenRemote {
-                            from_existing_connection: false,
-                        }
-                        .boxed_clone(),
-                        cx,
-                    );
-                })
-                .into_any_element(),
-        )
-    }
-
-    pub fn render_project_host(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.project.read(cx).is_via_ssh() {
-            return self.render_ssh_project_host(cx);
-        }
-
-        if self.project.read(cx).is_disconnected(cx) {
-            return Some(
-                Button::new("disconnected", "Disconnected")
-                    .disabled(true)
-                    .color(Color::Disabled)
-                    .style(ButtonStyle::Subtle)
-                    .label_size(LabelSize::Small)
-                    .into_any_element(),
-            );
-        }
-
-        let host = self.project.read(cx).host()?;
-        let host_user = self.user_store.read(cx).get_cached_user(host.user_id)?;
-        let participant_index = self
-            .user_store
-            .read(cx)
-            .participant_indices()
-            .get(&host_user.id)?;
-        Some(
-            Button::new("project_owner_trigger", host_user.github_login.clone())
-                .color(Color::Player(participant_index.0))
-                .style(ButtonStyle::Subtle)
-                .label_size(LabelSize::Small)
-                .tooltip(Tooltip::text(format!(
-                    "{} is sharing this project. Click to follow.",
-                    host_user.github_login
-                )))
-                .on_click({
-                    let host_peer_id = host.peer_id;
-                    cx.listener(move |this, _, window, cx| {
-                        this.workspace
-                            .update(cx, |workspace, cx| {
-                                workspace.follow(host_peer_id, window, cx);
-                            })
-                            .log_err();
-                    })
-                })
-                .into_any_element(),
-        )
     }
 
     pub fn render_project_name(&self, cx: &mut Context<Self>) -> impl IntoElement {

@@ -168,7 +168,7 @@
     }
   },
   {
-    "context": "Editor && !agent_diff",
+    "context": "Editor",
     "bindings": {
       "ctrl-k ctrl-r": "git::Restore",
       "ctrl-alt-y": "git::ToggleStaged",
@@ -187,28 +187,7 @@
     }
   },
   {
-    "context": "AgentPanel",
-    "bindings": {
-      "ctrl-shift-e": "project_panel::ToggleFocus"
-    }
-  },
-  {
-    "context": "AgentPanel > Markdown",
-    "bindings": {
-      "copy": "markdown::CopyAsMarkdown",
-      "ctrl-c": "markdown::CopyAsMarkdown"
-    }
-  },
-  {
     "context": "EditMessageEditor > Editor",
-    "bindings": {
-      "escape": "menu::Cancel",
-      "enter": "menu::Confirm",
-      "alt-enter": "editor::Newline"
-    }
-  },
-  {
-    "context": "AgentFeedbackMessageEditor > Editor",
     "bindings": {
       "escape": "menu::Cancel",
       "enter": "menu::Confirm",

@@ -2,7 +2,7 @@
 
 use semantic_version::SemanticVersion;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EventRequestBody {
@@ -44,52 +44,6 @@ pub struct EventWrapper {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AssistantKind {
-    Panel,
-    Inline,
-    InlineTerminal,
-}
-impl Display for AssistantKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Panel => "panel",
-                Self::Inline => "inline",
-                Self::InlineTerminal => "inline_terminal",
-            }
-        )
-    }
-}
-
-#[derive(Default, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AssistantPhase {
-    #[default]
-    Response,
-    Invoked,
-    Accepted,
-    Rejected,
-}
-
-impl Display for AssistantPhase {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Response => "response",
-                Self::Invoked => "invoked",
-                Self::Accepted => "accepted",
-                Self::Rejected => "rejected",
-            }
-        )
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Event {
     Flexible(FlexibleEvent),
@@ -97,7 +51,6 @@ pub enum Event {
     InlineCompletion(InlineCompletionEvent),
     InlineCompletionRating(InlineCompletionRatingEvent),
     Call(CallEvent),
-    Assistant(AssistantEventData),
     Cpu(CpuEvent),
     Memory(MemoryEvent),
     App(AppEvent),
@@ -154,24 +107,6 @@ pub struct CallEvent {
     pub operation: String,
     pub room_id: Option<u64>,
     pub channel_id: Option<u64>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AssistantEventData {
-    /// Unique random identifier for each assistant tab (None for inline assist)
-    pub conversation_id: Option<String>,
-    /// Server-generated message ID (only supported for some providers)
-    pub message_id: Option<String>,
-    /// The kind of assistant (Panel, Inline)
-    pub kind: AssistantKind,
-    #[serde(default)]
-    pub phase: AssistantPhase,
-    /// Name of the AI model used
-    pub model: String,
-    pub model_provider: String,
-    pub response_latency: Option<Duration>,
-    pub error_message: Option<String>,
-    pub language_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

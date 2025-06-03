@@ -194,52 +194,6 @@ pub mod icon_theme_selector {
     impl_actions!(icon_theme_selector, [Toggle]);
 }
 
-pub mod agent {
-    use gpui::actions;
-
-    actions!(
-        agent,
-        [OpenConfiguration, OpenOnboardingModal, ResetOnboarding]
-    );
-}
-
-pub mod assistant {
-    use gpui::{
-        action_with_deprecated_aliases, actions, impl_action_with_deprecated_aliases, impl_actions,
-    };
-    use schemars::JsonSchema;
-    use serde::Deserialize;
-    use uuid::Uuid;
-
-    action_with_deprecated_aliases!(agent, ToggleFocus, ["assistant::ToggleFocus"]);
-
-    actions!(assistant, [ShowConfiguration]);
-
-    #[derive(PartialEq, Clone, Default, Debug, Deserialize, JsonSchema)]
-    #[serde(deny_unknown_fields)]
-    pub struct OpenRulesLibrary {
-        #[serde(skip)]
-        pub prompt_to_select: Option<Uuid>,
-    }
-
-    impl_action_with_deprecated_aliases!(
-        agent,
-        OpenRulesLibrary,
-        [
-            "assistant::OpenRulesLibrary",
-            "assistant::DeployPromptLibrary"
-        ]
-    );
-
-    #[derive(Clone, Default, Deserialize, PartialEq, JsonSchema)]
-    #[serde(deny_unknown_fields)]
-    pub struct InlineAssist {
-        pub prompt: Option<String>,
-    }
-
-    impl_actions!(assistant, [InlineAssist]);
-}
-
 #[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OpenRecent {

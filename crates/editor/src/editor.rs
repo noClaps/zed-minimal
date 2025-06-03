@@ -54,7 +54,7 @@ use anyhow::{Context as _, Result, anyhow};
 use blink_manager::BlinkManager;
 use buffer_diff::DiffHunkStatus;
 use client::{Collaborator, ParticipantIndex};
-use clock::{AGENT_REPLICA_ID, ReplicaId};
+use clock::ReplicaId;
 use collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use convert_case::{Case, Casing};
 use dap::TelemetrySpawnLocation;
@@ -20729,17 +20729,6 @@ impl EditorSnapshot {
         self.buffer_snapshot
             .selections_in_range(range, false)
             .filter_map(move |(replica_id, line_mode, cursor_shape, selection)| {
-                if replica_id == AGENT_REPLICA_ID {
-                    Some(RemoteSelection {
-                        replica_id,
-                        selection,
-                        cursor_shape,
-                        line_mode,
-                        collaborator_id: CollaboratorId::Agent,
-                        user_name: Some("Agent".into()),
-                        color: cx.theme().players().agent(),
-                    })
-                } else {
                     let collaborator = collaborators_by_replica_id.get(&replica_id)?;
                     let participant_index = participant_indices.get(&collaborator.user_id).copied();
                     let user_name = participant_names.get(&collaborator.user_id).cloned();
@@ -20756,7 +20745,6 @@ impl EditorSnapshot {
                             cx.theme().players().absent()
                         },
                     })
-                }
             })
     }
 

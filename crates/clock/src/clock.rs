@@ -10,7 +10,6 @@ use std::{
 pub use system_clock::*;
 
 pub const LOCAL_BRANCH_REPLICA_ID: u16 = u16::MAX;
-pub const AGENT_REPLICA_ID: u16 = u16::MAX - 1;
 
 /// A unique identifier for each distributed node.
 pub type ReplicaId = u16;

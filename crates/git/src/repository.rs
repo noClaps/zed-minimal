@@ -1376,7 +1376,6 @@ impl GitRepository for RealGitRepository {
 
                 // TODO: We don't track binary and large files anymore,
                 //       so the following call would delete them.
-                //       Implement an alternative way to track files added by agent.
                 //
                 // git.with_temp_index(async move |git| {
                 //     git.run(&["read-tree", &checkpoint.commit_sha.to_string()])

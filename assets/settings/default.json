@@ -67,8 +67,6 @@
   "ui_font_weight": 400,
   // The default font size for text in the UI
   "ui_font_size": 16,
-  // The default font size for text in the agent panel
-  "agent_font_size": 16,
   // How much to fade out unused code.
   "unnecessary_code_fade": 0.3,
   // Active pane styling settings.
@@ -314,8 +312,6 @@
     "quick_actions": true,
     // Whether to show the Selections menu in the editor toolbar.
     "selections_menu": true,
-    // Whether to show agent review buttons in the editor toolbar.
-    "agent_review": true,
     // Whether to show code action buttons in the editor toolbar.
     "code_actions": false
   },

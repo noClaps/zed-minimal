@@ -1154,11 +1154,6 @@ impl EditorElement {
                                 }
                             }
                         }
-                        CollaboratorId::Agent => {
-                            if let Some((local_selection_style, _)) = selections.first_mut() {
-                                *local_selection_style = cx.theme().players().agent();
-                            }
-                        }
                     }
                 }
 

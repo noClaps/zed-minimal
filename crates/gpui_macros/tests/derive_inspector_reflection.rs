@@ -1,5 +1,3 @@
-//! This code was generated using Zed Agent.
-
 use gpui_macros::derive_inspector_reflection;
 
 #[derive_inspector_reflection]

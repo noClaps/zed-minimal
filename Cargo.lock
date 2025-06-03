@@ -11694,7 +11694,6 @@ dependencies = [
  "http_client",
  "pretty_assertions",
  "project",
- "remote",
  "rpc",
  "schemars",
  "serde",
@@ -14897,7 +14896,6 @@ dependencies = [
  "gpui",
  "schemars",
  "serde",
- "uuid",
  "workspace-hack",
 ]
 

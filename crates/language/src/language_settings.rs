@@ -223,9 +223,6 @@ pub struct EditPredictionSettings {
     pub disabled_globs: Vec<DisabledGlob>,
     /// Configures how edit predictions are displayed in the buffer.
     pub mode: EditPredictionsMode,
-    /// Whether edit predictions are enabled in the assistant panel.
-    /// This setting has no effect if globally disabled.
-    pub enabled_in_text_threads: bool,
 }
 
 impl EditPredictionSettings {
@@ -555,10 +552,6 @@ pub struct EditPredictionSettingsContent {
     /// Provider support required.
     #[serde(default)]
     pub mode: EditPredictionsMode,
-    /// Whether edit predictions are enabled in the assistant prompt editor.
-    /// This has no effect if globally disabled.
-    #[serde(default = "default_true")]
-    pub enabled_in_text_threads: bool,
 }
 
 /// The settings for enabling/disabling features.
@@ -1175,12 +1168,6 @@ impl settings::Settings for AllLanguageSettings {
             .map(|globs| globs.iter().collect())
             .ok_or_else(Self::missing_default)?;
 
-        let mut enabled_in_text_threads = default_value
-            .edit_predictions
-            .as_ref()
-            .map(|settings| settings.enabled_in_text_threads)
-            .unwrap_or(true);
-
         let mut file_types: FxHashMap<Arc<str>, GlobSet> = FxHashMap::default();
 
         for (language, patterns) in &default_value.file_types {
@@ -1204,7 +1191,6 @@ impl settings::Settings for AllLanguageSettings {
 
             if let Some(edit_predictions) = user_settings.edit_predictions.as_ref() {
                 edit_predictions_mode = edit_predictions.mode;
-                enabled_in_text_threads = edit_predictions.enabled_in_text_threads;
 
                 if let Some(disabled_globs) = edit_predictions.disabled_globs.as_ref() {
                     completion_globs.extend(disabled_globs.iter());
@@ -1266,7 +1252,6 @@ impl settings::Settings for AllLanguageSettings {
                     })
                     .collect(),
                 mode: edit_predictions_mode,
-                enabled_in_text_threads,
             },
             defaults,
             languages,
