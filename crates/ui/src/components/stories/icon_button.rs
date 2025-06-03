@@ -30,23 +30,6 @@ impl Render for IconButtonStory {
         "#,
         );
 
-        let selected_with_selected_icon = StoryItem::new(
-            "Selected with `selected_icon`",
-            IconButton::new("selected_with_selected_icon_button", IconName::AudioOn)
-                .toggle_state(true)
-                .selected_icon(IconName::AudioOff),
-        )
-        .description(
-            "Displays an icon button that is selected and shows a different icon when selected.",
-        )
-        .usage(
-            r#"
-            IconButton::new("selected_with_selected_icon_button", Icon::AudioOn)
-                .selected(true)
-                .selected_icon(Icon::AudioOff)
-        "#,
-        );
-
         let disabled_button = StoryItem::new(
             "Disabled",
             IconButton::new("disabled_icon_button", IconName::Hash).disabled(true),
@@ -89,7 +72,6 @@ impl Render for IconButtonStory {
         let buttons = vec![
             default_button,
             selected_button,
-            selected_with_selected_icon,
             disabled_button,
             with_tooltip_button,
             selected_with_tooltip_button,

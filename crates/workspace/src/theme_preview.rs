@@ -3,10 +3,10 @@ use gpui::{AnyElement, App, Entity, EventEmitter, FocusHandle, Focusable, Hsla, 
 use strum::IntoEnumIterator;
 use theme::all_theme_colors;
 use ui::{
-    AudioStatus, Avatar, AvatarAudioStatusIndicator, AvatarAvailabilityIndicator, ButtonLike,
-    Checkbox, CheckboxWithLabel, CollaboratorAvailability, ContentGroup, DecoratedIcon,
-    ElevationIndex, Facepile, IconDecoration, Indicator, KeybindingHint, Switch, Table, TintColor,
-    Tooltip, element_cell, prelude::*, string_cell, utils::calculate_contrast_ratio,
+    Avatar, AvatarAvailabilityIndicator, ButtonLike, Checkbox, CheckboxWithLabel,
+    CollaboratorAvailability, ContentGroup, DecoratedIcon, ElevationIndex, Facepile,
+    IconDecoration, Indicator, KeybindingHint, Switch, Table, TintColor, Tooltip, element_cell,
+    prelude::*, string_cell, utils::calculate_contrast_ratio,
 };
 
 use crate::{Item, Workspace};
