@@ -6,7 +6,6 @@ use settings::{Settings, SettingsSources};
 #[derive(Copy, Clone, Deserialize, Debug)]
 pub struct TitleBarSettings {
     pub show_branch_icon: bool,
-    pub show_onboarding_banner: bool,
     pub show_user_picture: bool,
     pub show_branch_name: bool,
     pub show_project_items: bool,
@@ -19,10 +18,6 @@ pub struct TitleBarSettingsContent {
     ///
     /// Default: false
     pub show_branch_icon: Option<bool>,
-    /// Whether to show onboarding banners in the title bar.
-    ///
-    /// Default: true
-    pub show_onboarding_banner: Option<bool>,
     /// Whether to show user avatar in the title bar.
     ///
     /// Default: true

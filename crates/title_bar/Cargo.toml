@@ -27,11 +27,9 @@ test-support = [
 
 [dependencies]
 auto_update.workspace = true
-chrono.workspace = true
 client.workspace = true
 db.workspace = true
 gpui.workspace = true
-notifications.workspace = true
 project.workspace = true
 remote.workspace = true
 rpc.workspace = true
@@ -40,7 +38,6 @@ serde.workspace = true
 settings.workspace = true
 smallvec.workspace = true
 story = { workspace = true, optional = true }
-telemetry.workspace = true
 theme.workspace = true
 ui.workspace = true
 util.workspace = true

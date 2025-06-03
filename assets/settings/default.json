@@ -325,8 +325,6 @@
     "show_branch_name": true,
     // Whether to show the project host and name in the titlebar.
     "show_project_items": true,
-    // Whether to show onboarding banners in the titlebar.
-    "show_onboarding_banner": true,
     // Whether to show user picture in the titlebar.
     "show_user_picture": true,
     // Whether to show the sign in button in the titlebar.
