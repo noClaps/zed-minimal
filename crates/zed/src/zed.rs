@@ -47,10 +47,8 @@ use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
     DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings,
-    SettingsStore, SettingsStore, VIM_KEYMAP_PATH, initial_debug_tasks_content,
-    initial_local_debug_tasks_content, initial_project_settings_content,
-    initial_project_settings_content, initial_tasks_content, initial_tasks_content,
-    update_settings_file, update_settings_file,
+    SettingsStore, initial_local_debug_tasks_content, initial_project_settings_content,
+    initial_tasks_content, update_settings_file,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{self, AtomicBool};
