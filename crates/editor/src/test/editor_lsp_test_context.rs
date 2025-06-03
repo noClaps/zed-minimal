@@ -101,7 +101,6 @@ impl EditorLspTestContext {
         let app_state = cx.update(AppState::test);
 
         cx.update(|cx| {
-            assets::Assets.load_test_fonts(cx);
             language::init(cx);
             crate::init(cx);
             workspace::init(app_state.clone(), cx);

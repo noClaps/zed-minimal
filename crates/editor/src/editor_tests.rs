@@ -21455,7 +21455,6 @@ pub(crate) fn update_test_project_settings(
 
 pub(crate) fn init_test(cx: &mut TestAppContext, f: fn(&mut AllLanguageSettingsContent)) {
     cx.update(|cx| {
-        assets::Assets.load_test_fonts(cx);
         let store = SettingsStore::test(cx);
         cx.set_global(store);
         theme::init(theme::LoadThemes::JustBase, cx);

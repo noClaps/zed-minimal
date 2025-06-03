@@ -1628,12 +1628,11 @@ fn open_settings_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assets::Assets;
     use collections::HashSet;
     use editor::{DisplayPoint, Editor, display_map::DisplayRow, scroll::Autoscroll};
     use gpui::{
-        Action, AnyWindowHandle, App, AssetSource, BorrowAppContext, SemanticVersion,
-        TestAppContext, UpdateGlobal, VisualTestContext, WindowHandle, actions,
+        Action, AnyWindowHandle, App, BorrowAppContext, SemanticVersion, TestAppContext,
+        UpdateGlobal, VisualTestContext, WindowHandle, actions,
     };
     use language::{LanguageMatcher, LanguageRegistry};
     use project::{Project, ProjectPath, WorktreeSettings, project_settings::ProjectSettings};
