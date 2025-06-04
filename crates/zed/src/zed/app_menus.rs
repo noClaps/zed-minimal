@@ -66,7 +66,7 @@ pub fn app_menus() -> Vec<Menu> {
                 MenuItem::action(
                     "Open Recent...",
                     zed_actions::OpenRecent {
-                        create_new_window: true,
+                        create_new_window: false,
                     },
                 ),
                 MenuItem::action(
