@@ -7,9 +7,9 @@ use crate::{
     EditorStyle, FILE_HEADER_HEIGHT, FocusedBlock, GutterDimensions, HalfPageDown, HalfPageUp,
     HandleInput, HoveredCursor, InlayHintRefreshReason, InlineCompletion, JumpData, LineDown,
     LineHighlight, LineUp, MAX_LINE_LEN, MIN_LINE_NUMBER_DIGITS, MINIMAP_FONT_SIZE,
-    MULTI_BUFFER_EXCERPT_HEADER_HEIGHT, OpenExcerpts, PageDown, PageUp, PhantomBreakpointIndicator,
-    Point, RowExt, RowRangeExt, SelectPhase, SelectedTextHighlight, Selection, SoftWrap,
-    StickyHeaderExcerpt, ToPoint, ToggleFold,
+    MULTI_BUFFER_EXCERPT_HEADER_HEIGHT, OpenExcerpts, PageDown, PageUp, Point, RowExt, RowRangeExt,
+    SelectPhase, SelectedTextHighlight, Selection, SoftWrap, StickyHeaderExcerpt, ToPoint,
+    ToggleFold,
     code_context_menus::{CodeActionsMenu, MENU_ASIDE_MAX_WIDTH, MENU_ASIDE_MIN_WIDTH, MENU_GAP},
     display_map::{
         Block, BlockContext, BlockStyle, DisplaySnapshot, EditorMargins, FoldId, HighlightedChunk,
@@ -32,7 +32,6 @@ use crate::{
 };
 use buffer_diff::{DiffHunkStatus, DiffHunkStatusKind};
 use collections::{BTreeMap, HashMap};
-use feature_flags::{DebuggerFeatureFlag, FeatureFlagAppExt};
 use file_icons::FileIcons;
 use git::{
     Oid,
@@ -60,11 +59,7 @@ use multi_buffer::{
     MultiBufferRow, RowInfo,
 };
 
-use project::{
-    ProjectPath,
-    debugger::breakpoint_store::{Breakpoint, BreakpointSessionState},
-    project_settings::{GitGutterSetting, GitHunkStyleSetting, ProjectSettings},
-};
+use project::project_settings::{GitGutterSetting, GitHunkStyleSetting, ProjectSettings};
 use settings::Settings;
 use smallvec::{SmallVec, smallvec};
 use std::{
@@ -76,7 +71,6 @@ use std::{
     ops::{Deref, Range},
     rc::Rc,
     sync::Arc,
-    time::Duration,
 };
 use sum_tree::Bias;
 use text::BufferId;
@@ -92,7 +86,6 @@ const INLINE_BLAME_PADDING_EM_WIDTHS: f32 = 7.;
 #[derive(Clone, Copy, Default)]
 struct LineHighlightSpec {
     selection: bool,
-    breakpoint: bool,
     _active_stack_frame: bool,
 }
 
@@ -528,12 +521,6 @@ impl EditorElement {
         register_action(editor, window, Editor::insert_uuid_v4);
         register_action(editor, window, Editor::insert_uuid_v7);
         register_action(editor, window, Editor::open_selections_in_multibuffer);
-        if cx.has_flag::<DebuggerFeatureFlag>() {
-            register_action(editor, window, Editor::toggle_breakpoint);
-            register_action(editor, window, Editor::edit_log_breakpoint);
-            register_action(editor, window, Editor::enable_breakpoint);
-            register_action(editor, window, Editor::disable_breakpoint);
-        }
     }
 
     fn register_key_listeners(&self, window: &mut Window, _: &mut App, layout: &EditorLayout) {
@@ -723,23 +710,6 @@ impl EditorElement {
         window: &mut Window,
         cx: &mut Context<Editor>,
     ) {
-        if position_map.gutter_hitbox.is_hovered(window) {
-            let gutter_right_padding = editor.gutter_dimensions.right_padding;
-            let hitbox = &position_map.gutter_hitbox;
-
-            if event.position.x <= hitbox.bounds.right() - gutter_right_padding {
-                let point_for_position = position_map.point_for_position(event.position);
-                editor.set_breakpoint_context_menu(
-                    point_for_position.previous_valid.row(),
-                    None,
-                    event.position,
-                    window,
-                    cx,
-                );
-            }
-            return;
-        }
-
         if !position_map.text_hitbox.is_hovered(window) {
             return;
         }
@@ -918,79 +888,6 @@ impl EditorElement {
         let gutter_hovered = gutter_hitbox.is_hovered(window);
         editor.set_gutter_hovered(gutter_hovered, cx);
         editor.mouse_cursor_hidden = false;
-
-        if gutter_hovered {
-            let new_point = position_map
-                .point_for_position(event.position)
-                .previous_valid;
-            let buffer_anchor = position_map
-                .snapshot
-                .display_point_to_anchor(new_point, Bias::Left);
-
-            if let Some((buffer_snapshot, file)) = position_map
-                .snapshot
-                .buffer_snapshot
-                .buffer_for_excerpt(buffer_anchor.excerpt_id)
-                .and_then(|buffer| buffer.file().map(|file| (buffer, file)))
-            {
-                let was_hovered = editor.gutter_breakpoint_indicator.0.is_some();
-                let as_point = text::ToPoint::to_point(&buffer_anchor.text_anchor, buffer_snapshot);
-
-                let is_visible = editor
-                    .gutter_breakpoint_indicator
-                    .0
-                    .map_or(false, |indicator| indicator.is_active);
-
-                let has_existing_breakpoint =
-                    editor.breakpoint_store.as_ref().map_or(false, |store| {
-                        let Some(project) = &editor.project else {
-                            return false;
-                        };
-                        let Some(abs_path) = project.read(cx).absolute_path(
-                            &ProjectPath {
-                                path: file.path().clone(),
-                                worktree_id: file.worktree_id(cx),
-                            },
-                            cx,
-                        ) else {
-                            return false;
-                        };
-                        store
-                            .read(cx)
-                            .breakpoint_at_row(&abs_path, as_point.row, cx)
-                            .is_some()
-                    });
-
-                editor.gutter_breakpoint_indicator.0 = Some(PhantomBreakpointIndicator {
-                    display_row: new_point.row(),
-                    is_active: is_visible,
-                    collides_with_existing_breakpoint: has_existing_breakpoint,
-                });
-
-                editor.gutter_breakpoint_indicator.1.get_or_insert_with(|| {
-                    cx.spawn(async move |this, cx| {
-                        if !was_hovered {
-                            cx.background_executor()
-                                .timer(Duration::from_millis(200))
-                                .await;
-                        }
-
-                        this.update(cx, |this, cx| {
-                            if let Some(indicator) = this.gutter_breakpoint_indicator.0.as_mut() {
-                                indicator.is_active = true;
-                            }
-
-                            cx.notify();
-                        })
-                        .ok();
-                    })
-                });
-            } else {
-                editor.gutter_breakpoint_indicator = (None, None);
-            }
-        } else {
-            editor.gutter_breakpoint_indicator = (None, None);
-        }
 
         cx.notify();
 
@@ -2447,65 +2344,6 @@ impl EditorElement {
         (offset_y, length)
     }
 
-    fn layout_breakpoints(
-        &self,
-        line_height: Pixels,
-        range: Range<DisplayRow>,
-        scroll_pixel_position: gpui::Point<Pixels>,
-        gutter_dimensions: &GutterDimensions,
-        gutter_hitbox: &Hitbox,
-        display_hunks: &[(DisplayDiffHunk, Option<Hitbox>)],
-        snapshot: &EditorSnapshot,
-        breakpoints: HashMap<DisplayRow, (Anchor, Breakpoint, Option<BreakpointSessionState>)>,
-        row_infos: &[RowInfo],
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Vec<AnyElement> {
-        self.editor.update(cx, |editor, cx| {
-            breakpoints
-                .into_iter()
-                .filter_map(|(display_row, (text_anchor, bp, state))| {
-                    if row_infos
-                        .get((display_row.0.saturating_sub(range.start.0)) as usize)
-                        .is_some_and(|row_info| {
-                            row_info.expand_info.is_some()
-                                || row_info
-                                    .diff_status
-                                    .is_some_and(|status| status.is_deleted())
-                        })
-                    {
-                        return None;
-                    }
-
-                    if range.start > display_row || range.end < display_row {
-                        return None;
-                    }
-
-                    let row =
-                        MultiBufferRow(DisplayPoint::new(display_row, 0).to_point(&snapshot).row);
-                    if snapshot.is_line_folded(row) {
-                        return None;
-                    }
-
-                    let button = editor.render_breakpoint(text_anchor, display_row, &bp, state, cx);
-
-                    let button = prepaint_gutter_button(
-                        button,
-                        display_row,
-                        line_height,
-                        gutter_dimensions,
-                        scroll_pixel_position,
-                        gutter_hitbox,
-                        display_hunks,
-                        window,
-                        cx,
-                    );
-                    Some(button)
-                })
-                .collect_vec()
-        })
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn layout_run_indicators(
         &self,
@@ -2517,7 +2355,6 @@ impl EditorElement {
         gutter_hitbox: &Hitbox,
         display_hunks: &[(DisplayDiffHunk, Option<Hitbox>)],
         snapshot: &EditorSnapshot,
-        breakpoints: &mut HashMap<DisplayRow, (Anchor, Breakpoint, Option<BreakpointSessionState>)>,
         window: &mut Window,
         cx: &mut App,
     ) -> Vec<AnyElement> {
@@ -2595,7 +2432,6 @@ impl EditorElement {
                         &self.style,
                         Some(display_row) == active_task_indicator_row,
                         display_row,
-                        breakpoints.remove(&display_row),
                         cx,
                     );
 
@@ -2820,13 +2656,7 @@ impl EditorElement {
 
                 let color = active_rows
                     .get(&display_row)
-                    .map(|spec| {
-                        if spec.breakpoint {
-                            cx.theme().colors().debugger_accent
-                        } else {
-                            cx.theme().colors().editor_active_line_number
-                        }
-                    })
+                    .map(|_| cx.theme().colors().editor_active_line_number)
                     .unwrap_or_else(|| cx.theme().colors().editor_line_number);
                 let shaped_line =
                     self.shape_line_number(SharedString::from(&line_number), color, window);
@@ -5311,10 +5141,6 @@ impl EditorElement {
                     expand_toggle.paint(window, cx);
                 }
             });
-
-            for breakpoint in layout.breakpoints.iter_mut() {
-                breakpoint.paint(window, cx);
-            }
 
             for test_indicator in layout.test_indicators.iter_mut() {
                 test_indicator.paint(window, cx);
@@ -7831,27 +7657,16 @@ impl Element for EditorElement {
                         })
                         .unwrap_or_default();
 
-                    let (selections, mut active_rows, newest_selection_head) = self
-                        .layout_selections(
-                            start_anchor,
-                            end_anchor,
-                            &local_selections,
-                            &snapshot,
-                            start_row,
-                            end_row,
-                            window,
-                            cx,
-                        );
-                    let mut breakpoint_rows = self.editor.update(cx, |editor, cx| {
-                        editor.active_breakpoints(start_row..end_row, window, cx)
-                    });
-                    if cx.has_flag::<DebuggerFeatureFlag>() {
-                        for (display_row, (_, bp, state)) in &breakpoint_rows {
-                            if bp.is_enabled() && state.is_none_or(|s| s.verified) {
-                                active_rows.entry(*display_row).or_default().breakpoint = true;
-                            }
-                        }
-                    }
+                    let (selections, active_rows, newest_selection_head) = self.layout_selections(
+                        start_anchor,
+                        end_anchor,
+                        &local_selections,
+                        &snapshot,
+                        start_row,
+                        end_row,
+                        window,
+                        cx,
+                    );
 
                     let line_numbers = self.layout_line_numbers(
                         Some(&gutter_hitbox),
@@ -7866,34 +7681,6 @@ impl Element for EditorElement {
                         window,
                         cx,
                     );
-
-                    // We add the gutter breakpoint indicator to breakpoint_rows after painting
-                    // line numbers so we don't paint a line number debug accent color if a user
-                    // has their mouse over that line when a breakpoint isn't there
-                    if cx.has_flag::<DebuggerFeatureFlag>() {
-                        self.editor.update(cx, |editor, _| {
-                            if let Some(phantom_breakpoint) = &mut editor
-                                .gutter_breakpoint_indicator
-                                .0
-                                .filter(|phantom_breakpoint| phantom_breakpoint.is_active)
-                            {
-                                // Is there a non-phantom breakpoint on this line?
-                                phantom_breakpoint.collides_with_existing_breakpoint = true;
-                                breakpoint_rows
-                                    .entry(phantom_breakpoint.display_row)
-                                    .or_insert_with(|| {
-                                        let position = snapshot.display_point_to_anchor(
-                                            DisplayPoint::new(phantom_breakpoint.display_row, 0),
-                                            Bias::Right,
-                                        );
-                                        let breakpoint = Breakpoint::new_standard();
-                                        phantom_breakpoint.collides_with_existing_breakpoint =
-                                            false;
-                                        (position, breakpoint, None)
-                                    });
-                            }
-                        })
-                    }
 
                     let mut expand_toggles =
                         window.with_element_namespace("expand_toggles", |window| {
@@ -8352,33 +8139,11 @@ impl Element for EditorElement {
                             &gutter_hitbox,
                             &display_hunks,
                             &snapshot,
-                            &mut breakpoint_rows,
                             window,
                             cx,
                         )
                     } else {
                         Vec::new()
-                    };
-
-                    let show_breakpoints = snapshot
-                        .show_breakpoints
-                        .unwrap_or(gutter_settings.breakpoints);
-                    let breakpoints = if cx.has_flag::<DebuggerFeatureFlag>() && show_breakpoints {
-                        self.layout_breakpoints(
-                            line_height,
-                            start_row..end_row,
-                            scroll_pixel_position,
-                            &gutter_dimensions,
-                            &gutter_hitbox,
-                            &display_hunks,
-                            &snapshot,
-                            breakpoint_rows,
-                            &row_infos,
-                            window,
-                            cx,
-                        )
-                    } else {
-                        vec![]
                     };
 
                     self.layout_signature_help(
@@ -8545,7 +8310,6 @@ impl Element for EditorElement {
                         diff_hunk_controls,
                         mouse_context_menu,
                         test_indicators,
-                        breakpoints,
                         crease_toggles,
                         crease_trailers,
                         tab_invisible,
@@ -8726,7 +8490,6 @@ pub struct EditorLayout {
     visible_cursors: Vec<CursorLayout>,
     selections: Vec<(PlayerColor, Vec<SelectionLayout>)>,
     test_indicators: Vec<AnyElement>,
-    breakpoints: Vec<AnyElement>,
     crease_toggles: Vec<Option<AnyElement>>,
     expand_toggles: Vec<Option<(AnyElement, gpui::Point<Pixels>)>>,
     diff_hunk_controls: Vec<AnyElement>,

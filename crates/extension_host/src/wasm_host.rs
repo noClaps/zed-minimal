@@ -4,8 +4,8 @@ use crate::ExtensionManifest;
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use extension::{
-    CodeLabel, Command, Completion, DebugAdapterBinary, DebugTaskDefinition, ExtensionHostProxy,
-    KeyValueStoreDelegate, Symbol, WorktreeDelegate,
+    CodeLabel, Command, Completion, ExtensionHostProxy, KeyValueStoreDelegate, Symbol,
+    WorktreeDelegate,
 };
 use fs::{Fs, normalize_path};
 use futures::future::LocalBoxFuture;
@@ -280,41 +280,6 @@ impl extension::Extension for WasmExtension {
                     .map_err(|err| anyhow!("{err:?}"))?;
 
                 anyhow::Ok(())
-            }
-            .boxed()
-        })
-        .await
-    }
-    async fn get_dap_binary(
-        &self,
-        dap_name: Arc<str>,
-        config: DebugTaskDefinition,
-        user_installed_path: Option<PathBuf>,
-        worktree: Arc<dyn WorktreeDelegate>,
-    ) -> Result<DebugAdapterBinary> {
-        self.call(|extension, store| {
-            async move {
-                let resource = store.data_mut().table().push(worktree)?;
-                let dap_binary = extension
-                    .call_get_dap_binary(store, dap_name, config, user_installed_path, resource)
-                    .await?
-                    .map_err(|err| anyhow!("{err:?}"))?;
-                let dap_binary = dap_binary.try_into()?;
-                Ok(dap_binary)
-            }
-            .boxed()
-        })
-        .await
-    }
-
-    async fn get_dap_schema(&self) -> Result<serde_json::Value> {
-        self.call(|extension, store| {
-            async move {
-                extension
-                    .call_dap_schema(store)
-                    .await
-                    .and_then(|schema| serde_json::to_value(schema).map_err(|err| err.to_string()))
-                    .map_err(|err| anyhow!(err.to_string()))
             }
             .boxed()
         })

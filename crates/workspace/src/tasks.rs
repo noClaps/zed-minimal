@@ -1,11 +1,10 @@
 use std::process::ExitStatus;
 
 use anyhow::Result;
-use gpui::{AppContext, Context, Entity, Task};
-use language::Buffer;
+use gpui::{AppContext, Context, Task};
 use project::TaskSourceKind;
 use remote::ConnectionState;
-use task::{DebugScenario, ResolvedTask, SpawnInTerminal, TaskContext, TaskTemplate};
+use task::{ResolvedTask, SpawnInTerminal, TaskContext, TaskTemplate};
 use ui::Window;
 
 use crate::Workspace;
@@ -56,10 +55,6 @@ impl Workspace {
     ) {
         let spawn_in_terminal = resolved_task.resolved.clone();
         if !omit_history {
-            if let Some(debugger_provider) = self.debugger_provider.as_ref() {
-                debugger_provider.task_scheduled(cx);
-            }
-
             self.project().update(cx, |project, cx| {
                 if let Some(task_inventory) =
                     project.task_store().read(cx).task_inventory().cloned()
@@ -87,19 +82,6 @@ impl Workspace {
                 }
             })
             .detach();
-        }
-    }
-
-    pub fn start_debug_session(
-        &mut self,
-        scenario: DebugScenario,
-        task_context: TaskContext,
-        active_buffer: Option<Entity<Buffer>>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(provider) = self.debugger_provider.as_mut() {
-            provider.start_session(scenario, task_context, active_buffer, window, cx)
         }
     }
 

@@ -290,5 +290,3 @@ pub mod outline {
 }
 
 actions!(git_onboarding, [OpenGitIntegrationOnboarding]);
-
-actions!(debugger, [ToggleEnableBreakpoint, UnsetBreakpoint]);

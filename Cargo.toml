@@ -16,12 +16,7 @@ members = [
     "crates/command_palette_hooks",
     "crates/component",
     "crates/credentials_provider",
-    "crates/dap",
-    "crates/dap_adapters",
     "crates/db",
-    "crates/debug_adapter_extension",
-    "crates/debugger_tools",
-    "crates/debugger_ui",
     "crates/diagnostics",
     "crates/editor",
     "crates/extension",
@@ -158,12 +153,7 @@ command_palette = { path = "crates/command_palette" }
 command_palette_hooks = { path = "crates/command_palette_hooks" }
 component = { path = "crates/component" }
 credentials_provider = { path = "crates/credentials_provider" }
-dap = { path = "crates/dap" }
-dap_adapters = { path = "crates/dap_adapters" }
 db = { path = "crates/db" }
-debug_adapter_extension = { path = "crates/debug_adapter_extension" }
-debugger_tools = { path = "crates/debugger_tools" }
-debugger_ui = { path = "crates/debugger_ui" }
 diagnostics = { path = "crates/diagnostics" }
 editor = { path = "crates/editor" }
 extension = { path = "crates/extension" }
@@ -312,7 +302,6 @@ core-foundation-sys = "0.8.6"
 core-video = { version = "0.4.3", features = ["metal"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 ctor = "0.4.0"
-dap-types = { git = "https://github.com/zed-industries/dap-types", rev = "68516de327fa1be15214133a0a2e52a12982ce75" }
 dashmap = "6.0"
 derive_more = "0.99.17"
 dirs = "4.0"

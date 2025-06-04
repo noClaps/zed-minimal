@@ -1,7 +1,3 @@
-use crate::wasm_host::wit::since_v0_6_0::dap::{
-    StartDebuggingRequestArguments, StartDebuggingRequestArgumentsRequest, TcpArguments,
-    TcpArgumentsTemplate,
-};
 use crate::wasm_host::wit::{CompletionKind, CompletionLabelDetails, InsertTextFormat, SymbolKind};
 use crate::wasm_host::{WasmState, wit::ToWasmtimeResult};
 use ::http_client::{AsyncBody, HttpRequestExt};
@@ -20,7 +16,6 @@ use project::project_settings::ProjectSettings;
 use semantic_version::SemanticVersion;
 use std::{
     env,
-    net::Ipv4Addr,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -73,72 +68,6 @@ impl From<Command> for extension::Command {
             args: value.args,
             env: value.env,
         }
-    }
-}
-
-impl From<StartDebuggingRequestArgumentsRequest>
-    for extension::StartDebuggingRequestArgumentsRequest
-{
-    fn from(value: StartDebuggingRequestArgumentsRequest) -> Self {
-        match value {
-            StartDebuggingRequestArgumentsRequest::Launch => Self::Launch,
-            StartDebuggingRequestArgumentsRequest::Attach => Self::Attach,
-        }
-    }
-}
-impl TryFrom<StartDebuggingRequestArguments> for extension::StartDebuggingRequestArguments {
-    type Error = anyhow::Error;
-
-    fn try_from(value: StartDebuggingRequestArguments) -> Result<Self, Self::Error> {
-        Ok(Self {
-            configuration: serde_json::from_str(&value.configuration)?,
-            request: value.request.into(),
-        })
-    }
-}
-impl From<TcpArguments> for extension::TcpArguments {
-    fn from(value: TcpArguments) -> Self {
-        Self {
-            host: value.host.into(),
-            port: value.port,
-            timeout: value.timeout,
-        }
-    }
-}
-
-impl From<extension::TcpArgumentsTemplate> for TcpArgumentsTemplate {
-    fn from(value: extension::TcpArgumentsTemplate) -> Self {
-        Self {
-            host: value.host.map(Ipv4Addr::to_bits),
-            port: value.port,
-            timeout: value.timeout,
-        }
-    }
-}
-
-impl TryFrom<extension::DebugTaskDefinition> for DebugTaskDefinition {
-    type Error = anyhow::Error;
-    fn try_from(value: extension::DebugTaskDefinition) -> Result<Self, Self::Error> {
-        Ok(Self {
-            label: value.label.to_string(),
-            adapter: value.adapter.to_string(),
-            config: value.config.to_string(),
-            tcp_connection: value.tcp_connection.map(Into::into),
-        })
-    }
-}
-
-impl TryFrom<DebugAdapterBinary> for extension::DebugAdapterBinary {
-    type Error = anyhow::Error;
-    fn try_from(value: DebugAdapterBinary) -> Result<Self, Self::Error> {
-        Ok(Self {
-            command: value.command,
-            arguments: value.arguments,
-            envs: value.envs.into_iter().collect(),
-            cwd: value.cwd.map(|s| s.into()),
-            connection: value.connection.map(Into::into),
-            request_args: value.request_args.try_into()?,
-        })
     }
 }
 
@@ -631,30 +560,6 @@ impl process::Host for WasmState {
                 .await?;
 
             Ok(output.into())
-        })
-        .await
-        .to_wasmtime_result()
-    }
-}
-
-impl dap::Host for WasmState {
-    async fn resolve_tcp_template(
-        &mut self,
-        template: TcpArgumentsTemplate,
-    ) -> wasmtime::Result<Result<TcpArguments, String>> {
-        maybe!(async {
-            let (host, port, timeout) =
-                ::dap::configure_tcp_connection(task::TcpArgumentsTemplate {
-                    port: template.port,
-                    host: template.host.map(Ipv4Addr::from_bits),
-                    timeout: template.timeout,
-                })
-                .await?;
-            Ok(TcpArguments {
-                port,
-                host: host.to_bits(),
-                timeout,
-            })
         })
         .await
         .to_wasmtime_result()

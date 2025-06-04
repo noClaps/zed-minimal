@@ -342,13 +342,7 @@
             },
             "jsx": {
               "description": "Specify what JSX code is generated.",
-              "enum": [
-                "preserve",
-                "react",
-                "react-jsx",
-                "react-jsxdev",
-                "react-native"
-              ]
+              "enum": ["preserve", "react", "react-jsx", "react-jsxdev", "react-native"]
             },
             "reactNamespace": {
               "$comment": "The value of 'null' is UNDOCUMENTED (https://github.com/microsoft/TypeScript/pull/18058).",
@@ -425,14 +419,7 @@
               "type": ["string", "null"],
               "anyOf": [
                 {
-                  "enum": [
-                    "classic",
-                    "node",
-                    "node10",
-                    "node16",
-                    "nodenext",
-                    "bundler"
-                  ],
+                  "enum": ["classic", "node", "node10", "node16", "nodenext", "bundler"],
                   "markdownEnumDescriptions": [
                     "It’s recommended to use `\"node16\"` instead",
                     "Deprecated, use `\"node10\"` in TypeScript 5.0+ instead",
@@ -699,12 +686,7 @@
             },
             "watchDirectory": {
               "description": "Specify the strategy for watching directories under systems that lack recursive file-watching functionality. Requires TypeScript version 3.8 or later.",
-              "enum": [
-                "useFsEvents",
-                "fixedPollingInterval",
-                "dynamicPriorityPolling",
-                "fixedChunkSizePolling"
-              ],
+              "enum": ["useFsEvents", "fixedPollingInterval", "dynamicPriorityPolling", "fixedChunkSizePolling"],
               "default": "useFsEvents"
             },
             "watchFile": {

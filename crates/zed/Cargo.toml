@@ -35,18 +35,13 @@ client.workspace = true
 collections.workspace = true
 command_palette.workspace = true
 component.workspace = true
-dap_adapters.workspace = true
 db.workspace = true
-debug_adapter_extension.workspace = true
-debugger_tools.workspace = true
-debugger_ui.workspace = true
 diagnostics.workspace = true
 editor.workspace = true
 env_logger.workspace = true
 extension.workspace = true
 extension_host.workspace = true
 extensions_ui.workspace = true
-feature_flags.workspace = true
 feedback.workspace = true
 file_finder.workspace = true
 fs.workspace = true
@@ -140,7 +135,6 @@ winresource = "0.1"
 ashpd.workspace = true
 
 [dev-dependencies]
-dap = { workspace = true, features = ["test-support"] }
 editor = { workspace = true, features = ["test-support"] }
 gpui = { workspace = true, features = ["test-support"] }
 image_viewer = { workspace = true, features = ["test-support"] }

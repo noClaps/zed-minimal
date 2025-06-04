@@ -22,8 +22,6 @@ test-support = [
     "prettier/test-support",
     "worktree/test-support",
     "gpui/test-support",
-    "dap/test-support",
-    "dap_adapters/test-support",
 ]
 
 [dependencies]
@@ -32,11 +30,9 @@ anyhow.workspace = true
 askpass.workspace = true
 async-trait.workspace = true
 buffer_diff.workspace = true
-circular-buffer.workspace = true
 client.workspace = true
 clock.workspace = true
 collections.workspace = true
-dap.workspace = true
 extension.workspace = true
 fancy-regex.workspace = true
 fs.workspace = true
@@ -81,7 +77,6 @@ text.workspace = true
 toml.workspace = true
 url.workspace = true
 util.workspace = true
-uuid.workspace = true
 which.workspace = true
 worktree.workspace = true
 zlog.workspace = true
@@ -91,8 +86,6 @@ workspace-hack.workspace = true
 client = { workspace = true, features = ["test-support"] }
 collections = { workspace = true, features = ["test-support"] }
 buffer_diff = { workspace = true, features = ["test-support"] }
-dap = { workspace = true, features = ["test-support"] }
-dap_adapters = { workspace = true, features = ["test-support"] }
 fs = { workspace = true, features = ["test-support"] }
 git2.workspace = true
 gpui = { workspace = true, features = ["test-support"] }

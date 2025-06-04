@@ -1,11 +1,9 @@
 //! Baseline interface of Tasks in Zed: all tasks in Zed are intended to use those for implementing their own logic.
 
 mod adapter_schema;
-mod debug_format;
 mod serde_helpers;
 pub mod static_source;
 mod task_template;
-mod vscode_debug_format;
 mod vscode_format;
 
 use collections::{HashMap, HashSet, hash_map};
@@ -17,15 +15,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 pub use adapter_schema::{AdapterSchema, AdapterSchemas};
-pub use debug_format::{
-    AttachRequest, BuildTaskDefinition, DebugRequest, DebugScenario, DebugTaskFile, LaunchRequest,
-    Request, TcpArgumentsTemplate, ZedDebugConfig,
-};
 pub use task_template::{
-    DebugArgsRequest, HideStrategy, RevealStrategy, TaskTemplate, TaskTemplates,
-    substitute_variables_in_map, substitute_variables_in_str,
+    HideStrategy, RevealStrategy, TaskTemplate, TaskTemplates, substitute_variables_in_map,
+    substitute_variables_in_str,
 };
-pub use vscode_debug_format::VsCodeDebugTaskFile;
 pub use vscode_format::VsCodeTaskFile;
 pub use zed_actions::RevealTarget;
 

@@ -1,9 +1,7 @@
-mod dap;
 mod lsp;
 
 use std::ops::Range;
 
-pub use dap::*;
 pub use lsp::*;
 
 /// A list of environment variables.

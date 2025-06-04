@@ -440,7 +440,6 @@ Error: Running Zed as root or via sudo is unsupported.
         .detach();
         let node_runtime = NodeRuntime::new(client.http_client(), Some(shell_env_loaded_rx), rx);
 
-        debug_adapter_extension::init(extension_host_proxy.clone(), cx);
         language::init(cx);
         language_extension::init(extension_host_proxy.clone(), languages.clone());
         languages::init(languages.clone(), node_runtime.clone(), cx);
@@ -451,8 +450,6 @@ Error: Running Zed as root or via sudo is unsupported.
 
         zed::init(cx);
         project::Project::init(&client, cx);
-        debugger_ui::init(cx);
-        debugger_tools::init(cx);
         client::init(&client, cx);
         let telemetry = client.telemetry();
         telemetry.start(
@@ -492,7 +489,6 @@ Error: Running Zed as root or via sudo is unsupported.
         AppState::set_global(Arc::downgrade(&app_state), cx);
 
         auto_update::init(client.http_client(), cx);
-        dap_adapters::init(cx);
         auto_update_ui::init(cx);
         reliability::init(
             client.http_client(),

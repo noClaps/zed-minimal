@@ -1,7 +1,6 @@
 package zed:extension;
 
 world extension {
-    import dap;
     import github;
     import http-client;
     import platform;
@@ -9,7 +8,6 @@ world extension {
     import nodejs;
 
     use common.{env-vars, range};
-    use dap.{debug-adapter-binary, debug-task-definition, debug-request};
     use lsp.{completion, symbol};
     use process.{command};
 
@@ -140,9 +138,4 @@ world extension {
 
     /// Indexes the docs for the specified package.
     export index-docs: func(provider-name: string, package-name: string, database: borrow<key-value-store>) -> result<_, string>;
-
-    /// Returns a configured debug adapter binary for a given debug task.
-    export get-dap-binary: func(adapter-name: string, config: debug-task-definition, user-installed-path: option<string>, worktree: borrow<worktree>) -> result<debug-adapter-binary, string>;
-    /// Get a debug adapter's configuration schema
-    export dap-schema: func() -> result<string, string>;
 }

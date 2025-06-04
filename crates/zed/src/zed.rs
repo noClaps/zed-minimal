@@ -15,29 +15,24 @@ use assets::Assets;
 use breadcrumbs::Breadcrumbs;
 use client::zed_urls;
 use collections::VecDeque;
-use debugger_ui::debugger_panel::DebugPanel;
 use editor::ProposedChangesEditorToolbar;
 use editor::{Editor, MultiBuffer, scroll::Autoscroll};
-use feature_flags::{DebuggerFeatureFlag, FeatureFlagViewExt};
 use futures::future::Either;
 use futures::{StreamExt, channel::mpsc, select_biased};
 use git_ui::git_panel::GitPanel;
 use git_ui::project_diff::ProjectDiffToolbar;
 use gpui::{
-    Action, App, AppContext as _, AsyncWindowContext, Context, DismissEvent, Element, Entity,
-    Focusable, KeyBinding, ParentElement, PathPromptOptions, PromptLevel, ReadGlobal, SharedString,
-    Styled, Task, TitlebarOptions, UpdateGlobal, Window, WindowKind, WindowOptions, actions,
-    image_cache, point, px, retain_all,
+    Action, App, AppContext as _, Context, DismissEvent, Element, Entity, Focusable, KeyBinding,
+    ParentElement, PathPromptOptions, PromptLevel, ReadGlobal, SharedString, Styled, Task,
+    TitlebarOptions, UpdateGlobal, Window, WindowKind, WindowOptions, actions, image_cache, point,
+    px, retain_all,
 };
 use image_viewer::ImageInfo;
 use migrate::{MigrationBanner, MigrationEvent, MigrationNotification, MigrationType};
 use migrator::{migrate_keymap, migrate_settings};
 pub use open_listener::*;
 use outline_panel::OutlinePanel;
-use paths::{
-    local_debug_file_relative_path, local_settings_file_relative_path,
-    local_tasks_file_relative_path,
-};
+use paths::{local_settings_file_relative_path, local_tasks_file_relative_path};
 use project::{DirectoryLister, ProjectItem};
 use project_panel::ProjectPanel;
 use quick_action_bar::QuickActionBar;
@@ -47,8 +42,7 @@ use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
     DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings,
-    SettingsStore, initial_local_debug_tasks_content, initial_project_settings_content,
-    initial_tasks_content, update_settings_file,
+    SettingsStore, initial_project_settings_content, initial_tasks_content, update_settings_file,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{self, AtomicBool};
@@ -83,9 +77,7 @@ actions!(
         OpenDefaultSettings,
         OpenProjectSettings,
         OpenProjectTasks,
-        OpenProjectDebugTasks,
         OpenTasks,
-        OpenDebugTasks,
         ResetDatabase,
         ShowAll,
         ToggleFullScreen,
@@ -159,16 +151,6 @@ pub fn init(cx: &mut App) {
             open_settings_file(
                 paths::tasks_file(),
                 || settings::initial_tasks_content().as_ref().into(),
-                window,
-                cx,
-            );
-        });
-    });
-    cx.on_action(|_: &OpenDebugTasks, cx| {
-        with_active_or_new_workspace(cx, |_, window, cx| {
-            open_settings_file(
-                paths::debug_scenarios_file(),
-                || settings::initial_debug_tasks_content().as_ref().into(),
                 window,
                 cx,
             );
@@ -462,20 +444,6 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) {
             workspace.add_panel(project_panel, window, cx);
             workspace.add_panel(outline_panel, window, cx);
             workspace.add_panel(terminal_panel, window, cx);
-            cx.when_flag_enabled::<DebuggerFeatureFlag>(window, |_, window, cx| {
-                cx.spawn_in(
-                    window,
-                    async move |workspace: gpui::WeakEntity<Workspace>,
-                                cx: &mut AsyncWindowContext| {
-                        let debug_panel = DebugPanel::load(workspace.clone(), cx).await?;
-                        workspace.update_in(cx, |workspace, window, cx| {
-                            workspace.add_panel(debug_panel, window, cx);
-                        })?;
-                        anyhow::Ok(())
-                    },
-                )
-                .detach()
-            });
 
             let entity = cx.entity();
             let project = workspace.project().clone();
@@ -701,7 +669,6 @@ fn register_actions(
         })
         .register_action(open_project_settings_file)
         .register_action(open_project_tasks_file)
-        .register_action(open_project_debug_tasks_file)
         .register_action(
             |workspace: &mut Workspace,
              _: &project_panel::ToggleFocus,
@@ -823,8 +790,6 @@ fn initialize_pane(
             toolbar.add_item(project_search_bar, window, cx);
             let lsp_log_item = cx.new(|_| language_tools::LspLogToolbarItemView::new());
             toolbar.add_item(lsp_log_item, window, cx);
-            let dap_log_item = cx.new(|_| debugger_tools::DapLogToolbarItemView::new());
-            toolbar.add_item(dap_log_item, window, cx);
             let syntax_tree_item = cx.new(|_| language_tools::SyntaxTreeToolbarItemView::new());
             toolbar.add_item(syntax_tree_item, window, cx);
             let migration_banner = cx.new(|cx| MigrationBanner::new(workspace, cx));
@@ -1395,21 +1360,6 @@ fn open_project_tasks_file(
         workspace,
         local_tasks_file_relative_path(),
         initial_tasks_content(),
-        window,
-        cx,
-    )
-}
-
-fn open_project_debug_tasks_file(
-    workspace: &mut Workspace,
-    _: &OpenProjectDebugTasks,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) {
-    open_local_file(
-        workspace,
-        local_debug_file_relative_path(),
-        initial_local_debug_tasks_content(),
         window,
         cx,
     )
@@ -4146,11 +4096,6 @@ mod tests {
             repl::init(app_state.fs.clone(), cx);
             repl::notebook::init(cx);
             tasks_ui::init(cx);
-            project::debugger::breakpoint_store::BreakpointStore::init(
-                &app_state.client.clone().into(),
-            );
-            project::debugger::dap_store::DapStore::init(&app_state.client.clone().into(), cx);
-            debugger_ui::init(cx);
             initialize_workspace(app_state.clone(), cx);
             search::init(cx);
             app_state

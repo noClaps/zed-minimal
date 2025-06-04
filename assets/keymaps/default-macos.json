@@ -3,13 +3,6 @@
   {
     "use_key_equivalents": true,
     "bindings": {
-      "f4": "debugger::Start",
-      "shift-f5": "debugger::Stop",
-      "shift-cmd-f5": "debugger::Restart",
-      "f6": "debugger::Pause",
-      "f7": "debugger::StepOver",
-      "f11": "debugger::StepInto",
-      "shift-f11": "debugger::StepOut",
       "home": "menu::SelectFirst",
       "shift-pageup": "menu::SelectFirst",
       "pageup": "menu::SelectFirst",
@@ -138,8 +131,6 @@
       "cmd-\"": "editor::ExpandAllDiffHunks",
       "cmd-alt-g b": "editor::ToggleGitBlame",
       "cmd-i": "editor::ShowSignatureHelp",
-      "f9": "editor::ToggleBreakpoint",
-      "shift-f9": "editor::EditLogBreakpoint",
       "ctrl-f12": "editor::GoToDeclaration",
       "alt-ctrl-f12": "editor::GoToDeclarationSplit",
       "ctrl-cmd-e": "editor::ToggleEditPrediction"
@@ -483,7 +474,6 @@
       "cmd-shift-e": "project_panel::ToggleFocus",
       "cmd-shift-b": "outline_panel::ToggleFocus",
       "ctrl-shift-g": "git_panel::ToggleFocus",
-      "cmd-shift-d": "debug_panel::ToggleFocus",
       "cmd-alt-s": "workspace::SaveAll",
       "cmd-k m": "language_selector::Toggle",
       "escape": "workspace::Unfollow",
@@ -495,8 +485,7 @@
       "cmd-k shift-right": "workspace::SwapPaneRight",
       "cmd-k shift-up": "workspace::SwapPaneUp",
       "cmd-k shift-down": "workspace::SwapPaneDown",
-      "cmd-shift-x": "zed::Extensions",
-      "f5": "debugger::RerunLastSession"
+      "cmd-shift-x": "zed::Extensions"
     }
   },
   {
@@ -511,20 +500,6 @@
       // "foo-bar": ["task::Spawn", { "task_name": "MyTask", "reveal_target": "dock" }]
       // or by tag:
       // "foo-bar": ["task::Spawn", { "task_tag": "MyTag" }],
-    }
-  },
-  {
-    "context": "Workspace && debugger_running",
-    "use_key_equivalents": true,
-    "bindings": {
-      "f5": "zed::NoAction"
-    }
-  },
-  {
-    "context": "Workspace && debugger_stopped",
-    "use_key_equivalents": true,
-    "bindings": {
-      "f5": "debugger::Continue"
     }
   },
   // Bindings from Sublime Text
@@ -687,17 +662,6 @@
     }
   },
   {
-    "context": "VariableList",
-    "use_key_equivalents": true,
-    "bindings": {
-      "left": "variable_list::CollapseSelectedEntry",
-      "right": "variable_list::ExpandSelectedEntry",
-      "enter": "variable_list::EditVariable",
-      "cmd-c": "variable_list::CopyVariableValue",
-      "cmd-alt-c": "variable_list::CopyVariableName"
-    }
-  },
-  {
     "context": "GitPanel && ChangesList",
     "use_key_equivalents": true,
     "bindings": {
@@ -777,21 +741,6 @@
       "cmd-enter": "git::Commit",
       "cmd-shift-enter": "git::Amend",
       "alt-tab": "git::GenerateCommitMessage"
-    }
-  },
-  {
-    "context": "DebugPanel",
-    "bindings": {
-      "cmd-t": "debugger::ToggleThreadPicker",
-      "cmd-i": "debugger::ToggleSessionPicker",
-      "shift-alt-escape": "debugger::ToggleExpandItem"
-    }
-  },
-  {
-    "context": "BreakpointList",
-    "bindings": {
-      "space": "debugger::ToggleEnableBreakpoint",
-      "backspace": "debugger::UnsetBreakpoint"
     }
   },
   {

@@ -1931,12 +1931,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "circular-buffer"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23bdce1da528cadbac4654b5632bfcd8c6c63e25b1d42cea919a95958790b51d"
-
-[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2808,73 +2802,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
 
 [[package]]
-name = "dap"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-compression",
- "async-pipe",
- "async-tar",
- "async-trait",
- "client",
- "collections",
- "dap-types",
- "fs",
- "futures 0.3.31",
- "gpui",
- "http_client",
- "language",
- "log",
- "node_runtime",
- "parking_lot",
- "paths",
- "proto",
- "schemars",
- "serde",
- "serde_json",
- "settings",
- "smallvec",
- "smol",
- "task",
- "telemetry",
- "tree-sitter",
- "tree-sitter-go",
- "util",
- "workspace-hack",
- "zlog",
-]
-
-[[package]]
-name = "dap-types"
-version = "0.0.1"
-source = "git+https://github.com/zed-industries/dap-types?rev=68516de327fa1be15214133a0a2e52a12982ce75#68516de327fa1be15214133a0a2e52a12982ce75"
-dependencies = [
- "schemars",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "dap_adapters"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "dap",
- "futures 0.3.31",
- "gpui",
- "json_dotpath",
- "language",
- "log",
- "paths",
- "serde",
- "serde_json",
- "task",
- "util",
- "workspace-hack",
-]
-
-[[package]]
 name = "dashmap"
 version = "5.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2915,83 +2842,6 @@ dependencies = [
  "tempfile",
  "util",
  "workspace-hack",
-]
-
-[[package]]
-name = "debug_adapter_extension"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "dap",
- "extension",
- "gpui",
- "serde_json",
- "task",
- "workspace-hack",
-]
-
-[[package]]
-name = "debugger_tools"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dap",
- "editor",
- "futures 0.3.31",
- "gpui",
- "project",
- "serde_json",
- "settings",
- "smol",
- "util",
- "workspace",
- "workspace-hack",
-]
-
-[[package]]
-name = "debugger_ui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "client",
- "collections",
- "command_palette_hooks",
- "dap",
- "dap_adapters",
- "db",
- "debugger_tools",
- "editor",
- "feature_flags",
- "file_icons",
- "futures 0.3.31",
- "fuzzy",
- "gpui",
- "language",
- "log",
- "menu",
- "parking_lot",
- "paths",
- "picker",
- "pretty_assertions",
- "project",
- "rpc",
- "serde",
- "serde_json",
- "settings",
- "shlex",
- "sysinfo",
- "task",
- "tasks_ui",
- "terminal_view",
- "theme",
- "ui",
- "unindent",
- "util",
- "workspace",
- "workspace-hack",
- "zed_actions",
- "zlog",
 ]
 
 [[package]]
@@ -3317,13 +3167,10 @@ dependencies = [
  "client",
  "clock",
  "collections",
- "command_palette_hooks",
  "convert_case 0.8.0",
  "ctor",
- "dap",
  "db",
  "emojis",
- "feature_flags",
  "file_icons",
  "fs",
  "futures 0.3.31",
@@ -3340,7 +3187,6 @@ dependencies = [
  "log",
  "lsp",
  "markdown",
- "menu",
  "multi_buffer",
  "ordered-float 2.10.1",
  "parking_lot",
@@ -3654,7 +3500,6 @@ dependencies = [
  "async-tar",
  "async-trait",
  "collections",
- "dap",
  "fs",
  "futures 0.3.31",
  "gpui",
@@ -3687,7 +3532,6 @@ dependencies = [
  "collections",
  "criterion",
  "ctor",
- "dap",
  "extension",
  "fs",
  "futures 0.3.31",
@@ -5874,18 +5718,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "json_dotpath"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbdcfef3cf5591f0cef62da413ae795e3d1f5a00936ccec0b2071499a32efd1a"
-dependencies = [
- "serde",
- "serde_derive",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "jupyter-protocol"
 version = "0.6.0"
 source = "git+https://github.com/ConradIrwin/runtimed?rev=7130c804216b6914355d15d0b91ea91f6babd734#7130c804216b6914355d15d0b91ea91f6babd734"
@@ -6101,7 +5933,6 @@ dependencies = [
  "async-trait",
  "chrono",
  "collections",
- "dap",
  "futures 0.3.31",
  "gpui",
  "http_client",
@@ -8483,12 +8314,9 @@ dependencies = [
  "askpass",
  "async-trait",
  "buffer_diff",
- "circular-buffer",
  "client",
  "clock",
  "collections",
- "dap",
- "dap_adapters",
  "extension",
  "fancy-regex",
  "fs",
@@ -8537,7 +8365,6 @@ dependencies = [
  "unindent",
  "url",
  "util",
- "uuid",
  "which 6.0.3",
  "workspace-hack",
  "worktree",
@@ -9004,7 +8831,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "auto_update",
- "dap",
  "editor",
  "extension_host",
  "file_finder",
@@ -11240,7 +11066,6 @@ dependencies = [
  "futures 0.3.31",
  "gpui",
  "hex",
- "log",
  "parking_lot",
  "pretty_assertions",
  "proto",
@@ -14222,7 +14047,6 @@ dependencies = [
  "clock",
  "collections",
  "component",
- "dap",
  "db",
  "fs",
  "futures 0.3.31",
@@ -14790,19 +14614,13 @@ dependencies = [
  "collections",
  "command_palette",
  "component",
- "dap",
- "dap_adapters",
  "db",
- "debug_adapter_extension",
- "debugger_tools",
- "debugger_ui",
  "diagnostics",
  "editor",
  "env_logger 0.11.8",
  "extension",
  "extension_host",
  "extensions_ui",
- "feature_flags",
  "feedback",
  "file_finder",
  "fs",

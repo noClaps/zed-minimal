@@ -11,7 +11,7 @@ use gpui::{
 use itertools::Itertools;
 use picker::{Picker, PickerDelegate, highlighted_match_with_paths::HighlightedMatch};
 use project::{TaskSourceKind, task_store::TaskStore};
-use task::{DebugScenario, ResolvedTask, RevealTarget, TaskContext, TaskTemplate};
+use task::{ResolvedTask, RevealTarget, TaskContext, TaskTemplate};
 use ui::{
     ActiveTheme, Button, ButtonCommon, ButtonSize, Clickable, Color, FluentBuilder as _, Icon,
     IconButton, IconButtonShape, IconName, IconSize, IconWithIndicator, Indicator, IntoElement,
@@ -125,7 +125,7 @@ impl TasksModalDelegate {
 
 pub struct TasksModal {
     pub picker: Entity<Picker<TasksModalDelegate>>,
-    _subscription: [Subscription; 2],
+    _subscription: [Subscription; 1],
 }
 
 impl TasksModal {
@@ -146,16 +146,9 @@ impl TasksModal {
             )
             .modal(is_modal)
         });
-        let _subscription = [
-            cx.subscribe(&picker, |_, _, _: &DismissEvent, cx| {
-                cx.emit(DismissEvent);
-            }),
-            cx.subscribe(&picker, |_, _, event: &ShowAttachModal, cx| {
-                cx.emit(ShowAttachModal {
-                    debug_config: event.debug_config.clone(),
-                });
-            }),
-        ];
+        let _subscription = [cx.subscribe(&picker, |_, _, _: &DismissEvent, cx| {
+            cx.emit(DismissEvent);
+        })];
         Self {
             picker,
             _subscription,
@@ -190,13 +183,7 @@ impl Render for TasksModal {
     }
 }
 
-pub struct ShowAttachModal {
-    pub debug_config: DebugScenario,
-}
-
 impl EventEmitter<DismissEvent> for TasksModal {}
-impl EventEmitter<ShowAttachModal> for TasksModal {}
-impl EventEmitter<ShowAttachModal> for Picker<TasksModalDelegate> {}
 
 impl Focusable for TasksModal {
     fn focus_handle(&self, cx: &gpui::App) -> gpui::FocusHandle {

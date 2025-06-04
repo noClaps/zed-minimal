@@ -1,13 +1,11 @@
 use anyhow::Context as _;
 use collections::HashMap;
-use dap::adapters::DebugAdapterName;
 use fs::Fs;
 use futures::StreamExt as _;
 use gpui::{App, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Task};
 use lsp::LanguageServerName;
 use paths::{
-    EDITORCONFIG_NAME, local_debug_file_relative_path, local_settings_file_relative_path,
-    local_tasks_file_relative_path, local_vscode_launch_file_relative_path,
+    EDITORCONFIG_NAME, local_settings_file_relative_path, local_tasks_file_relative_path,
     local_vscode_tasks_file_relative_path, task_file_name,
 };
 use rpc::{
@@ -25,7 +23,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use task::{DebugTaskFile, TaskTemplates, VsCodeDebugTaskFile, VsCodeTaskFile};
+use task::{TaskTemplates, VsCodeTaskFile};
 use util::{ResultExt, serde::default_true};
 use worktree::{PathChange, UpdatedEntriesSet, Worktree, WorktreeId};
 
@@ -47,10 +45,6 @@ pub struct ProjectSettings {
     /// Default: null
     #[serde(default)]
     pub lsp: HashMap<LanguageServerName, LspSettings>,
-
-    /// Configuration for Debugger-related features
-    #[serde(default)]
-    pub dap: HashMap<DebugAdapterName, DapSettings>,
 
     /// Configuration for Diagnostics-related features.
     #[serde(default)]
@@ -605,30 +599,6 @@ impl SettingsObserver {
                         .unwrap(),
                 );
                 (settings_dir, LocalSettingsKind::Tasks)
-            } else if path.ends_with(local_debug_file_relative_path()) {
-                let settings_dir = Arc::<Path>::from(
-                    path.ancestors()
-                        .nth(
-                            local_debug_file_relative_path()
-                                .components()
-                                .count()
-                                .saturating_sub(1),
-                        )
-                        .unwrap(),
-                );
-                (settings_dir, LocalSettingsKind::Debug)
-            } else if path.ends_with(local_vscode_launch_file_relative_path()) {
-                let settings_dir = Arc::<Path>::from(
-                    path.ancestors()
-                        .nth(
-                            local_vscode_tasks_file_relative_path()
-                                .components()
-                                .count()
-                                .saturating_sub(1),
-                        )
-                        .unwrap(),
-                );
-                (settings_dir, LocalSettingsKind::Debug)
             } else if path.ends_with(EDITORCONFIG_NAME) {
                 let Some(settings_dir) = path.parent().map(Arc::from) else {
                     continue;
@@ -667,23 +637,6 @@ impl SettingsObserver {
                                         .with_context(|| {
                                             format!(
                                         "converting VSCode tasks into Zed ones, file {abs_path:?}"
-                                    )
-                                        })?;
-                                    serde_json::to_string(&zed_tasks).with_context(|| {
-                                        format!(
-                                            "serializing Zed tasks into JSON, file {abs_path:?}"
-                                        )
-                                    })
-                                } else if abs_path.ends_with(local_vscode_launch_file_relative_path()) {
-                                    let vscode_tasks =
-                                        parse_json_with_comments::<VsCodeDebugTaskFile>(&content)
-                                            .with_context(|| {
-                                                format!("parsing VSCode debug tasks, file {abs_path:?}")
-                                            })?;
-                                    let zed_tasks = DebugTaskFile::try_from(vscode_tasks)
-                                        .with_context(|| {
-                                            format!(
-                                        "converting VSCode debug tasks into Zed ones, file {abs_path:?}"
                                     )
                                         })?;
                                     serde_json::to_string(&zed_tasks).with_context(|| {
@@ -793,37 +746,6 @@ impl SettingsObserver {
                         }
                     }
                 }
-                LocalSettingsKind::Debug => {
-                    let result = task_store.update(cx, |task_store, cx| {
-                        task_store.update_user_debug_scenarios(
-                            TaskSettingsLocation::Worktree(SettingsLocation {
-                                worktree_id,
-                                path: directory.as_ref(),
-                            }),
-                            file_content.as_deref(),
-                            cx,
-                        )
-                    });
-
-                    match result {
-                        Err(InvalidSettingsError::Debug { path, message }) => {
-                            log::error!(
-                                "Failed to set local debug scenarios in {path:?}: {message:?}"
-                            );
-                            cx.emit(SettingsObserverEvent::LocalTasksUpdated(Err(
-                                InvalidSettingsError::Debug { path, message },
-                            )));
-                        }
-                        Err(e) => {
-                            log::error!("Failed to set local tasks: {e}");
-                        }
-                        Ok(()) => {
-                            cx.emit(SettingsObserverEvent::LocalTasksUpdated(Ok(
-                                directory.join(task_file_name())
-                            )));
-                        }
-                    }
-                }
             };
 
             if let Some(downstream_client) = &self.downstream_client {
@@ -902,7 +824,7 @@ pub fn local_settings_kind_from_proto(kind: proto::LocalSettingsKind) -> LocalSe
         proto::LocalSettingsKind::Settings => LocalSettingsKind::Settings,
         proto::LocalSettingsKind::Tasks => LocalSettingsKind::Tasks,
         proto::LocalSettingsKind::Editorconfig => LocalSettingsKind::Editorconfig,
-        proto::LocalSettingsKind::Debug => LocalSettingsKind::Debug,
+        _ => unreachable!(),
     }
 }
 
@@ -911,6 +833,5 @@ pub fn local_settings_kind_to_proto(kind: LocalSettingsKind) -> proto::LocalSett
         LocalSettingsKind::Settings => proto::LocalSettingsKind::Settings,
         LocalSettingsKind::Tasks => proto::LocalSettingsKind::Tasks,
         LocalSettingsKind::Editorconfig => proto::LocalSettingsKind::Editorconfig,
-        LocalSettingsKind::Debug => proto::LocalSettingsKind::Debug,
     }
 }

@@ -26,7 +26,7 @@ pub use crate::language_settings::EditPredictionsMode;
 use crate::language_settings::SoftWrap;
 use anyhow::{Context as _, Result};
 use async_trait::async_trait;
-use collections::{HashMap, HashSet, IndexSet};
+use collections::{HashMap, HashSet};
 use fs::Fs;
 use futures::Future;
 use gpui::{App, AsyncApp, Entity, SharedString, Task};
@@ -765,9 +765,6 @@ pub struct LanguageConfig {
     /// A list of characters that Zed should treat as word characters for completion queries.
     #[serde(default)]
     pub completion_query_characters: HashSet<char>,
-    /// A list of preferred debuggers for this language.
-    #[serde(default)]
-    pub debuggers: IndexSet<SharedString>,
     /// Whether to treat documentation comment of this language differently by
     /// auto adding prefix on new line, adjusting the indenting , etc.
     #[serde(default)]
@@ -911,7 +908,6 @@ impl Default for LanguageConfig {
             hidden: false,
             jsx_tag_auto_close: None,
             completion_query_characters: Default::default(),
-            debuggers: Default::default(),
             significant_indentation: Default::default(),
             documentation: None,
         }

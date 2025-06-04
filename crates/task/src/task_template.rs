@@ -8,8 +8,8 @@ use util::serde::default_true;
 use util::{ResultExt, truncate_and_remove_front};
 
 use crate::{
-    AttachRequest, ResolvedTask, RevealTarget, Shell, SpawnInTerminal, TaskContext, TaskId,
-    VariableName, ZED_VARIABLE_NAME_PREFIX,
+    ResolvedTask, RevealTarget, Shell, SpawnInTerminal, TaskContext, TaskId, VariableName,
+    ZED_VARIABLE_NAME_PREFIX,
     serde_helpers::{non_empty_string_vec, non_empty_string_vec_json_schema},
 };
 
@@ -72,15 +72,6 @@ pub struct TaskTemplate {
     /// Whether to show the command line in the task output.
     #[serde(default = "default_true")]
     pub show_command: bool,
-}
-
-#[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
-/// Use to represent debug request type
-pub enum DebugArgsRequest {
-    /// launch (program, cwd) are stored in TaskTemplate as (command, cwd)
-    Launch,
-    /// Attach
-    Attach(AttachRequest),
 }
 
 /// What to do with the terminal pane and tab, after the command was started.

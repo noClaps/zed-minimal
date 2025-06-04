@@ -9,7 +9,7 @@ use workspace::Workspace;
 
 mod modal;
 
-pub use modal::{Rerun, ShowAttachModal, Spawn, TaskOverrides, TasksModal};
+pub use modal::{Rerun, Spawn, TaskOverrides, TasksModal};
 
 pub fn init(cx: &mut App) {
     cx.observe_new(
@@ -101,11 +101,6 @@ fn spawn_task_or_modal(
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) {
-    if let Some(provider) = workspace.debugger_provider() {
-        provider.spawn_task_or_modal(workspace, action, window, cx);
-        return;
-    }
-
     match action {
         Spawn::ByName {
             task_name,

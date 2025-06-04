@@ -40,7 +40,6 @@ async-tar.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 collections.workspace = true
-dap.workspace = true
 futures.workspace = true
 gpui.workspace = true
 http_client.workspace = true
