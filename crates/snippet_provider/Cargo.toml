@@ -19,8 +19,3 @@ paths.workspace = true
 serde.workspace = true
 schemars.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-fs = { workspace = true }
-gpui = { workspace = true }
-indoc.workspace = true
