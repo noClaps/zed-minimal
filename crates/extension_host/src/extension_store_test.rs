@@ -506,12 +506,7 @@ async fn test_extension_store(cx: &mut TestAppContext) {
     });
 }
 
-// todo(windows)
-// Disable this test on Windows for now. Because this test hangs at
-// `let fake_server = fake_servers.next().await.unwrap();`.
-// Reenable this test when we figure out why.
 #[gpui::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn test_extension_store_with_test_extension(cx: &mut TestAppContext) {
     init_test(cx);
     cx.executor().allow_parking();
@@ -587,14 +582,6 @@ async fn test_extension_store_with_test_extension(cx: &mut TestAppContext) {
                                         "name": format!("gleam-{version}-aarch64-apple-darwin.tar.gz"),
                                         "browser_download_url": asset_download_uri
                                     },
-                                    {
-                                        "name": format!("gleam-{version}-x86_64-unknown-linux-musl.tar.gz"),
-                                        "browser_download_url": asset_download_uri
-                                    },
-                                    {
-                                        "name": format!("gleam-{version}-aarch64-unknown-linux-musl.tar.gz"),
-                                        "browser_download_url": asset_download_uri
-                                    }
                                 ]
                             }
                         ])

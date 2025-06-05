@@ -1,20 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-#[cfg(unix)]
 use anyhow::Context as _;
 use futures::channel::{mpsc, oneshot};
-#[cfg(unix)]
 use futures::{AsyncBufReadExt as _, io::BufReader};
-#[cfg(unix)]
 use futures::{AsyncWriteExt as _, FutureExt as _, select_biased};
 use futures::{SinkExt, StreamExt};
 use gpui::{AsyncApp, BackgroundExecutor, Task};
-#[cfg(unix)]
 use smol::fs;
-#[cfg(unix)]
 use smol::{fs::unix::PermissionsExt as _, net::unix::UnixListener};
-#[cfg(unix)]
 use util::ResultExt as _;
 
 #[derive(PartialEq, Eq)]
@@ -49,7 +43,6 @@ impl AskPassDelegate {
     }
 }
 
-#[cfg(unix)]
 pub struct AskPassSession {
     script_path: PathBuf,
     _askpass_task: Task<()>,
@@ -57,7 +50,6 @@ pub struct AskPassSession {
     askpass_kill_master_rx: Option<oneshot::Receiver<()>>,
 }
 
-#[cfg(unix)]
 impl AskPassSession {
     /// This will create a new AskPassSession.
     /// You must retain this session until the master process exits.
@@ -160,7 +152,6 @@ impl AskPassSession {
     }
 }
 
-#[cfg(unix)]
 fn get_shell_safe_zed_path() -> anyhow::Result<String> {
     let zed_path = std::env::current_exe()
         .context("Failed to determine current executable path for use in askpass")?
@@ -194,7 +185,6 @@ fn get_shell_safe_zed_path() -> anyhow::Result<String> {
 
 /// The main function for when Zed is running in netcat mode for use in askpass.
 /// Called from both the remote server binary and the zed binary in their respective main functions.
-#[cfg(unix)]
 pub fn main(socket: &str) {
     use std::io::{self, Read, Write};
     use std::os::unix::net::UnixStream;
@@ -232,30 +222,5 @@ pub fn main(socket: &str) {
     if let Err(err) = io::stdout().write_all(&response) {
         eprintln!("Error writing to stdout: {}", err);
         exit(1);
-    }
-}
-#[cfg(not(unix))]
-pub fn main(_socket: &str) {}
-
-#[cfg(not(unix))]
-pub struct AskPassSession {
-    path: PathBuf,
-}
-
-#[cfg(not(unix))]
-impl AskPassSession {
-    pub async fn new(_: &BackgroundExecutor, _: AskPassDelegate) -> anyhow::Result<Self> {
-        Ok(Self {
-            path: PathBuf::new(),
-        })
-    }
-
-    pub fn script_path(&self) -> &Path {
-        &self.path
-    }
-
-    pub async fn run(&mut self) -> AskPassResult {
-        futures::FutureExt::fuse(smol::Timer::after(Duration::from_secs(20))).await;
-        AskPassResult::Timedout
     }
 }

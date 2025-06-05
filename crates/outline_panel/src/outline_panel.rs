@@ -1366,12 +1366,7 @@ impl OutlinePanel {
 
         let context_menu = ContextMenu::build(window, cx, |menu, _, _| {
             menu.context(self.focus_handle.clone())
-                .when(cfg!(target_os = "macos"), |menu| {
-                    menu.action("Reveal in Finder", Box::new(RevealInFileManager))
-                })
-                .when(cfg!(not(target_os = "macos")), |menu| {
-                    menu.action("Reveal in File Manager", Box::new(RevealInFileManager))
-                })
+                .action("Reveal in Finder", Box::new(RevealInFileManager))
                 .action("Open in Terminal", Box::new(OpenInTerminal))
                 .when(is_unfoldable, |menu| {
                     menu.action("Unfold Directory", Box::new(UnfoldDirectory))

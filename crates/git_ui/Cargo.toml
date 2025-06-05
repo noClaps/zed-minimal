@@ -58,9 +58,6 @@ workspace-hack.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-windows.workspace = true
-
 [dev-dependencies]
 ctor.workspace = true
 editor = { workspace = true, features = ["test-support"] }

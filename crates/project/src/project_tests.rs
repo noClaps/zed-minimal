@@ -34,7 +34,6 @@ use postage::stream::Stream as _;
 use pretty_assertions::{assert_eq, assert_matches};
 use rand::{Rng as _, rngs::StdRng};
 use serde_json::json;
-#[cfg(not(windows))]
 use std::os;
 use std::{env, mem, num::NonZeroU32, ops::Range, str::FromStr, sync::OnceLock, task::Poll};
 use task::{ResolvedTask, TaskContext};
@@ -54,10 +53,7 @@ async fn test_block_via_channel(cx: &mut gpui::TestAppContext) {
 
     let (tx, mut rx) = futures::channel::mpsc::unbounded();
     let _thread = std::thread::spawn(move || {
-        #[cfg(not(target_os = "windows"))]
         std::fs::metadata("/tmp").unwrap();
-        #[cfg(target_os = "windows")]
-        std::fs::metadata("C:/Windows").unwrap();
         std::thread::sleep(Duration::from_millis(1000));
         tx.unbounded_send(1).unwrap();
     });
@@ -81,7 +77,6 @@ async fn test_block_via_smol(cx: &mut gpui::TestAppContext) {
     task.await;
 }
 
-#[cfg(not(windows))]
 #[gpui::test]
 async fn test_symlinks(cx: &mut gpui::TestAppContext) {
     init_test(cx);
@@ -374,11 +369,7 @@ async fn test_managing_project_specific_settings(cx: &mut gpui::TestAppContext) 
                 TaskSourceKind::Worktree {
                     id: worktree_id,
                     directory_in_worktree: PathBuf::from(separator!("b/.zed")),
-                    id_base: if cfg!(windows) {
-                        "local worktree tasks from directory \"b\\\\.zed\"".into()
-                    } else {
-                        "local worktree tasks from directory \"b/.zed\"".into()
-                    },
+                    id_base: "local worktree tasks from directory \"b/.zed\"".into(),
                 },
                 "cargo check".to_string(),
                 vec!["check".to_string()],
@@ -457,11 +448,7 @@ async fn test_managing_project_specific_settings(cx: &mut gpui::TestAppContext) 
                 TaskSourceKind::Worktree {
                     id: worktree_id,
                     directory_in_worktree: PathBuf::from(separator!("b/.zed")),
-                    id_base: if cfg!(windows) {
-                        "local worktree tasks from directory \"b\\\\.zed\"".into()
-                    } else {
-                        "local worktree tasks from directory \"b/.zed\"".into()
-                    },
+                    id_base: "local worktree tasks from directory \"b/.zed\"".into(),
                 },
                 "cargo check".to_string(),
                 vec!["check".to_string()],
@@ -568,11 +555,7 @@ async fn test_fallback_to_single_worktree_tasks(cx: &mut gpui::TestAppContext) {
             TaskSourceKind::Worktree {
                 id: worktree_id,
                 directory_in_worktree: PathBuf::from(separator!(".zed")),
-                id_base: if cfg!(windows) {
-                    "local worktree tasks from directory \".zed\"".into()
-                } else {
-                    "local worktree tasks from directory \".zed\"".into()
-                },
+                id_base: "local worktree tasks from directory \".zed\"".into(),
             },
             "echo /dir".to_string(),
         )]
@@ -7923,13 +7906,7 @@ async fn test_update_gitignore(cx: &mut gpui::TestAppContext) {
     });
 }
 
-// NOTE:
-// This test always fails on Windows, because on Windows, unlike on Unix, you can't rename
-// a directory which some program has already open.
-// This is a limitation of the Windows.
-// See: https://stackoverflow.com/questions/41365318/access-is-denied-when-renaming-folder
 #[gpui::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn test_rename_work_directory(cx: &mut gpui::TestAppContext) {
     init_test(cx);
     cx.executor().allow_parking();
@@ -8003,12 +7980,7 @@ async fn test_rename_work_directory(cx: &mut gpui::TestAppContext) {
     });
 }
 
-// NOTE: This test always fails on Windows, because on Windows, unlike on Unix,
-// you can't rename a directory which some program has already open. This is a
-// limitation of the Windows. See:
-// https://stackoverflow.com/questions/41365318/access-is-denied-when-renaming-folder
 #[gpui::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn test_file_status(cx: &mut gpui::TestAppContext) {
     init_test(cx);
     cx.executor().allow_parking();

@@ -2889,8 +2889,7 @@ impl Pane {
             }
         }
 
-        let is_clone = cfg!(target_os = "macos") && window.modifiers().alt
-            || cfg!(not(target_os = "macos")) && window.modifiers().control;
+        let is_clone = window.modifiers().alt;
 
         let from_pane = dragged_tab.pane.clone();
         self.workspace

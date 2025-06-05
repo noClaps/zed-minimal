@@ -92,79 +92,23 @@ static ZED_CLIENT_CHECKSUM_SEED: LazyLock<Option<Vec<u8>>> = LazyLock::new(|| {
 });
 
 pub fn os_name() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        "macOS".to_string()
-    }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    {
-        format!("Linux {}", gpui::guess_compositor())
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        "Windows".to_string()
-    }
+    "macOS".to_string()
 }
 
 /// Note: This might do blocking IO! Only call from background threads
 pub fn os_version() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        use cocoa::base::nil;
-        use cocoa::foundation::NSProcessInfo;
+    use cocoa::base::nil;
+    use cocoa::foundation::NSProcessInfo;
 
-        unsafe {
-            let process_info = cocoa::foundation::NSProcessInfo::processInfo(nil);
-            let version = process_info.operatingSystemVersion();
-            gpui::SemanticVersion::new(
-                version.majorVersion as usize,
-                version.minorVersion as usize,
-                version.patchVersion as usize,
-            )
-            .to_string()
-        }
-    }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    {
-        use std::path::Path;
-
-        let content = if let Ok(file) = std::fs::read_to_string(&Path::new("/etc/os-release")) {
-            file
-        } else if let Ok(file) = std::fs::read_to_string(&Path::new("/usr/lib/os-release")) {
-            file
-        } else {
-            log::error!("Failed to load /etc/os-release, /usr/lib/os-release");
-            "".to_string()
-        };
-        let mut name = "unknown";
-        let mut version = "unknown";
-
-        for line in content.lines() {
-            match line.split_once('=') {
-                Some(("ID", val)) => name = val.trim_matches('"'),
-                Some(("VERSION_ID", val)) => version = val.trim_matches('"'),
-                _ => {}
-            }
-        }
-
-        format!("{} {}", name, version)
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let mut info = unsafe { std::mem::zeroed() };
-        let status = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut info) };
-        if status.is_ok() {
-            gpui::SemanticVersion::new(
-                info.dwMajorVersion as _,
-                info.dwMinorVersion as _,
-                info.dwBuildNumber as _,
-            )
-            .to_string()
-        } else {
-            "unknown".to_string()
-        }
+    unsafe {
+        let process_info = cocoa::foundation::NSProcessInfo::processInfo(nil);
+        let version = process_info.operatingSystemVersion();
+        gpui::SemanticVersion::new(
+            version.majorVersion as usize,
+            version.minorVersion as usize,
+            version.patchVersion as usize,
+        )
+        .to_string()
     }
 }
 

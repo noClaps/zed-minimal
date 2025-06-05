@@ -15,7 +15,6 @@ use language::{BinaryStatus, LanguageName, language_settings::AllLanguageSetting
 use project::project_settings::ProjectSettings;
 use semantic_version::SemanticVersion;
 use std::{
-    env,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -518,20 +517,7 @@ impl github::Host for WasmState {
 
 impl platform::Host for WasmState {
     async fn current_platform(&mut self) -> Result<(platform::Os, platform::Architecture)> {
-        Ok((
-            match env::consts::OS {
-                "macos" => platform::Os::Mac,
-                "linux" => platform::Os::Linux,
-                "windows" => platform::Os::Windows,
-                _ => panic!("unsupported os"),
-            },
-            match env::consts::ARCH {
-                "aarch64" => platform::Architecture::Aarch64,
-                "x86" => platform::Architecture::X86,
-                "x86_64" => platform::Architecture::X8664,
-                _ => panic!("unsupported architecture"),
-            },
-        ))
+        Ok((platform::Os::Mac, platform::Architecture::Aarch64))
     }
 }
 
@@ -717,17 +703,11 @@ impl ExtensionImports for WasmState {
             .host
             .writeable_path_from_extension(&self.manifest.id, Path::new(&path))?;
 
-        #[cfg(unix)]
-        {
-            use std::fs::{self, Permissions};
-            use std::os::unix::fs::PermissionsExt;
+        use std::fs::{self, Permissions};
+        use std::os::unix::fs::PermissionsExt;
 
-            return fs::set_permissions(&path, Permissions::from_mode(0o755))
-                .with_context(|| format!("setting permissions for path {path:?}"))
-                .to_wasmtime_result();
-        }
-
-        #[cfg(not(unix))]
-        Ok(Ok(()))
+        return fs::set_permissions(&path, Permissions::from_mode(0o755))
+            .with_context(|| format!("setting permissions for path {path:?}"))
+            .to_wasmtime_result();
     }
 }

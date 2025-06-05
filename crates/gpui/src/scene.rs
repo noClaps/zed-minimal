@@ -43,13 +43,6 @@ impl Scene {
         self.surfaces.clear();
     }
 
-    #[cfg_attr(
-        all(
-            any(target_os = "linux", target_os = "freebsd"),
-            not(any(feature = "x11", feature = "wayland"))
-        ),
-        allow(dead_code)
-    )]
     pub fn paths(&self) -> &[Path<ScaledPixels>] {
         &self.paths
     }
@@ -142,13 +135,6 @@ impl Scene {
         self.surfaces.sort_by_key(|surface| surface.order);
     }
 
-    #[cfg_attr(
-        all(
-            any(target_os = "linux", target_os = "freebsd"),
-            not(any(feature = "x11", feature = "wayland"))
-        ),
-        allow(dead_code)
-    )]
     pub(crate) fn batches(&self) -> impl Iterator<Item = PrimitiveBatch> {
         BatchIterator {
             shadows: &self.shadows,
@@ -177,13 +163,6 @@ impl Scene {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
-#[cfg_attr(
-    all(
-        any(target_os = "linux", target_os = "freebsd"),
-        not(any(feature = "x11", feature = "wayland"))
-    ),
-    allow(dead_code)
-)]
 pub(crate) enum PrimitiveKind {
     Shadow,
     #[default]
@@ -238,13 +217,6 @@ impl Primitive {
     }
 }
 
-#[cfg_attr(
-    all(
-        any(target_os = "linux", target_os = "freebsd"),
-        not(any(feature = "x11", feature = "wayland"))
-    ),
-    allow(dead_code)
-)]
 struct BatchIterator<'a> {
     shadows: &'a [Shadow],
     shadows_start: usize,
@@ -431,13 +403,6 @@ impl<'a> Iterator for BatchIterator<'a> {
 }
 
 #[derive(Debug)]
-#[cfg_attr(
-    all(
-        any(target_os = "linux", target_os = "freebsd"),
-        not(any(feature = "x11", feature = "wayland"))
-    ),
-    allow(dead_code)
-)]
 pub(crate) enum PrimitiveBatch<'a> {
     Shadows(&'a [Shadow]),
     Quads(&'a [Quad]),
@@ -664,7 +629,6 @@ pub(crate) struct PaintSurface {
     pub order: DrawOrder,
     pub bounds: Bounds<ScaledPixels>,
     pub content_mask: ContentMask<ScaledPixels>,
-    #[cfg(target_os = "macos")]
     pub image_buffer: core_video::pixel_buffer::CVPixelBuffer,
 }
 

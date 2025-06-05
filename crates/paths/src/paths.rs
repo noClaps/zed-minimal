@@ -66,17 +66,6 @@ pub fn config_dir() -> &'static PathBuf {
     CONFIG_DIR.get_or_init(|| {
         if let Some(custom_dir) = CUSTOM_DATA_DIR.get() {
             custom_dir.join("config")
-        } else if cfg!(target_os = "windows") {
-            dirs::config_dir()
-                .expect("failed to determine RoamingAppData directory")
-                .join("Zed")
-        } else if cfg!(any(target_os = "linux", target_os = "freebsd")) {
-            if let Ok(flatpak_xdg_config) = std::env::var("FLATPAK_XDG_CONFIG_HOME") {
-                flatpak_xdg_config.into()
-            } else {
-                dirs::config_dir().expect("failed to determine XDG_CONFIG_HOME directory")
-            }
-            .join("zed")
         } else {
             home_dir().join(".config").join("zed-min")
         }
@@ -88,21 +77,8 @@ pub fn data_dir() -> &'static PathBuf {
     CURRENT_DATA_DIR.get_or_init(|| {
         if let Some(custom_dir) = CUSTOM_DATA_DIR.get() {
             custom_dir.clone()
-        } else if cfg!(target_os = "macos") {
-            home_dir().join("Library/Application Support/Zed")
-        } else if cfg!(any(target_os = "linux", target_os = "freebsd")) {
-            if let Ok(flatpak_xdg_data) = std::env::var("FLATPAK_XDG_DATA_HOME") {
-                flatpak_xdg_data.into()
-            } else {
-                dirs::data_local_dir().expect("failed to determine XDG_DATA_HOME directory")
-            }
-            .join("zed")
-        } else if cfg!(target_os = "windows") {
-            dirs::data_local_dir()
-                .expect("failed to determine LocalAppData directory")
-                .join("Zed")
         } else {
-            config_dir().clone() // Fallback
+            home_dir().join("Library/Application Support/Zed")
         }
     })
 }
@@ -110,41 +86,16 @@ pub fn data_dir() -> &'static PathBuf {
 pub fn temp_dir() -> &'static PathBuf {
     static TEMP_DIR: OnceLock<PathBuf> = OnceLock::new();
     TEMP_DIR.get_or_init(|| {
-        if cfg!(target_os = "macos") {
-            return dirs::cache_dir()
-                .expect("failed to determine cachesDirectory directory")
-                .join("Zed");
-        }
-
-        if cfg!(target_os = "windows") {
-            return dirs::cache_dir()
-                .expect("failed to determine LocalAppData directory")
-                .join("Zed");
-        }
-
-        if cfg!(any(target_os = "linux", target_os = "freebsd")) {
-            return if let Ok(flatpak_xdg_cache) = std::env::var("FLATPAK_XDG_CACHE_HOME") {
-                flatpak_xdg_cache.into()
-            } else {
-                dirs::cache_dir().expect("failed to determine XDG_CACHE_HOME directory")
-            }
-            .join("zed");
-        }
-
-        home_dir().join(".cache").join("zed")
+        return dirs::cache_dir()
+            .expect("failed to determine cachesDirectory directory")
+            .join("Zed");
     })
 }
 
 /// Returns the path to the logs directory.
 pub fn logs_dir() -> &'static PathBuf {
     static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    LOGS_DIR.get_or_init(|| {
-        if cfg!(target_os = "macos") {
-            home_dir().join("Library/Logs/Zed")
-        } else {
-            data_dir().join("logs")
-        }
-    })
+    LOGS_DIR.get_or_init(|| home_dir().join("Library/Logs/Zed"))
 }
 
 /// Returns the path to the Zed server directory on this SSH host.
@@ -174,9 +125,7 @@ pub fn database_dir() -> &'static PathBuf {
 /// Returns the path to the crashes directory, if it exists for the current platform.
 pub fn crashes_dir() -> &'static Option<PathBuf> {
     static CRASHES_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
-    CRASHES_DIR.get_or_init(|| {
-        cfg!(target_os = "macos").then_some(home_dir().join("Library/Logs/DiagnosticReports"))
-    })
+    CRASHES_DIR.get_or_init(|| Some(home_dir().join("Library/Logs/DiagnosticReports")))
 }
 
 /// Returns the path to the retired crashes directory, if it exists for the current platform.
@@ -344,13 +293,9 @@ pub fn vscode_settings_file() -> &'static PathBuf {
     static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
     let rel_path = "Code/User/settings.json";
     LOGS_DIR.get_or_init(|| {
-        if cfg!(target_os = "macos") {
-            home_dir()
-                .join("Library/Application Support")
-                .join(rel_path)
-        } else {
-            home_dir().join(".config").join(rel_path)
-        }
+        home_dir()
+            .join("Library/Application Support")
+            .join(rel_path)
     })
 }
 
@@ -359,12 +304,8 @@ pub fn cursor_settings_file() -> &'static PathBuf {
     static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
     let rel_path = "Cursor/User/settings.json";
     LOGS_DIR.get_or_init(|| {
-        if cfg!(target_os = "macos") {
-            home_dir()
-                .join("Library/Application Support")
-                .join(rel_path)
-        } else {
-            config_dir().join(rel_path)
-        }
+        home_dir()
+            .join("Library/Application Support")
+            .join(rel_path)
     })
 }

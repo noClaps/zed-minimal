@@ -89,10 +89,7 @@ actions!(
 ///Scrolling is unbearably sluggish by default. Alacritty supports a configurable
 ///Scroll multiplier that is set to 3 by default. This will be removed when I
 ///Implement scroll bars.
-#[cfg(target_os = "macos")]
 const SCROLL_MULTIPLIER: f32 = 4.;
-#[cfg(not(target_os = "macos"))]
-const SCROLL_MULTIPLIER: f32 = 1.;
 const MAX_SEARCH_LINES: usize = 100;
 const DEBUG_TERMINAL_WIDTH: Pixels = px(500.);
 const DEBUG_TERMINAL_HEIGHT: Pixels = px(30.);
@@ -375,19 +372,7 @@ impl TerminalBuilder {
 
         let pty_options = {
             let alac_shell = match shell.clone() {
-                Shell::System => {
-                    #[cfg(target_os = "windows")]
-                    {
-                        Some(alacritty_terminal::tty::Shell::new(
-                            util::get_windows_system_shell(),
-                            Vec::new(),
-                        ))
-                    }
-                    #[cfg(not(target_os = "windows"))]
-                    {
-                        None
-                    }
-                }
+                Shell::System => None,
                 Shell::Program(program) => {
                     Some(alacritty_terminal::tty::Shell::new(program, Vec::new()))
                 }
@@ -856,11 +841,6 @@ impl Terminal {
                         selection.update(point, AlacDirection::Right);
                         term.selection = Some(selection);
 
-                        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                        if let Some(selection_text) = term.selection_to_string() {
-                            cx.write_to_primary(ClipboardItem::new_string(selection_text));
-                        }
-
                         self.selection_head = Some(point);
                         cx.emit(Event::SelectionsChanged)
                     }
@@ -868,11 +848,6 @@ impl Terminal {
             }
             InternalEvent::SetSelection(selection) => {
                 term.selection = selection.as_ref().map(|(sel, _)| sel.clone());
-
-                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                if let Some(selection_text) = term.selection_to_string() {
-                    cx.write_to_primary(ClipboardItem::new_string(selection_text));
-                }
 
                 if let Some((_, head)) = selection {
                     self.selection_head = Some(*head);
@@ -889,11 +864,6 @@ impl Terminal {
 
                     selection.update(point, side);
                     term.selection = Some(selection);
-
-                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                    if let Some(selection_text) = term.selection_to_string() {
-                        cx.write_to_primary(ClipboardItem::new_string(selection_text));
-                    }
 
                     self.selection_head = Some(point);
                     cx.emit(Event::SelectionsChanged)
@@ -1660,13 +1630,6 @@ impl Terminal {
                             .push_back(InternalEvent::SetSelection(Some((sel, point))));
                     }
                 }
-                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                MouseButton::Middle => {
-                    if let Some(item) = _cx.read_from_primary() {
-                        let text = item.text().unwrap_or_default().to_string();
-                        self.input(text.into_bytes());
-                    }
-                }
                 _ => {}
             }
         }
@@ -1879,14 +1842,7 @@ impl Terminal {
 
     fn register_task_finished(&mut self, error_code: Option<i32>, cx: &mut Context<Terminal>) {
         let e: Option<ExitStatus> = error_code.map(|code| {
-            #[cfg(unix)]
-            {
-                return std::os::unix::process::ExitStatusExt::from_raw(code);
-            }
-            #[cfg(windows)]
-            {
-                return std::os::windows::process::ExitStatusExt::from_raw(code as u32);
-            }
+            return std::os::unix::process::ExitStatusExt::from_raw(code);
         });
 
         self.completion_tx.try_send(e).ok();

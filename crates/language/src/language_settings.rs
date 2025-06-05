@@ -1605,19 +1605,6 @@ mod tests {
                 disabled_globs: globs
                     .iter()
                     .map(|glob_str| {
-                        #[cfg(windows)]
-                        let glob_str = {
-                            let mut g = String::new();
-
-                            if glob_str.starts_with('/') {
-                                g.push_str("C:");
-                            }
-
-                            g.push_str(&glob_str.replace('/', "\\"));
-                            g
-                        };
-                        #[cfg(windows)]
-                        let glob_str = glob_str.as_str();
                         let expanded_glob_str = shellexpand::tilde(glob_str).into_owned();
                         DisabledGlob {
                             matcher: globset::Glob::new(&expanded_glob_str)
@@ -1639,11 +1626,7 @@ mod tests {
             Arc::new(TestFile {
                 path: path_buf.as_path().into(),
                 root_name: WORKTREE_NAME.to_string(),
-                local_root: Some(PathBuf::from(if cfg!(windows) {
-                    "C:\\absolute\\"
-                } else {
-                    "/absolute/"
-                })),
+                local_root: Some(PathBuf::from("/absolute/")),
             })
         };
 

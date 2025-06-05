@@ -44,11 +44,7 @@ static GO_ESCAPE_SUBTEST_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"[.*+?^${}()|\[\]\\]"#).expect("Failed to create GO_ESCAPE_SUBTEST_NAME_REGEX")
 });
 
-const BINARY: &str = if cfg!(target_os = "windows") {
-    "gopls.exe"
-} else {
-    "gopls"
-};
+const BINARY: &str = "gopls";
 
 #[async_trait(?Send)]
 impl super::LspAdapter for GoLspAdapter {

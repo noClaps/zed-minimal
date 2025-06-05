@@ -70,52 +70,23 @@ fn format_absolute_date(
     reference: OffsetDateTime,
     #[allow(unused_variables)] enhanced_date_formatting: bool,
 ) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        if !enhanced_date_formatting {
-            return macos::format_date(&timestamp);
-        }
-
-        let timestamp_date = timestamp.date();
-        let reference_date = reference.date();
-        if timestamp_date == reference_date {
-            "Today".to_string()
-        } else if reference_date.previous_day() == Some(timestamp_date) {
-            "Yesterday".to_string()
-        } else {
-            macos::format_date(&timestamp)
-        }
+    if !enhanced_date_formatting {
+        return macos::format_date(&timestamp);
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // todo(linux) respect user's date/time preferences
-        // todo(windows) respect user's date/time preferences
-        let current_locale = CURRENT_LOCALE
-            .get_or_init(|| sys_locale::get_locale().unwrap_or_else(|| String::from("en-US")));
-        format_timestamp_naive_date(
-            timestamp,
-            reference,
-            is_12_hour_time_by_locale(current_locale.as_str()),
-        )
+
+    let timestamp_date = timestamp.date();
+    let reference_date = reference.date();
+    if timestamp_date == reference_date {
+        "Today".to_string()
+    } else if reference_date.previous_day() == Some(timestamp_date) {
+        "Yesterday".to_string()
+    } else {
+        macos::format_date(&timestamp)
     }
 }
 
 fn format_absolute_time(timestamp: OffsetDateTime) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        macos::format_time(&timestamp)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // todo(linux) respect user's date/time preferences
-        // todo(windows) respect user's date/time preferences
-        let current_locale = CURRENT_LOCALE
-            .get_or_init(|| sys_locale::get_locale().unwrap_or_else(|| String::from("en-US")));
-        format_timestamp_naive_time(
-            timestamp,
-            is_12_hour_time_by_locale(current_locale.as_str()),
-        )
-    }
+    macos::format_time(&timestamp)
 }
 
 fn format_absolute_timestamp(
@@ -123,35 +94,26 @@ fn format_absolute_timestamp(
     reference: OffsetDateTime,
     #[allow(unused_variables)] enhanced_date_formatting: bool,
 ) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        if !enhanced_date_formatting {
-            return format!(
-                "{} {}",
-                format_absolute_date(timestamp, reference, enhanced_date_formatting),
-                format_absolute_time(timestamp)
-            );
-        }
-
-        let timestamp_date = timestamp.date();
-        let reference_date = reference.date();
-        if timestamp_date == reference_date {
-            format!("Today at {}", format_absolute_time(timestamp))
-        } else if reference_date.previous_day() == Some(timestamp_date) {
-            format!("Yesterday at {}", format_absolute_time(timestamp))
-        } else {
-            format!(
-                "{} {}",
-                format_absolute_date(timestamp, reference, enhanced_date_formatting),
-                format_absolute_time(timestamp)
-            )
-        }
+    if !enhanced_date_formatting {
+        return format!(
+            "{} {}",
+            format_absolute_date(timestamp, reference, enhanced_date_formatting),
+            format_absolute_time(timestamp)
+        );
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // todo(linux) respect user's date/time preferences
-        // todo(windows) respect user's date/time preferences
-        format_timestamp_fallback(timestamp, reference)
+
+    let timestamp_date = timestamp.date();
+    let reference_date = reference.date();
+    if timestamp_date == reference_date {
+        format!("Today at {}", format_absolute_time(timestamp))
+    } else if reference_date.previous_day() == Some(timestamp_date) {
+        format!("Yesterday at {}", format_absolute_time(timestamp))
+    } else {
+        format!(
+            "{} {}",
+            format_absolute_date(timestamp, reference, enhanced_date_formatting),
+            format_absolute_time(timestamp)
+        )
     }
 }
 
@@ -160,47 +122,18 @@ fn format_absolute_date_medium(
     reference: OffsetDateTime,
     enhanced_formatting: bool,
 ) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        if !enhanced_formatting {
-            return macos::format_date_medium(&timestamp);
-        }
-
-        let timestamp_date = timestamp.date();
-        let reference_date = reference.date();
-        if timestamp_date == reference_date {
-            "Today".to_string()
-        } else if reference_date.previous_day() == Some(timestamp_date) {
-            "Yesterday".to_string()
-        } else {
-            macos::format_date_medium(&timestamp)
-        }
+    if !enhanced_formatting {
+        return macos::format_date_medium(&timestamp);
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // todo(linux) respect user's date/time preferences
-        // todo(windows) respect user's date/time preferences
-        let current_locale = CURRENT_LOCALE
-            .get_or_init(|| sys_locale::get_locale().unwrap_or_else(|| String::from("en-US")));
-        if !enhanced_formatting {
-            return format_timestamp_naive_date_medium(
-                timestamp,
-                is_12_hour_time_by_locale(current_locale.as_str()),
-            );
-        }
 
-        let timestamp_date = timestamp.date();
-        let reference_date = reference.date();
-        if timestamp_date == reference_date {
-            "Today".to_string()
-        } else if reference_date.previous_day() == Some(timestamp_date) {
-            "Yesterday".to_string()
-        } else {
-            format_timestamp_naive_date_medium(
-                timestamp,
-                is_12_hour_time_by_locale(current_locale.as_str()),
-            )
-        }
+    let timestamp_date = timestamp.date();
+    let reference_date = reference.date();
+    if timestamp_date == reference_date {
+        "Today".to_string()
+    } else if reference_date.previous_day() == Some(timestamp_date) {
+        "Yesterday".to_string()
+    } else {
+        macos::format_date_medium(&timestamp)
     }
 }
 
@@ -208,16 +141,7 @@ fn format_absolute_timestamp_medium(
     timestamp: OffsetDateTime,
     reference: OffsetDateTime,
 ) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        format_absolute_date_medium(timestamp, reference, false)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // todo(linux) respect user's date/time preferences
-        // todo(windows) respect user's date/time preferences
-        format_timestamp_fallback(timestamp, reference)
-    }
+    format_absolute_date_medium(timestamp, reference, false)
 }
 
 fn format_relative_time(timestamp: OffsetDateTime, reference: OffsetDateTime) -> Option<String> {
@@ -331,60 +255,6 @@ fn format_timestamp_naive_time(timestamp_local: OffsetDateTime, is_12_hour_time:
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn format_timestamp_naive_date(
-    timestamp_local: OffsetDateTime,
-    reference_local: OffsetDateTime,
-    is_12_hour_time: bool,
-) -> String {
-    let reference_local_date = reference_local.date();
-    let timestamp_local_date = timestamp_local.date();
-
-    if timestamp_local_date == reference_local_date {
-        "Today".to_string()
-    } else if reference_local_date.previous_day() == Some(timestamp_local_date) {
-        "Yesterday".to_string()
-    } else {
-        match is_12_hour_time {
-            true => format!(
-                "{:02}/{:02}/{}",
-                timestamp_local_date.month() as u32,
-                timestamp_local_date.day(),
-                timestamp_local_date.year()
-            ),
-            false => format!(
-                "{:02}/{:02}/{}",
-                timestamp_local_date.day(),
-                timestamp_local_date.month() as u32,
-                timestamp_local_date.year()
-            ),
-        }
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn format_timestamp_naive_date_medium(
-    timestamp_local: OffsetDateTime,
-    is_12_hour_time: bool,
-) -> String {
-    let timestamp_local_date = timestamp_local.date();
-
-    match is_12_hour_time {
-        true => format!(
-            "{:02}/{:02}/{}",
-            timestamp_local_date.month() as u32,
-            timestamp_local_date.day(),
-            timestamp_local_date.year()
-        ),
-        false => format!(
-            "{:02}/{:02}/{}",
-            timestamp_local_date.day(),
-            timestamp_local_date.month() as u32,
-            timestamp_local_date.year()
-        ),
-    }
-}
-
 pub fn format_timestamp_naive(
     timestamp_local: OffsetDateTime,
     reference_local: OffsetDateTime,
@@ -417,37 +287,6 @@ pub fn format_timestamp_naive(
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-static CURRENT_LOCALE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-
-#[cfg(not(target_os = "macos"))]
-fn format_timestamp_fallback(timestamp: OffsetDateTime, reference: OffsetDateTime) -> String {
-    let current_locale = CURRENT_LOCALE
-        .get_or_init(|| sys_locale::get_locale().unwrap_or_else(|| String::from("en-US")));
-
-    let is_12_hour_time = is_12_hour_time_by_locale(current_locale.as_str());
-    format_timestamp_naive(timestamp, reference, is_12_hour_time)
-}
-
-/// Returns `true` if the locale is recognized as a 12-hour time locale.
-#[cfg(not(target_os = "macos"))]
-fn is_12_hour_time_by_locale(locale: &str) -> bool {
-    [
-        "es-MX", "es-CO", "es-SV", "es-NI",
-        "es-HN", // Mexico, Colombia, El Salvador, Nicaragua, Honduras
-        "en-US", "en-CA", "en-AU", "en-NZ", // U.S, Canada, Australia, New Zealand
-        "ar-SA", "ar-EG", "ar-JO", // Saudi Arabia, Egypt, Jordan
-        "en-IN", "hi-IN", // India, Hindu
-        "en-PK", "ur-PK", // Pakistan, Urdu
-        "en-PH", "fil-PH", // Philippines, Filipino
-        "bn-BD", "ccp-BD", // Bangladesh, Chakma
-        "en-IE", "ga-IE", // Ireland, Irish
-        "en-MY", "ms-MY", // Malaysia, Malay
-    ]
-    .contains(&locale)
-}
-
-#[cfg(target_os = "macos")]
 mod macos {
     use core_foundation::base::TCFType;
     use core_foundation::date::CFAbsoluteTime;

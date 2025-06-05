@@ -750,49 +750,11 @@ impl EditorElement {
         );
     }
 
-    fn mouse_up(
-        editor: &mut Editor,
-        event: &MouseUpEvent,
-        position_map: &PositionMap,
-        window: &mut Window,
-        cx: &mut Context<Editor>,
-    ) {
-        let text_hitbox = &position_map.text_hitbox;
+    fn mouse_up(editor: &mut Editor, window: &mut Window, cx: &mut Context<Editor>) {
         let end_selection = editor.has_pending_selection();
-        let pending_nonempty_selections = editor.has_pending_nonempty_selection();
 
         if end_selection {
             editor.select(SelectPhase::End, window, cx);
-        }
-
-        if end_selection && pending_nonempty_selections {
-            cx.stop_propagation();
-        } else if cfg!(any(target_os = "linux", target_os = "freebsd"))
-            && event.button == MouseButton::Middle
-        {
-            if !text_hitbox.is_hovered(window) || editor.read_only(cx) {
-                return;
-            }
-
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            if EditorSettings::get_global(cx).middle_click_paste {
-                if let Some(text) = cx.read_from_primary().and_then(|item| item.text()) {
-                    let point_for_position = position_map.point_for_position(event.position);
-                    let position = point_for_position.previous_valid;
-
-                    editor.select(
-                        SelectPhase::Begin {
-                            position,
-                            add: false,
-                            click_count: 1,
-                        },
-                        window,
-                        cx,
-                    );
-                    editor.insert(&text, window, cx);
-                }
-                cx.stop_propagation()
-            }
         }
     }
 
@@ -6275,13 +6237,10 @@ impl EditorElement {
 
         window.on_mouse_event({
             let editor = self.editor.clone();
-            let position_map = layout.position_map.clone();
 
-            move |event: &MouseUpEvent, phase, window, cx| {
+            move |_: &MouseUpEvent, phase, window, cx| {
                 if phase == DispatchPhase::Bubble {
-                    editor.update(cx, |editor, cx| {
-                        Self::mouse_up(editor, event, &position_map, window, cx)
-                    });
+                    editor.update(cx, |editor, cx| Self::mouse_up(editor, window, cx));
                 }
             }
         });

@@ -96,7 +96,7 @@ pub enum CloseWindowWhenNoItems {
 impl CloseWindowWhenNoItems {
     pub fn should_close(&self) -> bool {
         match self {
-            CloseWindowWhenNoItems::PlatformDefault => cfg!(target_os = "macos"),
+            CloseWindowWhenNoItems::PlatformDefault => true,
             CloseWindowWhenNoItems::CloseWindow => true,
             CloseWindowWhenNoItems::KeepWindowOpen => false,
         }

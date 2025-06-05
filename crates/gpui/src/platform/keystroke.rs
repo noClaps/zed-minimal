@@ -56,7 +56,6 @@ impl Keystroke {
     /// This method assumes that `self` was typed and `target' is in the keymap, and checks
     /// both possibilities for self against the target.
     pub(crate) fn should_match(&self, target: &Keystroke) -> bool {
-        #[cfg(not(target_os = "windows"))]
         if let Some(key_char) = self
             .key_char
             .as_ref()
@@ -69,18 +68,6 @@ impl Keystroke {
             };
 
             if &target.key == key_char && target.modifiers == ime_modifiers {
-                return true;
-            }
-        }
-
-        #[cfg(target_os = "windows")]
-        if let Some(key_char) = self
-            .key_char
-            .as_ref()
-            .filter(|key_char| key_char != &&self.key)
-        {
-            // On Windows, if key_char is set, then the typed keystroke produced the key_char
-            if &target.key == key_char && target.modifiers == Modifiers::none() {
                 return true;
             }
         }
@@ -117,11 +104,7 @@ impl Keystroke {
                 continue;
             }
             if component.eq_ignore_ascii_case("secondary") {
-                if cfg!(target_os = "macos") {
-                    modifiers.platform = true;
-                } else {
-                    modifiers.control = true;
-                };
+                modifiers.platform = true;
                 continue;
             }
 
@@ -208,14 +191,7 @@ impl Keystroke {
             str.push_str("alt-");
         }
         if self.modifiers.platform {
-            #[cfg(target_os = "macos")]
             str.push_str("cmd-");
-
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            str.push_str("super-");
-
-            #[cfg(target_os = "windows")]
-            str.push_str("win-");
         }
         if self.modifiers.shift {
             str.push_str("shift-");
@@ -320,58 +296,28 @@ fn is_printable_key(key: &str) -> bool {
 impl std::fmt::Display for Keystroke {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.modifiers.control {
-            #[cfg(target_os = "macos")]
             f.write_char('^')?;
-
-            #[cfg(not(target_os = "macos"))]
-            write!(f, "ctrl-")?;
         }
         if self.modifiers.alt {
-            #[cfg(target_os = "macos")]
             f.write_char('⌥')?;
-
-            #[cfg(not(target_os = "macos"))]
-            write!(f, "alt-")?;
         }
         if self.modifiers.platform {
-            #[cfg(target_os = "macos")]
             f.write_char('⌘')?;
-
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            f.write_char('❖')?;
-
-            #[cfg(target_os = "windows")]
-            f.write_char('⊞')?;
         }
         if self.modifiers.shift {
-            #[cfg(target_os = "macos")]
             f.write_char('⇧')?;
-
-            #[cfg(not(target_os = "macos"))]
-            write!(f, "shift-")?;
         }
         let key = match self.key.as_str() {
-            #[cfg(target_os = "macos")]
             "backspace" => '⌫',
-            #[cfg(target_os = "macos")]
             "up" => '↑',
-            #[cfg(target_os = "macos")]
             "down" => '↓',
-            #[cfg(target_os = "macos")]
             "left" => '←',
-            #[cfg(target_os = "macos")]
             "right" => '→',
-            #[cfg(target_os = "macos")]
             "tab" => '⇥',
-            #[cfg(target_os = "macos")]
             "escape" => '⎋',
-            #[cfg(target_os = "macos")]
             "shift" => '⇧',
-            #[cfg(target_os = "macos")]
             "control" => '⌃',
-            #[cfg(target_os = "macos")]
             "alt" => '⌥',
-            #[cfg(target_os = "macos")]
             "platform" => '⌘',
 
             key if key.len() == 1 => key.chars().next().unwrap().to_ascii_uppercase(),
@@ -419,15 +365,7 @@ impl Modifiers {
     /// On macOS, this is the command key.
     /// On Linux and Windows, this is the control key.
     pub fn secondary(&self) -> bool {
-        #[cfg(target_os = "macos")]
-        {
-            self.platform
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.control
-        }
+        self.platform
     }
 
     /// Returns how many modifier keys are pressed.
@@ -454,20 +392,9 @@ impl Modifiers {
 
     /// A Returns [`Modifiers`] with just the secondary key pressed.
     pub fn secondary_key() -> Modifiers {
-        #[cfg(target_os = "macos")]
-        {
-            Modifiers {
-                platform: true,
-                ..Default::default()
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            Modifiers {
-                control: true,
-                ..Default::default()
-            }
+        Modifiers {
+            platform: true,
+            ..Default::default()
         }
     }
 

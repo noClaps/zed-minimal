@@ -149,8 +149,7 @@
   "use_system_path_prompts": true,
   // Whether to use the system provided dialogs for prompts, such as confirmation
   // prompts.
-  // When set to false, Zed will use its built-in prompts. Note that on Linux,
-  // this option is ignored and Zed will always use the built-in prompts.
+  // When set to false, Zed will use its built-in prompts.
   "use_system_prompts": true,
   // Whether the cursor blinks in the editor.
   "cursor_blink": true,
@@ -861,8 +860,7 @@
     // Send anonymized usage data like what languages you're using Zed with.
     "metrics": true
   },
-  // Automatically update Zed. This setting may be ignored on Linux if
-  // installed through a package manager.
+  // Automatically update Zed.
   "auto_update": true,
   // Diagnostics configuration.
   "diagnostics": {
@@ -962,7 +960,7 @@
     // There's a sensible default list of globs already included.
     // Any addition to this list will be merged with the default list.
     // Globs are matched relative to the worktree root,
-    // except when starting with a slash (/) or equivalent in Windows.
+    // except when starting with a slash (/).
     "disabled_globs": ["**/.env*", "**/*.pem", "**/*.key", "**/*.cert", "**/*.crt", "**/.dev.vars", "**/secrets.yml"],
     // When to show edit predictions previews in buffer.
     // This setting takes two possible values:

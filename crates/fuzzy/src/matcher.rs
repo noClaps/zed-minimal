@@ -245,12 +245,8 @@ impl<'a> Matcher<'a> {
                 last_slash = j_regular;
             }
 
-            #[cfg(not(target_os = "windows"))]
             let need_to_score =
                 query_char == path_char || (is_path_sep && query_char == '_' || query_char == '\\');
-            // `query_char == '\\'` breaks `test_match_path_entries` on Windows, `\` is only used as a path separator on Windows.
-            #[cfg(target_os = "windows")]
-            let need_to_score = query_char == path_char || (is_path_sep && query_char == '_');
             if need_to_score {
                 let curr = if j_regular < prefix.len() {
                     prefix[j_regular]
@@ -372,7 +368,6 @@ mod tests {
         assert_eq!(matcher.last_positions, vec![0, 3, 4, 8]);
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[test]
     fn test_match_path_entries() {
         let paths = vec![
@@ -409,54 +404,6 @@ mod tests {
                 ("/test/tiatd", vec![6, 7, 8, 9, 10]),
                 ("/this/is/a/test/dir", vec![1, 6, 9, 11, 16]),
                 ("/////ThisIsATestDir", vec![5, 9, 11, 12, 16]),
-                ("thisisatestdir", vec![0, 2, 6, 7, 11]),
-            ]
-        );
-    }
-
-    /// todo(windows)
-    /// Now, on Windows, users can only use the backslash as a path separator.
-    /// I do want to support both the backslash and the forward slash as path separators on Windows.
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn test_match_path_entries() {
-        let paths = vec![
-            "",
-            "a",
-            "ab",
-            "abC",
-            "abcd",
-            "alphabravocharlie",
-            "AlphaBravoCharlie",
-            "thisisatestdir",
-            "\\\\\\\\\\ThisIsATestDir",
-            "\\this\\is\\a\\test\\dir",
-            "\\test\\tiatd",
-        ];
-
-        assert_eq!(
-            match_single_path_query("abc", false, &paths),
-            vec![
-                ("abC", vec![0, 1, 2]),
-                ("abcd", vec![0, 1, 2]),
-                ("AlphaBravoCharlie", vec![0, 5, 10]),
-                ("alphabravocharlie", vec![4, 5, 10]),
-            ]
-        );
-        assert_eq!(
-            match_single_path_query("t\\i\\a\\t\\d", false, &paths),
-            vec![(
-                "\\this\\is\\a\\test\\dir",
-                vec![1, 5, 6, 8, 9, 10, 11, 15, 16]
-            ),]
-        );
-
-        assert_eq!(
-            match_single_path_query("tiatd", false, &paths),
-            vec![
-                ("\\test\\tiatd", vec![6, 7, 8, 9, 10]),
-                ("\\this\\is\\a\\test\\dir", vec![1, 6, 9, 11, 16]),
-                ("\\\\\\\\\\ThisIsATestDir", vec![5, 9, 11, 12, 16]),
                 ("thisisatestdir", vec![0, 2, 6, 7, 11]),
             ]
         );

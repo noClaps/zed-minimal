@@ -287,14 +287,7 @@ impl settings::Settings for TerminalSettings {
             current.line_height = Some(TerminalLineHeight::Custom(height as f32))
         }
 
-        #[cfg(target_os = "windows")]
-        let platform = "windows";
-        #[cfg(target_os = "linux")]
-        let platform = "linux";
-        #[cfg(target_os = "macos")]
         let platform = "osx";
-        #[cfg(target_os = "freebsd")]
-        let platform = "freebsd";
 
         // TODO: handle arguments
         let shell_name = format!("{platform}Exec");

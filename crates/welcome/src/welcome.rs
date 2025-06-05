@@ -185,8 +185,7 @@ impl Render for WelcomePage {
                                                 .color(Color::Muted),
                                         ),
                                     )
-                                    .when(cfg!(target_os = "macos"), |el| {
-                                        el.child(
+                                    .child(
                                             Button::new("install-cli", "Install the CLI")
                                                 .icon(IconName::Terminal)
                                                 .icon_size(IconSize::XSmall)
@@ -198,8 +197,7 @@ impl Render for WelcomePage {
                                                         install_cli::install_cli(window, cx);
                                                     }).log_err();
                                                 })),
-                                        )
-                                    })
+                                    )
                                     .child(
                                         Button::new("view-docs", "View Documentation")
                                             .icon(IconName::FileCode)

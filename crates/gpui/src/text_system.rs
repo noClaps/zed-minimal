@@ -670,7 +670,7 @@ pub struct TextRun {
     pub strikethrough: Option<StrikethroughStyle>,
 }
 
-#[cfg(all(target_os = "macos", test))]
+#[cfg(all(test))]
 impl TextRun {
     fn with_len(&self, len: usize) -> Self {
         let mut this = self.clone();

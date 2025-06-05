@@ -24,7 +24,6 @@ use collections::HashMap;
 // output to remove languages with no mappings and other oddities, and converting it to a less verbose representation with:
 //  jq -s 'map(to_entries | map({key: .key, value: [(.value | to_entries | map(.key) | join("")), (.value | to_entries | map(.value) | join(""))]}) | from_entries) | add'
 // From there I used multi-cursor to produce this match statement.
-#[cfg(target_os = "macos")]
 pub fn get_key_equivalents(layout: &str) -> Option<HashMap<char, char>> {
     let mappings: &[(char, char)] = match layout {
         "com.apple.keylayout.ABC-AZERTY" => &[
@@ -1416,9 +1415,4 @@ pub fn get_key_equivalents(layout: &str) -> Option<HashMap<char, char>> {
     };
 
     Some(HashMap::from_iter(mappings.into_iter().cloned()))
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn get_key_equivalents(_layout: &str) -> Option<HashMap<char, char>> {
-    None
 }

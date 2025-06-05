@@ -144,14 +144,11 @@ impl LspAdapter for ExtensionLspAdapter {
             if ["toml", "zig"].contains(&self.extension.manifest().id.as_ref())
                 && path.starts_with(&self.extension.work_dir())
             {
-                #[cfg(not(windows))]
-                {
-                    use std::fs::{self, Permissions};
-                    use std::os::unix::fs::PermissionsExt;
+                use std::fs::{self, Permissions};
+                use std::os::unix::fs::PermissionsExt;
 
-                    fs::set_permissions(&path, Permissions::from_mode(0o755))
-                        .context("failed to set file permissions")?;
-                }
+                fs::set_permissions(&path, Permissions::from_mode(0o755))
+                    .context("failed to set file permissions")?;
             }
 
             Ok(LanguageServerBinary {

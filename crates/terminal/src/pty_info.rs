@@ -1,12 +1,6 @@
 use alacritty_terminal::tty::Pty;
-#[cfg(target_os = "windows")]
-use std::num::NonZeroU32;
-#[cfg(unix)]
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
-
-#[cfg(target_os = "windows")]
-use windows::Win32::{Foundation::HANDLE, System::Threading::GetProcessId};
 
 use sysinfo::{Pid, Process, ProcessRefreshKind, RefreshKind, System, UpdateKind};
 
@@ -15,7 +9,6 @@ pub struct ProcessIdGetter {
     fallback_pid: u32,
 }
 
-#[cfg(unix)]
 impl ProcessIdGetter {
     fn new(pty: &Pty) -> ProcessIdGetter {
         ProcessIdGetter {
@@ -30,41 +23,6 @@ impl ProcessIdGetter {
             return Some(Pid::from_u32(self.fallback_pid));
         }
         Some(Pid::from_u32(pid as u32))
-    }
-
-    pub fn fallback_pid(&self) -> u32 {
-        self.fallback_pid
-    }
-}
-
-#[cfg(windows)]
-impl ProcessIdGetter {
-    fn new(pty: &Pty) -> ProcessIdGetter {
-        let child = pty.child_watcher();
-        let handle = child.raw_handle();
-        let fallback_pid = child.pid().unwrap_or_else(|| unsafe {
-            NonZeroU32::new_unchecked(GetProcessId(HANDLE(handle as _)))
-        });
-
-        ProcessIdGetter {
-            handle: handle as i32,
-            fallback_pid: u32::from(fallback_pid),
-        }
-    }
-
-    fn pid(&self) -> Option<Pid> {
-        let pid = unsafe { GetProcessId(HANDLE(self.handle as _)) };
-        // the GetProcessId may fail and returns zero, which will lead to a stack overflow issue
-        if pid == 0 {
-            // in the builder process, there is a small chance, almost negligible,
-            // that this value could be zero, which means child_watcher returns None,
-            // GetProcessId returns 0.
-            if self.fallback_pid == 0 {
-                return None;
-            }
-            return Some(Pid::from_u32(self.fallback_pid));
-        }
-        Some(Pid::from_u32(pid))
     }
 
     pub fn fallback_pid(&self) -> u32 {

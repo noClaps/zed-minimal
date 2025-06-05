@@ -7,17 +7,11 @@ mod events;
 mod keyboard;
 mod screen_capture;
 
-#[cfg(not(feature = "macos-blade"))]
 mod metal_atlas;
-#[cfg(not(feature = "macos-blade"))]
 pub mod metal_renderer;
 
 use core_video::image_buffer::CVImageBuffer;
-#[cfg(not(feature = "macos-blade"))]
 use metal_renderer as renderer;
-
-#[cfg(feature = "macos-blade")]
-use crate::platform::blade as renderer;
 
 mod attributed_string;
 

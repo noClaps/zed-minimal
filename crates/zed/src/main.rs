@@ -72,8 +72,6 @@ fn files_not_created_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
                 _many => format!("{kind} when creating directories {paths:?}"),
             };
 
-            #[cfg(unix)]
-            {
                 match kind {
                     io::ErrorKind::PermissionDenied => {
                         error_kind_details.push_str("\n\nConsider using chown and chmod tools for altering the directories permissions if your user has corresponding rights.\
@@ -81,7 +79,6 @@ fn files_not_created_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
                     }
                     _ => {}
                 }
-            }
 
             Some(error_kind_details)
         })
@@ -123,71 +120,23 @@ fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
     eprintln!(
         "Zed failed to open a window: {e:?}. See https://zed.dev/docs/linux for troubleshooting steps."
     );
-    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
-    {
-        process::exit(1);
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    {
-        use ashpd::desktop::notification::{Notification, NotificationProxy, Priority};
-        _cx.spawn(async move |_cx| {
-            let Ok(proxy) = NotificationProxy::new().await else {
-                process::exit(1);
-            };
-
-            let notification_id = "dev.zed.Oops";
-            proxy
-                .add_notification(
-                    notification_id,
-                    Notification::new("Zed failed to launch")
-                        .body(Some(
-                            format!(
-                                "{e:?}. See https://zed.dev/docs/linux for troubleshooting steps."
-                            )
-                            .as_str(),
-                        ))
-                        .priority(Priority::High)
-                        .icon(ashpd::desktop::Icon::with_names(&[
-                            "dialog-question-symbolic",
-                        ])),
-                )
-                .await
-                .ok();
-
-            process::exit(1);
-        })
-        .detach();
-    }
+    process::exit(1);
 }
 
 pub fn main() {
-    #[cfg(unix)]
-    {
-        let is_root = nix::unistd::geteuid().is_root();
-        let allow_root = env::var("ZED_ALLOW_ROOT").is_ok_and(|val| val == "true");
+    let is_root = nix::unistd::geteuid().is_root();
+    let allow_root = env::var("ZED_ALLOW_ROOT").is_ok_and(|val| val == "true");
 
-        // Prevent running Zed with root privileges on Unix systems unless explicitly allowed
-        if is_root && !allow_root {
-            eprintln!(
-                "\
+    // Prevent running Zed with root privileges on Unix systems unless explicitly allowed
+    if is_root && !allow_root {
+        eprintln!(
+            "\
 Error: Running Zed as root or via sudo is unsupported.
        Doing so (even once) may subtly break things for all subsequent non-root usage of Zed.
        It is untested and not recommended, don't complain when things break.
        If you wish to proceed anyways, set `ZED_ALLOW_ROOT=true` in your environment."
-            );
-            process::exit(1);
-        }
-    }
-
-    // Check if there is a pending installer
-    // If there is, run the installer and exit
-    // And we don't want to run the installer if we are not the first instance
-    #[cfg(target_os = "windows")]
-    let is_first_instance = crate::zed::windows_only_instance::is_first_instance();
-    #[cfg(target_os = "windows")]
-    if is_first_instance && auto_update::check_pending_installation() {
-        return;
+        );
+        process::exit(1);
     }
 
     let args = Args::parse();
@@ -205,15 +154,6 @@ Error: Running Zed as root or via sudo is unsupported.
     // Set custom data directory.
     if let Some(dir) = &args.user_data_dir {
         paths::set_custom_data_dir(dir);
-    }
-
-    #[cfg(all(not(debug_assertions), target_os = "windows"))]
-    unsafe {
-        use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-
-        if args.foreground {
-            let _ = AttachConsole(ATTACH_PARENT_PROCESS);
-        }
     }
 
     let file_errors = init_paths();
@@ -270,25 +210,8 @@ Error: Running Zed as root or via sudo is unsupported.
         if *db::ZED_STATELESS || *release_channel::RELEASE_CHANNEL == ReleaseChannel::Dev {
             false
         } else {
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            {
-                crate::zed::listen_for_cli_connections(open_listener.clone()).is_err()
-            }
-
-            #[cfg(target_os = "windows")]
-            {
-                !crate::zed::windows_only_instance::handle_single_instance(
-                    open_listener.clone(),
-                    &args,
-                    is_first_instance,
-                )
-            }
-
-            #[cfg(target_os = "macos")]
-            {
-                use zed::mac_only_instance::*;
-                ensure_only_instance() != IsOnlyInstance::Yes
-            }
+            use zed::mac_only_instance::*;
+            ensure_only_instance() != IsOnlyInstance::Yes
         };
     if failed_single_instance_check {
         println!("zed is already running");
@@ -296,14 +219,13 @@ Error: Running Zed as root or via sudo is unsupported.
     }
 
     let git_hosting_provider_registry = Arc::new(GitHostingProviderRegistry::new());
-    let git_binary_path =
-        if cfg!(target_os = "macos") && option_env!("ZED_BUNDLE").as_deref() == Some("true") {
-            app.path_for_auxiliary_executable("git")
-                .context("could not find git binary path")
-                .log_err()
-        } else {
-            None
-        };
+    let git_binary_path = if option_env!("ZED_BUNDLE").as_deref() == Some("true") {
+        app.path_for_auxiliary_executable("git")
+            .context("could not find git binary path")
+            .log_err()
+    } else {
+        None
+    };
     log::info!("Using git binary path: {:?}", git_binary_path);
 
     let fs = Arc::new(RealFs::new(git_binary_path, app.background_executor()));
@@ -327,7 +249,6 @@ Error: Running Zed as root or via sudo is unsupported.
     if !stdout_is_a_pty() {
         app.background_executor()
             .spawn(async {
-                #[cfg(unix)]
                 util::load_login_shell_environment().log_err();
                 shell_env_loaded_tx.send(()).ok();
             })
@@ -944,18 +865,6 @@ struct Args {
     /// by having Zed act like netcat communicating over a Unix socket.
     #[arg(long, hide = true)]
     askpass: Option<String>,
-
-    /// Run zed in the foreground, only used on Windows, to match the behavior on macOS.
-    #[arg(long)]
-    #[cfg(target_os = "windows")]
-    #[arg(hide = true)]
-    foreground: bool,
-
-    /// The dock action to perform. This is used on Windows only.
-    #[arg(long)]
-    #[cfg(target_os = "windows")]
-    #[arg(hide = true)]
-    dock_action: Option<usize>,
 
     #[arg(long, hide = true)]
     dump_all_actions: bool,

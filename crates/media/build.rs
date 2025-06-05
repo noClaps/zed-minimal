@@ -1,4 +1,3 @@
-#[cfg(target_os = "macos")]
 fn main() {
     use std::{env, path::PathBuf, process::Command};
 
@@ -38,6 +37,3 @@ fn main() {
         .write_to_file(out_path.join("bindings.rs"))
         .expect("couldn't write dispatch bindings");
 }
-
-#[cfg(not(target_os = "macos"))]
-fn main() {}

@@ -1044,32 +1044,6 @@ async fn test_adding_directory_via_file(cx: &mut gpui::TestAppContext) {
             "      .dockerignore",
         ]
     );
-
-    // Test filename ends with "\"
-    #[cfg(target_os = "windows")]
-    {
-        select_path(&panel, "root1", cx);
-        panel.update_in(cx, |panel, window, cx| panel.new_file(&NewFile, window, cx));
-        let confirm = panel.update_in(cx, |panel, window, cx| {
-            // If we want to create a subdirectory, there should be no prefix slash.
-            panel
-                .filename_editor
-                .update(cx, |editor, cx| editor.set_text("new_dir_3\\", window, cx));
-            panel.confirm_edit(window, cx).unwrap()
-        });
-        confirm.await.unwrap();
-        assert_eq!(
-            visible_entries_as_strings(&panel, 0..10, cx),
-            &[
-                "v root1",
-                "    > .git",
-                "    v new dir 2",
-                "    v new_dir",
-                "    v new_dir_3  <== selected",
-                "      .dockerignore",
-            ]
-        );
-    }
 }
 
 #[gpui::test]
@@ -2713,7 +2687,6 @@ async fn test_new_file_move(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn test_rename_root_of_worktree(cx: &mut gpui::TestAppContext) {
     init_test_with_editor(cx);
 

@@ -4,51 +4,6 @@ use anyhow::{Context as _, Result};
 use async_zip::base::read;
 use futures::{AsyncRead, io::BufReader};
 
-#[cfg(windows)]
-pub async fn extract_zip<R: AsyncRead + Unpin>(destination: &Path, reader: R) -> Result<()> {
-    let mut reader = read::stream::ZipFileReader::new(BufReader::new(reader));
-
-    let destination = &destination
-        .canonicalize()
-        .unwrap_or_else(|_| destination.to_path_buf());
-
-    while let Some(mut item) = reader.next_with_entry().await? {
-        let entry_reader = item.reader_mut();
-        let entry = entry_reader.entry();
-        let path = destination.join(
-            entry
-                .filename()
-                .as_str()
-                .context("reading zip entry file name")?,
-        );
-
-        if entry
-            .dir()
-            .with_context(|| format!("reading zip entry metadata for path {path:?}"))?
-        {
-            std::fs::create_dir_all(&path)
-                .with_context(|| format!("creating directory {path:?}"))?;
-        } else {
-            let parent_dir = path
-                .parent()
-                .with_context(|| format!("no parent directory for {path:?}"))?;
-            std::fs::create_dir_all(parent_dir)
-                .with_context(|| format!("creating parent directory {parent_dir:?}"))?;
-            let mut file = smol::fs::File::create(&path)
-                .await
-                .with_context(|| format!("creating file {path:?}"))?;
-            futures::io::copy(entry_reader, &mut file)
-                .await
-                .with_context(|| format!("extracting into file {path:?}"))?;
-        }
-
-        reader = item.skip().await.context("reading next zip entry")?;
-    }
-
-    Ok(())
-}
-
-#[cfg(not(windows))]
 pub async fn extract_zip<R: AsyncRead + Unpin>(destination: &Path, reader: R) -> Result<()> {
     // Unix needs file permissions copied when extracting.
     // This is only possible to do when a reader impls `AsyncSeek` and `seek::ZipFileReader` is used.
@@ -139,22 +94,13 @@ mod tests {
 
             let filename = relative_path.display().to_string();
 
-            #[cfg(unix)]
-            {
-                let mut builder =
-                    ZipEntryBuilder::new(filename.into(), async_zip::Compression::Deflate);
-                use std::os::unix::fs::PermissionsExt;
-                let metadata = std::fs::metadata(&path)?;
-                let perms = metadata.permissions().mode() as u16;
-                builder = builder.unix_permissions(perms);
-                writer.write_entry_whole(builder, &data).await?;
-            }
-            #[cfg(not(unix))]
-            {
-                let builder =
-                    ZipEntryBuilder::new(filename.into(), async_zip::Compression::Deflate);
-                writer.write_entry_whole(builder, &data).await?;
-            }
+            let mut builder =
+                ZipEntryBuilder::new(filename.into(), async_zip::Compression::Deflate);
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&path)?;
+            let perms = metadata.permissions().mode() as u16;
+            builder = builder.unix_permissions(perms);
+            writer.write_entry_whole(builder, &data).await?;
         }
 
         writer.close().await?;
@@ -209,7 +155,6 @@ mod tests {
         });
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_extract_zip_preserves_executable_permissions() {
         use std::os::unix::fs::PermissionsExt;

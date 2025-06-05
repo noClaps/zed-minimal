@@ -36,14 +36,7 @@ static mut LEVEL_ENABLED_MAX_STATIC: log::LevelFilter = LEVEL_ENABLED_MAX_DEFAUL
 // PERF: this doesn't need to be an atomic, we don't actually care about race conditions here
 pub static LEVEL_ENABLED_MAX_CONFIG: AtomicU8 = AtomicU8::new(LEVEL_ENABLED_MAX_DEFAULT as u8);
 
-const DEFAULT_FILTERS: &[(&str, log::LevelFilter)] = &[
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    ("zbus", log::LevelFilter::Off),
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
-    ("blade_graphics", log::LevelFilter::Off),
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))]
-    ("naga::back::spv::writer", log::LevelFilter::Off),
-];
+const DEFAULT_FILTERS: &[(&str, log::LevelFilter)] = &[];
 
 pub fn init_env_filter(filter: env_config::EnvFilter) {
     if let Some(level_max) = filter.level_global {

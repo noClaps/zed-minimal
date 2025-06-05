@@ -41,7 +41,6 @@ pub fn capture(change_dir: Option<impl AsRef<Path>>) -> Result<HashMap<String, S
     // For csh/tcsh, the login shell option is set by passing `-` as
     // the 0th argument instead of using `-l`.
     if let Some("tcsh" | "csh") = shell_name {
-        #[cfg(unix)]
         std::os::unix::process::CommandExt::arg0(&mut command, "-");
     } else {
         command.arg("-l");

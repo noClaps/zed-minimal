@@ -692,10 +692,7 @@ impl EsLintLspAdapter {
     const CURRENT_VERSION: &'static str = "2.4.4";
     const CURRENT_VERSION_TAG_NAME: &'static str = "release/2.4.4";
 
-    #[cfg(not(windows))]
     const GITHUB_ASSET_KIND: AssetKind = AssetKind::TarGz;
-    #[cfg(windows)]
-    const GITHUB_ASSET_KIND: AssetKind = AssetKind::Zip;
 
     const SERVER_PATH: &'static str = "vscode-eslint/server/out/eslintServer.js";
     const SERVER_NAME: LanguageServerName = LanguageServerName::new_static("eslint");
@@ -863,20 +860,6 @@ impl LspAdapter for EsLintLspAdapter {
             let repo_root = destination_path.join("vscode-eslint");
             fs::rename(first.path(), &repo_root).await?;
 
-            #[cfg(target_os = "windows")]
-            {
-                handle_symlink(
-                    repo_root.join("$shared"),
-                    repo_root.join("client").join("src").join("shared"),
-                )
-                .await?;
-                handle_symlink(
-                    repo_root.join("$shared"),
-                    repo_root.join("server").join("src").join("shared"),
-                )
-                .await?;
-            }
-
             self.node
                 .run_npm_subcommand(&repo_root, "install", &[])
                 .await?;
@@ -906,26 +889,6 @@ impl LspAdapter for EsLintLspAdapter {
             arguments: eslint_server_binary_arguments(&server_path),
         })
     }
-}
-
-#[cfg(target_os = "windows")]
-async fn handle_symlink(src_dir: PathBuf, dest_dir: PathBuf) -> Result<()> {
-    anyhow::ensure!(
-        fs::metadata(&src_dir).await.is_ok(),
-        "Directory {src_dir:?} is not present"
-    );
-    if fs::metadata(&dest_dir).await.is_ok() {
-        fs::remove_file(&dest_dir).await?;
-    }
-    fs::create_dir_all(&dest_dir).await?;
-    let mut entries = fs::read_dir(&src_dir).await?;
-    while let Some(entry) = entries.try_next().await? {
-        let entry_path = entry.path();
-        let entry_name = entry.file_name();
-        let dest_path = dest_dir.join(&entry_name);
-        fs::copy(&entry_path, &dest_path).await?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

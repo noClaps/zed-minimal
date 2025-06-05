@@ -337,7 +337,6 @@ async fn test_symlinks_pointing_outside(cx: &mut TestAppContext) {
     );
 }
 
-#[cfg(target_os = "macos")]
 #[gpui::test]
 async fn test_renaming_case_only(cx: &mut TestAppContext) {
     cx.executor().allow_parking();
@@ -700,9 +699,6 @@ async fn test_write_file(cx: &mut TestAppContext) {
     )
     .await
     .unwrap();
-
-    #[cfg(not(target_os = "macos"))]
-    fs::fs_watcher::global(|_| {}).unwrap();
 
     cx.read(|cx| worktree.read(cx).as_local().unwrap().scan_complete())
         .await;

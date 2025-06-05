@@ -5,9 +5,7 @@ fn main() {
         println!(r#"cargo:rustc-cfg=feature="no-bundled-uninstall""#);
     }
 
-    if cfg!(target_os = "macos") {
-        println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=10.15.7");
-    }
+    println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=10.15.7");
 
     // Populate git sha environment variable if git is available
     println!("cargo:rerun-if-changed=../../.git/logs/HEAD");

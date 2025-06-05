@@ -269,31 +269,16 @@ struct ManagedNodeRuntime {
 impl ManagedNodeRuntime {
     const VERSION: &str = "v22.5.1";
 
-    #[cfg(not(windows))]
     const NODE_PATH: &str = "bin/node";
-    #[cfg(windows)]
-    const NODE_PATH: &str = "node.exe";
 
-    #[cfg(not(windows))]
     const NPM_PATH: &str = "bin/npm";
-    #[cfg(windows)]
-    const NPM_PATH: &str = "node_modules/npm/bin/npm-cli.js";
 
     async fn install_if_needed(http: &Arc<dyn HttpClient>) -> Result<Box<dyn NodeRuntimeTrait>> {
         log::info!("Node runtime install_if_needed");
 
-        let os = match consts::OS {
-            "macos" => "darwin",
-            "linux" => "linux",
-            "windows" => "win",
-            other => bail!("Running on unsupported os: {other}"),
-        };
+        let os = "darwin";
 
-        let arch = match consts::ARCH {
-            "x86_64" => "x64",
-            "aarch64" => "arm64",
-            other => bail!("Running on unsupported architecture: {other}"),
-        };
+        let arch = "aarch64";
 
         let version = Self::VERSION;
         let folder_name = format!("node-{version}-{os}-{arch}");
@@ -654,23 +639,5 @@ fn configure_npm_command(
             .replace("localhost", "127.0.0.1");
 
         command.args(["--proxy", &proxy]);
-    }
-
-    #[cfg(windows)]
-    {
-        // SYSTEMROOT is a critical environment variables for Windows.
-        if let Some(val) = env::var("SYSTEMROOT")
-            .context("Missing environment variable: SYSTEMROOT!")
-            .log_err()
-        {
-            command.env("SYSTEMROOT", val);
-        }
-        // Without ComSpec, the post-install will always fail.
-        if let Some(val) = env::var("ComSpec")
-            .context("Missing environment variable: ComSpec!")
-            .log_err()
-        {
-            command.env("ComSpec", val);
-        }
     }
 }

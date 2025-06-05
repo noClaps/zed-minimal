@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 use client::ZED_URL_SCHEME;
-use gpui::{AppContext as _, AsyncApp, Context, PromptLevel, Window, actions};
+use gpui::{AsyncApp, Context, Window, actions};
 use release_channel::ReleaseChannel;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -23,16 +23,12 @@ async fn install_script(cx: &AsyncApp) -> Result<PathBuf> {
     // If the symlink is not there or is outdated, first try replacing it
     // without escalating.
     smol::fs::remove_file(link_path).await.log_err();
-    // todo("windows")
-    #[cfg(not(windows))]
+    if smol::fs::unix::symlink(&cli_path, link_path)
+        .await
+        .log_err()
+        .is_some()
     {
-        if smol::fs::unix::symlink(&cli_path, link_path)
-            .await
-            .log_err()
-            .is_some()
-        {
-            return Ok(link_path.into());
-        }
+        return Ok(link_path.into());
     }
 
     // The symlink could not be created, so use osascript with admin privileges
@@ -65,19 +61,7 @@ pub async fn register_zed_scheme(cx: &AsyncApp) -> anyhow::Result<()> {
 }
 
 pub fn install_cli(window: &mut Window, cx: &mut Context<Workspace>) {
-    const LINUX_PROMPT_DETAIL: &str = "If you installed Zed from our official release add ~/.local/bin to your PATH.\n\nIf you installed Zed from a different source like your package manager, then you may need to create an alias/symlink manually.\n\nDepending on your package manager, the CLI might be named zeditor, zedit, zed-editor or something else.";
-
     cx.spawn_in(window, async move |workspace, cx| {
-        if cfg!(any(target_os = "linux", target_os = "freebsd")) {
-            let prompt = cx.prompt(
-                PromptLevel::Warning,
-                "CLI should already be installed",
-                Some(LINUX_PROMPT_DETAIL),
-                &["Ok"],
-            );
-            cx.background_spawn(prompt).detach();
-            return Ok(());
-        }
         let path = install_script(cx.deref())
             .await
             .context("error creating CLI symlink")?;

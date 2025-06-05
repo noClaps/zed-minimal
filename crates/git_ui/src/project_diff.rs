@@ -1329,7 +1329,6 @@ fn merge_anchor_ranges<'a>(
     })
 }
 
-#[cfg(not(target_os = "windows"))]
 #[cfg(test)]
 mod tests {
     use db::indoc;

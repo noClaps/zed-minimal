@@ -561,17 +561,11 @@ impl ExtensionImports for WasmState {
             .host
             .writeable_path_from_extension(&self.manifest.id, Path::new(&path))?;
 
-        #[cfg(unix)]
-        {
-            use std::fs::{self, Permissions};
-            use std::os::unix::fs::PermissionsExt;
+        use std::fs::{self, Permissions};
+        use std::os::unix::fs::PermissionsExt;
 
-            return fs::set_permissions(&path, Permissions::from_mode(0o755))
-                .with_context(|| format!("setting permissions for path {path:?}"))
-                .to_wasmtime_result();
-        }
-
-        #[cfg(not(unix))]
-        Ok(Ok(()))
+        return fs::set_permissions(&path, Permissions::from_mode(0o755))
+            .with_context(|| format!("setting permissions for path {path:?}"))
+            .to_wasmtime_result();
     }
 }

@@ -227,11 +227,7 @@ pub fn deploy_context_menu(
                 .action("Paste", Box::new(Paste))
                 .separator()
                 .map(|builder| {
-                    let reveal_in_finder_label = if cfg!(target_os = "macos") {
-                        "Reveal in Finder"
-                    } else {
-                        "Reveal in File Manager"
-                    };
+                    let reveal_in_finder_label = "Reveal in Finder";
                     const OPEN_IN_TERMINAL_LABEL: &str = "Open in Terminal";
                     if has_reveal_target {
                         builder

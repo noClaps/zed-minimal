@@ -34,20 +34,9 @@ text.workspace = true
 time.workspace = true
 util.workspace = true
 workspace-hack.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
 fsevent.workspace = true
 objc.workspace = true
 cocoa = "0.26"
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-notify = "8.0.0"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows.workspace = true
-
-[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-ashpd.workspace = true
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

@@ -778,11 +778,8 @@ impl ProjectPanel {
                         menu.action("New File", Box::new(NewFile))
                             .action("New Folder", Box::new(NewDirectory))
                             .separator()
-                            .when(is_local && cfg!(target_os = "macos"), |menu| {
+                            .when(is_local, |menu| {
                                 menu.action("Reveal in Finder", Box::new(RevealInFileManager))
-                            })
-                            .when(is_local && cfg!(not(target_os = "macos")), |menu| {
-                                menu.action("Reveal in File Manager", Box::new(RevealInFileManager))
                             })
                             .when(is_local, |menu| {
                                 menu.action("Open in Default App", Box::new(OpenWithSystem))
@@ -817,9 +814,7 @@ impl ProjectPanel {
                                 Box::new(zed_actions::workspace::CopyRelativePath),
                             )
                             .separator()
-                            .when(!is_root || !cfg!(target_os = "windows"), |menu| {
-                                menu.action("Rename", Box::new(Rename))
-                            })
+                            .action("Rename", Box::new(Rename))
                             .when(!is_root & !is_remote, |menu| {
                                 menu.action("Trash", Box::new(Trash { skip_prompt: false }))
                             })
@@ -1262,11 +1257,7 @@ impl ProjectPanel {
         if filename.trim().is_empty() {
             return None;
         }
-        #[cfg(not(target_os = "windows"))]
         let filename_indicates_dir = filename.ends_with("/");
-        // On Windows, path separator could be either `/` or `\`.
-        #[cfg(target_os = "windows")]
-        let filename_indicates_dir = filename.ends_with("/") || filename.ends_with("\\");
         edit_state.is_dir =
             edit_state.is_dir || (edit_state.is_new_entry() && filename_indicates_dir);
         let is_dir = edit_state.is_dir;
@@ -1534,10 +1525,6 @@ impl ProjectPanel {
             if let Some(worktree) = self.project.read(cx).worktree_for_id(worktree_id, cx) {
                 let sub_entry_id = self.unflatten_entry_id(entry_id);
                 if let Some(entry) = worktree.read(cx).entry_for_id(sub_entry_id) {
-                    #[cfg(target_os = "windows")]
-                    if Some(entry) == worktree.read(cx).root_entry() {
-                        return;
-                    }
                     self.edit_state = Some(EditState {
                         worktree_id,
                         entry_id: sub_entry_id,
@@ -3112,8 +3099,7 @@ impl ProjectPanel {
     }
 
     fn is_copy_modifier_set(modifiers: &Modifiers) -> bool {
-        cfg!(target_os = "macos") && modifiers.alt
-            || cfg!(not(target_os = "macos")) && modifiers.control
+        modifiers.alt
     }
 
     fn drag_onto(

@@ -1,19 +1,13 @@
 mod application_menu;
 mod platforms;
 mod title_bar_settings;
-mod window_controls;
 
 #[cfg(feature = "stories")]
 mod stories;
 
 use crate::application_menu::ApplicationMenu;
 
-#[cfg(not(target_os = "macos"))]
-use crate::application_menu::{
-    ActivateDirection, ActivateMenuLeft, ActivateMenuRight, OpenApplicationMenu,
-};
-
-use crate::platforms::{platform_linux, platform_mac, platform_windows};
+use crate::platforms::platform_mac;
 use auto_update::AutoUpdateStatus;
 use client::{Client, UserStore};
 use gpui::{
@@ -53,52 +47,6 @@ pub fn init(cx: &mut App) {
         };
         let item = cx.new(|cx| TitleBar::new("title-bar", workspace, window, cx));
         workspace.set_titlebar_item(item.into(), window, cx);
-
-        #[cfg(not(target_os = "macos"))]
-        workspace.register_action(|workspace, action: &OpenApplicationMenu, window, cx| {
-            if let Some(titlebar) = workspace
-                .titlebar_item()
-                .and_then(|item| item.downcast::<TitleBar>().ok())
-            {
-                titlebar.update(cx, |titlebar, cx| {
-                    if let Some(ref menu) = titlebar.application_menu {
-                        menu.update(cx, |menu, cx| menu.open_menu(action, window, cx));
-                    }
-                });
-            }
-        });
-
-        #[cfg(not(target_os = "macos"))]
-        workspace.register_action(|workspace, _: &ActivateMenuRight, window, cx| {
-            if let Some(titlebar) = workspace
-                .titlebar_item()
-                .and_then(|item| item.downcast::<TitleBar>().ok())
-            {
-                titlebar.update(cx, |titlebar, cx| {
-                    if let Some(ref menu) = titlebar.application_menu {
-                        menu.update(cx, |menu, cx| {
-                            menu.navigate_menus_in_direction(ActivateDirection::Right, window, cx)
-                        });
-                    }
-                });
-            }
-        });
-
-        #[cfg(not(target_os = "macos"))]
-        workspace.register_action(|workspace, _: &ActivateMenuLeft, window, cx| {
-            if let Some(titlebar) = workspace
-                .titlebar_item()
-                .and_then(|item| item.downcast::<TitleBar>().ok())
-            {
-                titlebar.update(cx, |titlebar, cx| {
-                    if let Some(ref menu) = titlebar.application_menu {
-                        menu.update(cx, |menu, cx| {
-                            menu.navigate_menus_in_direction(ActivateDirection::Left, window, cx)
-                        });
-                    }
-                });
-            }
-        });
     })
     .detach();
 }
@@ -111,7 +59,6 @@ pub struct TitleBar {
     user_store: Entity<UserStore>,
     client: Arc<Client>,
     workspace: WeakEntity<Workspace>,
-    should_move: bool,
     application_menu: Option<Entity<ApplicationMenu>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -119,19 +66,9 @@ pub struct TitleBar {
 impl Render for TitleBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title_bar_settings = *TitleBarSettings::get_global(cx);
-        let close_action = Box::new(workspace::CloseWindow);
         let height = Self::height(window);
-        let supported_controls = window.window_controls();
         let decorations = window.window_decorations();
-        let titlebar_color = if cfg!(any(target_os = "linux", target_os = "freebsd")) {
-            if window.is_window_active() && !self.should_move {
-                cx.theme().colors().title_bar_background
-            } else {
-                cx.theme().colors().title_bar_inactive_background
-            }
-        } else {
-            cx.theme().colors().title_bar_background
-        };
+        let titlebar_color = cx.theme().colors().title_bar_background;
 
         h_flex()
             .id("titlebar")
@@ -170,18 +107,10 @@ impl Render for TitleBar {
                     .items_center()
                     .justify_between()
                     .w_full()
-                    // Note: On Windows the title bar behavior is handled by the platform implementation.
                     .when(self.platform_style == PlatformStyle::Mac, |this| {
                         this.on_click(|event, window, _| {
                             if event.up.click_count == 2 {
                                 window.titlebar_double_click();
-                            }
-                        })
-                    })
-                    .when(self.platform_style == PlatformStyle::Linux, |this| {
-                        this.on_click(|event, window, _| {
-                            if event.up.click_count == 2 {
-                                window.zoom_window();
                             }
                         })
                     })
@@ -235,44 +164,6 @@ impl Render for TitleBar {
             .when(!window.is_fullscreen(), |title_bar| {
                 match self.platform_style {
                     PlatformStyle::Mac => title_bar,
-                    PlatformStyle::Linux => {
-                        if matches!(decorations, Decorations::Client { .. }) {
-                            title_bar
-                                .child(platform_linux::LinuxWindowControls::new(close_action))
-                                .when(supported_controls.window_menu, |titlebar| {
-                                    titlebar.on_mouse_down(
-                                        gpui::MouseButton::Right,
-                                        move |ev, window, _| window.show_window_menu(ev.position),
-                                    )
-                                })
-                                .on_mouse_move(cx.listener(move |this, _ev, window, _| {
-                                    if this.should_move {
-                                        this.should_move = false;
-                                        window.start_window_move();
-                                    }
-                                }))
-                                .on_mouse_down_out(cx.listener(move |this, _ev, _window, _cx| {
-                                    this.should_move = false;
-                                }))
-                                .on_mouse_up(
-                                    gpui::MouseButton::Left,
-                                    cx.listener(move |this, _ev, _window, _cx| {
-                                        this.should_move = false;
-                                    }),
-                                )
-                                .on_mouse_down(
-                                    gpui::MouseButton::Left,
-                                    cx.listener(move |this, _ev, _window, _cx| {
-                                        this.should_move = true;
-                                    }),
-                                )
-                        } else {
-                            title_bar
-                        }
-                    }
-                    PlatformStyle::Windows => {
-                        title_bar.child(platform_windows::WindowsWindowControls::new(height))
-                    }
                 }
             })
     }
@@ -298,9 +189,6 @@ impl TitleBar {
                     None
                 }
             }
-            PlatformStyle::Linux | PlatformStyle::Windows => {
-                Some(cx.new(|cx| ApplicationMenu::new(window, cx)))
-            }
         };
 
         let mut subscriptions = Vec::new();
@@ -319,7 +207,6 @@ impl TitleBar {
             children: SmallVec::new(),
             application_menu,
             workspace: workspace.weak_handle(),
-            should_move: false,
             project,
             user_store,
             client,
@@ -327,15 +214,8 @@ impl TitleBar {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
     pub fn height(window: &mut Window) -> Pixels {
         (1.75 * window.rem_size()).max(px(34.))
-    }
-
-    #[cfg(target_os = "windows")]
-    pub fn height(_window: &mut Window) -> Pixels {
-        // todo(windows) instead of hard coded size report the actual size to the Windows platform API
-        px(32.)
     }
 
     /// Sets the platform style.

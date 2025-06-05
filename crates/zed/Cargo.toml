@@ -50,7 +50,7 @@ git.workspace = true
 git_hosting_providers.workspace = true
 git_ui.workspace = true
 go_to_line.workspace = true
-gpui = { workspace = true, features = ["wayland", "x11", "font-kit"] }
+gpui = { workspace = true, features = ["font-kit"] }
 gpui_tokio.workspace = true
 http_client.workspace = true
 image_viewer.workspace = true
@@ -124,15 +124,6 @@ workspace.workspace = true
 zed_actions.workspace = true
 zlog.workspace = true
 zlog_settings.workspace = true
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows.workspace = true
-
-[target.'cfg(target_os = "windows")'.build-dependencies]
-winresource = "0.1"
-
-[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
-ashpd.workspace = true
 
 [dev-dependencies]
 editor = { workspace = true, features = ["test-support"] }

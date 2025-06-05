@@ -1,4 +1,3 @@
-#[cfg(target_os = "macos")]
 fn main() {
     use fsevent::EventStream;
     use std::{env::args, path::Path, time::Duration};
@@ -15,9 +14,4 @@ fn main() {
         }
         true
     });
-}
-
-#[cfg(not(target_os = "macos"))]
-fn main() {
-    eprintln!("This example only works on macOS");
 }

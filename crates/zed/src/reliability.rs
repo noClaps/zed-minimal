@@ -152,7 +152,6 @@ pub fn init_panic_hook(
     }));
 }
 
-#[cfg(not(target_os = "windows"))]
 fn get_main_module_base_address() -> *mut c_void {
     let mut dl_info = libc::Dl_info {
         dli_fname: std::ptr::null(),
@@ -166,11 +165,6 @@ fn get_main_module_base_address() -> *mut c_void {
     dl_info.dli_fbase
 }
 
-#[cfg(target_os = "windows")]
-fn get_main_module_base_address() -> *mut c_void {
-    std::ptr::null_mut()
-}
-
 pub fn init(
     http_client: Arc<HttpClientWithUrl>,
     system_id: Option<String>,
@@ -178,7 +172,6 @@ pub fn init(
     session_id: String,
     cx: &mut App,
 ) {
-    #[cfg(target_os = "macos")]
     monitor_main_thread_hangs(http_client.clone(), installation_id.clone(), cx);
 
     let Some(panic_report_url) = http_client
@@ -241,7 +234,6 @@ pub fn init(
     .detach();
 }
 
-#[cfg(target_os = "macos")]
 pub fn monitor_main_thread_hangs(
     http_client: Arc<HttpClientWithUrl>,
     installation_id: Option<String>,

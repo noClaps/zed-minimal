@@ -788,13 +788,7 @@ impl DirectoryLister {
             s.push_str(separator);
             s
         })
-        .unwrap_or_else(|| {
-            if cfg!(target_os = "windows") {
-                format!("C:{separator}")
-            } else {
-                format!("~{separator}")
-            }
-        })
+        .unwrap_or_else(|| format!("~{separator}"))
     }
 
     pub fn list_directory(&self, path: String, cx: &mut App) -> Task<Result<Vec<DirectoryItem>>> {

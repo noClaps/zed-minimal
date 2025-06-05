@@ -211,33 +211,6 @@ async fn load_directory_shell_environment(
     }
 }
 
-#[cfg(any(test, feature = "test-support"))]
-async fn load_shell_environment(
-    _dir: &Path,
-    _load_direnv: &DirenvSettings,
-) -> (
-    Option<HashMap<String, String>>,
-    Option<EnvironmentErrorMessage>,
-) {
-    let fake_env = [("ZED_FAKE_TEST_ENV".into(), "true".into())]
-        .into_iter()
-        .collect();
-    (Some(fake_env), None)
-}
-
-#[cfg(all(target_os = "windows", not(any(test, feature = "test-support"))))]
-async fn load_shell_environment(
-    _dir: &Path,
-    _load_direnv: &DirenvSettings,
-) -> (
-    Option<HashMap<String, String>>,
-    Option<EnvironmentErrorMessage>,
-) {
-    // TODO the current code works with Unix $SHELL only, implement environment loading on windows
-    (None, None)
-}
-
-#[cfg(not(any(target_os = "windows", test, feature = "test-support")))]
 async fn load_shell_environment(
     dir: &Path,
     load_direnv: &DirenvSettings,
