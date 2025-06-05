@@ -5,7 +5,7 @@ for Rust, designed to support a wide variety of applications.
 
 ## Getting Started
 
-GPUI is still in active development as we work on the Zed code editor and isn't yet on crates.io. You'll also need to use the latest version of stable Rust and be on macOS or Linux. Add the following to your `Cargo.toml`:
+GPUI is still in active development as we work on the Zed code editor and isn't yet on crates.io. You'll also need to use the latest version of stable Rust and be on macOS. Add the following to your `Cargo.toml`:
 
 ```toml
 gpui = { git = "https://github.com/zed-industries/zed" }

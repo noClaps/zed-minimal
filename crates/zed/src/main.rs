@@ -45,10 +45,11 @@ use welcome::{FIRST_OPEN, show_welcome_view};
 use workspace::{AppState, SerializedWorkspaceLocation, WorkspaceSettings, WorkspaceStore};
 use zed::{
     OpenListener, OpenRequest, app_menus, build_window_options, derive_paths_with_position,
-    handle_cli_connection, handle_keymap_file_changes, handle_settings_changed,
-    handle_settings_file_changes, initialize_workspace, inline_completion_registry,
-    open_paths_with_positions,
+    handle_cli_connection, handle_settings_changed, handle_settings_file_changes,
+    initialize_workspace, inline_completion_registry, open_paths_with_positions,
 };
+
+use crate::zed::load_default_keymap;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -113,10 +114,7 @@ fn fail_to_open_window_async(e: anyhow::Error, cx: &mut AsyncApp) {
     cx.update(|cx| fail_to_open_window(e, cx)).log_err();
 }
 
-fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
-    eprintln!(
-        "Zed failed to open a window: {e:?}. See https://zed.dev/docs/linux for troubleshooting steps."
-    );
+fn fail_to_open_window(_: anyhow::Error, _cx: &mut App) {
     process::exit(1);
 }
 
@@ -236,11 +234,6 @@ Error: Running Zed as root or via sudo is unsupported.
         fs.clone(),
         paths::global_settings_file().clone(),
     );
-    let user_keymap_file_rx = watch_config_file(
-        &app.background_executor(),
-        fs.clone(),
-        paths::keymap_file().clone(),
-    );
 
     let (shell_env_loaded_tx, shell_env_loaded_rx) = oneshot::channel();
     if !stdout_is_a_pty() {
@@ -290,7 +283,7 @@ Error: Running Zed as root or via sudo is unsupported.
             cx,
             handle_settings_changed,
         );
-        handle_keymap_file_changes(user_keymap_file_rx, cx);
+        load_default_keymap(cx);
         client::init_settings(cx);
         let user_agent = format!(
             "Zed/{} ({}; {})",
@@ -838,8 +831,6 @@ struct Args {
     /// Sets a custom directory for all user data (e.g., database, extensions, logs).
     /// This overrides the default platform-specific data directory location.
     /// On macOS, the default is `~/Library/Application Support/Zed`.
-    /// On Linux/FreeBSD, the default is `$XDG_DATA_HOME/zed`.
-    /// On Windows, the default is `%LOCALAPPDATA%\Zed`.
     #[arg(long, value_name = "DIR")]
     user_data_dir: Option<String>,
 

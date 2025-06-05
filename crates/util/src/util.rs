@@ -249,7 +249,6 @@ pub fn set_pre_exec_to_start_new_session(
     command: &mut std::process::Command,
 ) -> &mut std::process::Command {
     // safety: code in pre_exec should be signal safe.
-    // https://man7.org/linux/man-pages/man7/signal-safety.7.html
     unsafe {
         use std::os::unix::process::CommandExt;
         command.pre_exec(|| {

@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 use gpui::{App, AsyncApp};
@@ -8,7 +8,7 @@ use lsp::{InitializeParams, LanguageServerBinary, LanguageServerName};
 use project::lsp_store::clangd_ext;
 use serde_json::json;
 use smol::fs;
-use std::{any::Any, env::consts, path::PathBuf, sync::Arc};
+use std::{any::Any, path::PathBuf, sync::Arc};
 use util::{ResultExt, archive::extract_zip, fs::remove_matching, maybe, merge_json_value_into};
 
 pub struct CLspAdapter;
@@ -43,12 +43,7 @@ impl super::LspAdapter for CLspAdapter {
     ) -> Result<Box<dyn 'static + Send + Any>> {
         let release =
             latest_github_release("clangd/clangd", true, false, delegate.http_client()).await?;
-        let os_suffix = match consts::OS {
-            "macos" => "mac",
-            "linux" => "linux",
-            "windows" => "windows",
-            other => bail!("Running on unsupported os: {other}"),
-        };
+        let os_suffix = "mac";
         let asset_name = format!("clangd-{}-{}.zip", os_suffix, release.tag_name);
         let asset = release
             .assets

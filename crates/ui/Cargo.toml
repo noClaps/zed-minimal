@@ -17,14 +17,12 @@ chrono.workspace = true
 component.workspace = true
 documented.workspace = true
 gpui.workspace = true
-gpui_macros.workspace = true
 icons.workspace = true
 itertools.workspace = true
 menu.workspace = true
 serde.workspace = true
 settings.workspace = true
 smallvec.workspace = true
-story = { workspace = true, optional = true }
 strum.workspace = true
 theme.workspace = true
 ui_macros.workspace = true
@@ -33,4 +31,3 @@ workspace-hack.workspace = true
 
 [features]
 default = []
-stories = ["dep:story"]

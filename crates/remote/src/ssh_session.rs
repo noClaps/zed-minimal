@@ -305,15 +305,7 @@ pub struct SshPlatform {
 
 impl SshPlatform {
     pub fn triple(&self) -> Option<String> {
-        Some(format!(
-            "{}-{}",
-            self.arch,
-            match self.os {
-                "linux" => "unknown-linux-gnu",
-                "macos" => "apple-darwin",
-                _ => return None,
-            }
-        ))
+        Some(format!("{}-{}", self.arch, "apple-darwin"))
     }
 }
 
@@ -1465,32 +1457,8 @@ impl SshRemoteConnection {
     }
 
     async fn platform(&self) -> Result<SshPlatform> {
-        let uname = self.socket.run_command("sh", &["-c", "uname -sm"]).await?;
-        let Some((os, arch)) = uname.split_once(" ") else {
-            anyhow::bail!("unknown uname: {uname:?}")
-        };
-
-        let os = match os.trim() {
-            "Darwin" => "macos",
-            "Linux" => "linux",
-            _ => anyhow::bail!(
-                "Prebuilt remote servers are not yet available for {os:?}. See https://zed.dev/docs/remote-development"
-            ),
-        };
-        // exclude armv5,6,7 as they are 32-bit.
-        let arch = if arch.starts_with("armv8")
-            || arch.starts_with("armv9")
-            || arch.starts_with("arm64")
-            || arch.starts_with("aarch64")
-        {
-            "aarch64"
-        } else if arch.starts_with("x86") {
-            "x86_64"
-        } else {
-            anyhow::bail!(
-                "Prebuilt remote servers are not yet available for {arch:?}. See https://zed.dev/docs/remote-development"
-            )
-        };
+        let os = "macos";
+        let arch = "aarch64";
 
         Ok(SshPlatform { os, arch })
     }

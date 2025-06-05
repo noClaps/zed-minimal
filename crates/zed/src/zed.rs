@@ -15,18 +15,17 @@ use collections::VecDeque;
 use editor::ProposedChangesEditorToolbar;
 use editor::{Editor, MultiBuffer, scroll::Autoscroll};
 use futures::future::Either;
-use futures::{StreamExt, channel::mpsc, select_biased};
+use futures::{StreamExt, channel::mpsc};
 use git_ui::git_panel::GitPanel;
 use git_ui::project_diff::ProjectDiffToolbar;
 use gpui::{
-    Action, App, AppContext as _, Context, DismissEvent, Element, Entity, Focusable, KeyBinding,
-    ParentElement, PathPromptOptions, PromptLevel, ReadGlobal, SharedString, Styled, Task,
-    TitlebarOptions, UpdateGlobal, Window, WindowKind, WindowOptions, actions, image_cache, point,
-    px, retain_all,
+    Action, App, AppContext as _, Context, DismissEvent, Entity, Focusable, PathPromptOptions,
+    PromptLevel, ReadGlobal, Task, TitlebarOptions, UpdateGlobal, Window, WindowKind,
+    WindowOptions, actions, point, px,
 };
 use image_viewer::ImageInfo;
 use migrate::{MigrationBanner, MigrationEvent, MigrationNotification, MigrationType};
-use migrator::{migrate_keymap, migrate_settings};
+use migrator::migrate_settings;
 pub use open_listener::*;
 use outline_panel::OutlinePanel;
 use paths::{local_settings_file_relative_path, local_tasks_file_relative_path};
@@ -38,7 +37,7 @@ use release_channel::{AppCommitSha, ReleaseChannel};
 use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
-    InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings, SettingsStore,
+    DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, Settings, SettingsStore,
     initial_project_settings_content, initial_tasks_content, update_settings_file,
 };
 use std::path::PathBuf;
@@ -47,7 +46,6 @@ use std::{borrow::Cow, path::Path, sync::Arc};
 use terminal_view::terminal_panel::{self, TerminalPanel};
 use theme::{ActiveTheme, ThemeSettings};
 use ui::{PopoverMenuHandle, prelude::*};
-use util::markdown::MarkdownString;
 use util::{ResultExt, asset_str};
 use uuid::Uuid;
 use welcome::{DOCS_URL, MultibufferHint};
@@ -257,7 +255,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
 
         if let Some(specs) = window.gpu_specs() {
             log::info!("Using GPU: {:?}", specs);
-            show_software_emulation_warning_if_needed(specs, window, cx);
         }
 
         let popover_menu_handle = PopoverMenuHandle::default();
@@ -320,44 +317,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         workspace.focus_handle(cx).focus(window);
     })
     .detach();
-}
-
-fn show_software_emulation_warning_if_needed(
-    specs: gpui::GpuSpecs,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) {
-    if specs.is_software_emulated && std::env::var("ZED_ALLOW_EMULATED_GPU").is_err() {
-        let message = format!(
-            db::indoc! {r#"
-            Zed uses Vulkan for rendering and requires a compatible GPU.
-
-            Currently you are using a software emulated GPU ({}) which
-            will result in awful performance.
-
-            For troubleshooting see: https://zed.dev/docs/linux
-            Set ZED_ALLOW_EMULATED_GPU=1 env var to permanently override.
-            "#},
-            specs.device_name
-        );
-        let prompt = window.prompt(
-            PromptLevel::Critical,
-            "Unsupported GPU",
-            Some(&message),
-            &["Skip", "Troubleshoot and Quit"],
-            cx,
-        );
-        cx.spawn(async move |_, cx| {
-            if prompt.await == Ok(1) {
-                cx.update(|cx| {
-                    cx.open_url("https://zed.dev/docs/linux#zed-fails-to-open-windows");
-                    cx.quit();
-                })
-                .ok();
-            }
-        })
-        .detach()
-    }
 }
 
 fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) {
@@ -1002,174 +961,8 @@ pub fn handle_settings_file_changes(
     .detach();
 }
 
-pub fn handle_keymap_file_changes(
-    mut user_keymap_file_rx: mpsc::UnboundedReceiver<String>,
-    cx: &mut App,
-) {
-    let (keyboard_layout_tx, mut keyboard_layout_rx) = mpsc::unbounded();
-
-    let mut current_mapping = settings::get_key_equivalents(cx.keyboard_layout().id());
-    cx.on_keyboard_layout_change(move |cx| {
-        let next_mapping = settings::get_key_equivalents(cx.keyboard_layout().id());
-        if next_mapping != current_mapping {
-            current_mapping = next_mapping;
-            keyboard_layout_tx.unbounded_send(()).ok();
-        }
-    })
-    .detach();
-
-    struct KeymapParseErrorNotification;
-    let notification_id = NotificationId::unique::<KeymapParseErrorNotification>();
-
-    cx.spawn(async move |cx| {
-        let mut user_keymap_content = String::new();
-        let mut migrating_in_memory = false;
-        loop {
-            select_biased! {
-                _ = keyboard_layout_rx.next() => {},
-                content = user_keymap_file_rx.next() => {
-                    if let Some(content) = content {
-                        if let Ok(Some(migrated_content)) = migrate_keymap(&content) {
-                            user_keymap_content = migrated_content;
-                            migrating_in_memory = true;
-                        } else {
-                            user_keymap_content = content;
-                            migrating_in_memory = false;
-                        }
-                    }
-                }
-            };
-            cx.update(|cx| {
-                if let Some(notifier) = MigrationNotification::try_global(cx) {
-                    notifier.update(cx, |_, cx| {
-                        cx.emit(MigrationEvent::ContentChanged {
-                            migration_type: MigrationType::Keymap,
-                            migrating_in_memory,
-                        });
-                    });
-                }
-                let load_result = KeymapFile::load(&user_keymap_content, cx);
-                match load_result {
-                    KeymapFileLoadResult::Success { key_bindings } => {
-                        reload_keymaps(cx, key_bindings);
-                        dismiss_app_notification(&notification_id.clone(), cx);
-                    }
-                    KeymapFileLoadResult::SomeFailedToLoad {
-                        key_bindings,
-                        error_message,
-                    } => {
-                        if !key_bindings.is_empty() {
-                            reload_keymaps(cx, key_bindings);
-                        }
-                        show_keymap_file_load_error(notification_id.clone(), error_message, cx);
-                    }
-                    KeymapFileLoadResult::JsonParseFailure { error } => {
-                        show_keymap_file_json_error(notification_id.clone(), &error, cx)
-                    }
-                }
-            })
-            .ok();
-        }
-    })
-    .detach();
-}
-
-fn show_keymap_file_json_error(
-    notification_id: NotificationId,
-    error: &anyhow::Error,
-    cx: &mut App,
-) {
-    let message: SharedString =
-        format!("JSON parse error in keymap file. Bindings not reloaded.\n\n{error}").into();
-    show_app_notification(notification_id, cx, move |cx| {
-        cx.new(|cx| {
-            MessageNotification::new(message.clone(), cx)
-                .primary_message("Open Keymap File")
-                .primary_on_click(|window, cx| {
-                    window.dispatch_action(zed_actions::OpenKeymap.boxed_clone(), cx);
-                    cx.emit(DismissEvent);
-                })
-        })
-    });
-}
-
-fn show_keymap_file_load_error(
-    notification_id: NotificationId,
-    error_message: MarkdownString,
-    cx: &mut App,
-) {
-    show_markdown_app_notification(
-        notification_id.clone(),
-        error_message,
-        "Open Keymap File".into(),
-        |window, cx| {
-            window.dispatch_action(zed_actions::OpenKeymap.boxed_clone(), cx);
-            cx.emit(DismissEvent);
-        },
-        cx,
-    )
-}
-
-fn show_markdown_app_notification<F>(
-    notification_id: NotificationId,
-    message: MarkdownString,
-    primary_button_message: SharedString,
-    primary_button_on_click: F,
-    cx: &mut App,
-) where
-    F: 'static + Send + Sync + Fn(&mut Window, &mut Context<MessageNotification>),
-{
-    let parsed_markdown = cx.background_spawn(async move {
-        let file_location_directory = None;
-        let language_registry = None;
-        markdown_preview::markdown_parser::parse_markdown(
-            &message.0,
-            file_location_directory,
-            language_registry,
-        )
-        .await
-    });
-
-    cx.spawn(async move |cx| {
-        let parsed_markdown = Arc::new(parsed_markdown.await);
-        let primary_button_message = primary_button_message.clone();
-        let primary_button_on_click = Arc::new(primary_button_on_click);
-        cx.update(|cx| {
-            show_app_notification(notification_id, cx, move |cx| {
-                let workspace_handle = cx.entity().downgrade();
-                let parsed_markdown = parsed_markdown.clone();
-                let primary_button_message = primary_button_message.clone();
-                let primary_button_on_click = primary_button_on_click.clone();
-                cx.new(move |cx| {
-                    MessageNotification::new_from_builder(cx, move |window, cx| {
-                        image_cache(retain_all("notification-cache"))
-                            .text_xs()
-                            .child(markdown_preview::markdown_renderer::render_parsed_markdown(
-                                &parsed_markdown.clone(),
-                                Some(workspace_handle.clone()),
-                                window,
-                                cx,
-                            ))
-                            .into_any()
-                    })
-                    .primary_message(primary_button_message)
-                    .primary_on_click_arc(primary_button_on_click)
-                })
-            })
-        })
-        .ok();
-    })
-    .detach();
-}
-
-fn reload_keymaps(cx: &mut App, user_key_bindings: Vec<KeyBinding>) {
-    cx.clear_key_bindings();
-    cx.bind_keys(user_key_bindings);
-    cx.set_menus(app_menus());
-    cx.set_dock_menu(vec![gpui::MenuItem::action(
-        "New Window",
-        workspace::NewWindow,
-    )]);
+pub fn load_default_keymap(cx: &mut App) {
+    cx.bind_keys(KeymapFile::load_asset(DEFAULT_KEYMAP_PATH, cx).unwrap());
 }
 
 pub fn handle_settings_changed(error: Option<anyhow::Error>, cx: &mut App) {

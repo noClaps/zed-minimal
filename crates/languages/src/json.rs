@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use async_compression::futures::bufread::GzipDecoder;
 use async_tar::Archive;
 use async_trait::async_trait;
@@ -364,12 +364,7 @@ impl LspAdapter for NodeVersionAdapter {
             delegate.http_client(),
         )
         .await?;
-        let os = match consts::OS {
-            "macos" => "apple-darwin",
-            "linux" => "unknown-linux-gnu",
-            "windows" => "pc-windows-msvc",
-            other => bail!("Running on unsupported os: {other}"),
-        };
+        let os = "apple-darwin";
         let suffix = if consts::OS == "windows" {
             ".zip"
         } else {

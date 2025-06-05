@@ -170,8 +170,6 @@ pub struct WorkspaceSettingsContent {
     pub use_system_path_prompts: Option<bool>,
     /// Whether to use the system provided prompts.
     /// When set to false, Zed will use the built-in prompts.
-    /// Note that this setting has no effect on Linux, where Zed will always
-    /// use the built-in prompts.
     ///
     /// Default: true
     pub use_system_prompts: Option<bool>,

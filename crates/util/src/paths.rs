@@ -40,7 +40,7 @@ impl<T: AsRef<Path>> PathExt for T {
     ///
     /// * A `PathBuf` containing the compacted file path. If the input path
     ///   does not have the user's home directory prefix, or if we are not on
-    ///   Linux or macOS, the original path is returned unchanged.
+    ///   macOS, the original path is returned unchanged.
     fn compact(&self) -> PathBuf {
         match self.as_ref().strip_prefix(home_dir().as_path()) {
             Ok(relative_path) => {

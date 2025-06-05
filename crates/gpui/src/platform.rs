@@ -998,8 +998,7 @@ pub struct TitlebarOptions {
     /// The initial title of the window
     pub title: Option<SharedString>,
 
-    /// Should the default system titlebar be hidden to allow for a custom-drawn titlebar? (macOS and Windows only)
-    /// Refer to [`WindowOptions::window_decorations`] on Linux
+    /// Should the default system titlebar be hidden to allow for a custom-drawn titlebar? (macOS only)
     pub appears_transparent: bool,
 
     /// The position of the macOS traffic light buttons

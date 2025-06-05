@@ -69,8 +69,6 @@ pub fn capture(change_dir: Option<impl AsRef<Path>>) -> Result<HashMap<String, S
 }
 
 /// Parse the result of calling `sh -c 'export -p'`.
-///
-/// https://www.man7.org/linux/man-pages/man1/export.1p.html
 fn parse(mut input: &str) -> impl Iterator<Item = Result<(Cow<'_, str>, Option<Cow<'_, str>>)>> {
     std::iter::from_fn(move || {
         if input.is_empty() {

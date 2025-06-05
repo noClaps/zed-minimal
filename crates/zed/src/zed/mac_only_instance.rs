@@ -22,7 +22,7 @@ fn address() -> SocketAddr {
     // users running different release channels on the same machine. This ends up
     // interleaving the ports between different users and different release channels.
     //
-    // On macOS user IDs start at 501 and on Linux they start at 1000. The first user
+    // On macOS user IDs start at 501. The first user
     // on a Mac with ID 501 running a dev channel build will use port 44238, and the
     // second user with ID 502 will use port 44239, and so on. User 501 will use ports
     // 44338, 44438, and 44538 for the preview, stable, and nightly channels,

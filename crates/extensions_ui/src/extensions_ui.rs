@@ -111,14 +111,7 @@ pub fn init(cx: &mut App) {
                             match Flatten::flatten(prompt.await.map_err(|e| e.into())) {
                                 Ok(Some(mut paths)) => paths.pop()?,
                                 Ok(None) => return None,
-                                Err(err) => {
-                                    workspace_handle
-                                        .update(cx, |workspace, cx| {
-                                            workspace.show_portal_error(err.to_string(), cx);
-                                        })
-                                        .ok();
-                                    return None;
-                                }
+                                Err(_) => return None,
                             };
 
                         let install_task = store

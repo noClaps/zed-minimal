@@ -2,9 +2,6 @@ mod application_menu;
 mod platforms;
 mod title_bar_settings;
 
-#[cfg(feature = "stories")]
-mod stories;
-
 use crate::application_menu::ApplicationMenu;
 
 use crate::platforms::platform_mac;
@@ -28,9 +25,6 @@ use ui::{
 };
 use workspace::Workspace;
 use zed_actions::OpenRecent;
-
-#[cfg(feature = "stories")]
-pub use stories::*;
 
 const MAX_PROJECT_NAME_LENGTH: usize = 40;
 const MAX_BRANCH_NAME_LENGTH: usize = 40;

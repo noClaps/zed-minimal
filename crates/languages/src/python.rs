@@ -694,13 +694,11 @@ fn python_env_kind_display(k: &PythonEnvironmentKind) -> &'static str {
         PythonEnvironmentKind::Poetry => "Poetry",
         PythonEnvironmentKind::MacPythonOrg => "global (Python.org)",
         PythonEnvironmentKind::MacCommandLineTools => "global (Command Line Tools for Xcode)",
-        PythonEnvironmentKind::LinuxGlobal => "global",
         PythonEnvironmentKind::MacXCode => "global (Xcode)",
         PythonEnvironmentKind::Venv => "venv",
         PythonEnvironmentKind::VirtualEnv => "virtualenv",
         PythonEnvironmentKind::VirtualEnvWrapper => "virtualenvwrapper",
-        PythonEnvironmentKind::WindowsStore => "global (Windows Store)",
-        PythonEnvironmentKind::WindowsRegistry => "global (Windows Registry)",
+        _ => unreachable!(),
     }
 }
 

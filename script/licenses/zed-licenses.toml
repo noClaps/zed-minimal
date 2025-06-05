@@ -82,12 +82,6 @@ license = "MIT"
 path = '../../LICENSE'
 checksum = 'c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383'
 
-[pet-linux-global-python.clarify]
-license = "MIT"
-[[pet-linux-global-python.clarify.files]]
-path = '../../LICENSE'
-checksum = 'c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383'
-
 [pet-mac-commandlinetools.clarify]
 license = "MIT"
 [[pet-mac-commandlinetools.clarify.files]]

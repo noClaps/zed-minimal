@@ -16,20 +16,16 @@ static CUSTOM_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// The resolved data directory, combining custom override or platform defaults.
 /// This is set once and cached for subsequent calls.
 /// On macOS, this is `~/Library/Application Support/Zed`.
-/// On Linux/FreeBSD, this is `$XDG_DATA_HOME/zed`.
-/// On Windows, this is `%LOCALAPPDATA%\Zed`.
 static CURRENT_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// The resolved config directory, combining custom override or platform defaults.
 /// This is set once and cached for subsequent calls.
 /// On macOS, this is `~/.config/zed`.
-/// On Linux/FreeBSD, this is `$XDG_CONFIG_HOME/zed`.
-/// On Windows, this is `%APPDATA%\Zed`.
 static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// Returns the relative path to the zed_server directory on the ssh host.
 pub fn remote_server_dir_relative() -> &'static Path {
-    Path::new(".zed_server")
+    Path::new(".zed_min_server")
 }
 
 /// Sets a custom directory for all user data, overriding the default data directory.
@@ -78,7 +74,7 @@ pub fn data_dir() -> &'static PathBuf {
         if let Some(custom_dir) = CUSTOM_DATA_DIR.get() {
             custom_dir.clone()
         } else {
-            home_dir().join("Library/Application Support/Zed")
+            home_dir().join("Library/Application Support/ZedMin")
         }
     })
 }
@@ -88,14 +84,14 @@ pub fn temp_dir() -> &'static PathBuf {
     TEMP_DIR.get_or_init(|| {
         return dirs::cache_dir()
             .expect("failed to determine cachesDirectory directory")
-            .join("Zed");
+            .join("ZedMin");
     })
 }
 
 /// Returns the path to the logs directory.
 pub fn logs_dir() -> &'static PathBuf {
     static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    LOGS_DIR.get_or_init(|| home_dir().join("Library/Logs/Zed"))
+    LOGS_DIR.get_or_init(|| home_dir().join("Library/Logs/ZedMin"))
 }
 
 /// Returns the path to the Zed server directory on this SSH host.
@@ -107,13 +103,13 @@ pub fn remote_server_state_dir() -> &'static PathBuf {
 /// Returns the path to the `Zed.log` file.
 pub fn log_file() -> &'static PathBuf {
     static LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
-    LOG_FILE.get_or_init(|| logs_dir().join("Zed.log"))
+    LOG_FILE.get_or_init(|| logs_dir().join("ZedMin.log"))
 }
 
 /// Returns the path to the `Zed.log.old` file.
 pub fn old_log_file() -> &'static PathBuf {
     static OLD_LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
-    OLD_LOG_FILE.get_or_init(|| logs_dir().join("Zed.log.old"))
+    OLD_LOG_FILE.get_or_init(|| logs_dir().join("ZedMin.log.old"))
 }
 
 /// Returns the path to the database directory.
@@ -216,14 +212,6 @@ pub fn languages_dir() -> &'static PathBuf {
     LANGUAGES_DIR.get_or_init(|| data_dir().join("languages"))
 }
 
-/// Returns the path to the debug adapters directory
-///
-/// This is where debug adapters are downloaded to for DAPs that are built-in to Zed.
-pub fn debug_adapters_dir() -> &'static PathBuf {
-    static DEBUG_ADAPTERS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    DEBUG_ADAPTERS_DIR.get_or_init(|| data_dir().join("debug_adapters"))
-}
-
 /// Returns the path to the default Prettier directory.
 pub fn default_prettier_dir() -> &'static PathBuf {
     static DEFAULT_PRETTIER_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -238,17 +226,17 @@ pub fn remote_servers_dir() -> &'static PathBuf {
 
 /// Returns the relative path to a `.zed` folder within a project.
 pub fn local_settings_folder_relative_path() -> &'static Path {
-    Path::new(".zed")
+    Path::new(".zed-min")
 }
 
 /// Returns the relative path to a `settings.json` file within a project.
 pub fn local_settings_file_relative_path() -> &'static Path {
-    Path::new(".zed/settings.json")
+    Path::new(".zed-min/settings.json")
 }
 
 /// Returns the relative path to a `tasks.json` file within a project.
 pub fn local_tasks_file_relative_path() -> &'static Path {
-    Path::new(".zed/tasks.json")
+    Path::new(".zed-min/tasks.json")
 }
 
 pub fn debug_task_file_name() -> &'static str {
@@ -262,7 +250,7 @@ pub fn task_file_name() -> &'static str {
 /// Returns the relative path to a `debug.json` file within a project.
 /// .zed/debug.json
 pub fn local_debug_file_relative_path() -> &'static Path {
-    Path::new(".zed/debug.json")
+    Path::new(".zed-min/debug.json")
 }
 
 pub fn user_ssh_config_file() -> PathBuf {

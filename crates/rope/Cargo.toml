@@ -17,5 +17,4 @@ rayon.workspace = true
 smallvec.workspace = true
 sum_tree.workspace = true
 unicode-segmentation.workspace = true
-util.workspace = true
 workspace-hack.workspace = true

@@ -164,7 +164,6 @@ actions!(
         ReloadActiveItem,
         SaveAs,
         SaveWithoutFormat,
-        ShutdownDebugAdapters,
         SuppressNotification,
         ToggleBottomDock,
         ToggleCenteredLayout,
@@ -374,19 +373,6 @@ fn prompt_and_open_paths(app_state: Arc<AppState>, options: PathPromptOptions, c
             Ok(None) => {}
             Err(err) => {
                 util::log_err(&err);
-                cx.update(|cx| {
-                    if let Some(workspace_window) = cx
-                        .active_window()
-                        .and_then(|window| window.downcast::<Workspace>())
-                    {
-                        workspace_window
-                            .update(cx, |workspace, _, cx| {
-                                workspace.show_portal_error(err.to_string(), cx);
-                            })
-                            .ok();
-                    }
-                })
-                .ok();
             }
         },
     )
@@ -1765,9 +1751,8 @@ impl Workspace {
                     Ok(result) => {
                         tx.send(result).ok();
                     }
-                    Err(err) => {
+                    Err(_) => {
                         let rx = workspace.update_in(cx, |workspace, window, cx| {
-                            workspace.show_portal_error(err.to_string(), cx);
                             let prompt = workspace.on_prompt_for_open_path.take().unwrap();
                             let rx = prompt(workspace, lister, window, cx);
                             workspace.on_prompt_for_open_path = Some(prompt);
@@ -1820,10 +1805,8 @@ impl Workspace {
             })?;
             let abs_path = match abs_path.await? {
                 Ok(path) => path,
-                Err(err) => {
+                Err(_) => {
                     let rx = workspace.update_in(cx, |workspace, window, cx| {
-                        workspace.show_portal_error(err.to_string(), cx);
-
                         let prompt = workspace.on_prompt_for_new_path.take().unwrap();
                         let rx = prompt(workspace, lister, window, cx);
                         workspace.on_prompt_for_new_path = Some(prompt);

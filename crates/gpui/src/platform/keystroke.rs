@@ -108,9 +108,7 @@ impl Keystroke {
                 continue;
             }
 
-            let is_platform = component.eq_ignore_ascii_case("cmd")
-                || component.eq_ignore_ascii_case("super")
-                || component.eq_ignore_ascii_case("win");
+            let is_platform = component.eq_ignore_ascii_case("cmd");
 
             if is_platform {
                 modifiers.platform = true;
@@ -344,8 +342,6 @@ pub struct Modifiers {
     pub shift: bool,
 
     /// The command key, on macos
-    /// the windows key, on windows
-    /// the super key, on linux
     #[serde(default)]
     pub platform: bool,
 
@@ -363,7 +359,6 @@ impl Modifiers {
     /// Whether the semantically 'secondary' modifier key is pressed.
     ///
     /// On macOS, this is the command key.
-    /// On Linux and Windows, this is the control key.
     pub fn secondary(&self) -> bool {
         self.platform
     }

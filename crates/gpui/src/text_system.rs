@@ -63,16 +63,7 @@ impl TextSystem {
             font_ids_by_font: RwLock::default(),
             wrapper_pool: Mutex::default(),
             font_runs_pool: Mutex::default(),
-            fallback_font_stack: smallvec![
-                // TODO: Remove this when Linux have implemented setting fallbacks.
-                font("Menlo"),
-                font("Helvetica"),
-                font("Segoe UI"),  // Windows
-                font("Cantarell"), // Gnome
-                font("Ubuntu"),    // Gnome (Ubuntu)
-                font("Noto Sans"), // KDE
-                font("DejaVu Sans")
-            ],
+            fallback_font_stack: smallvec![font("Menlo"), font("Helvetica"),],
         }
     }
 

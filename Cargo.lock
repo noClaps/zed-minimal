@@ -3884,7 +3884,6 @@ dependencies = [
 name = "gpui_macros"
 version = "0.1.0"
 dependencies = [
- "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.101",
@@ -5084,10 +5083,8 @@ dependencies = [
  "regex",
  "rope",
  "rust-embed",
- "schemars",
  "serde",
  "serde_json",
- "serde_json_lenient",
  "settings",
  "smol",
  "task",
@@ -7996,7 +7993,6 @@ dependencies = [
  "smallvec",
  "sum_tree",
  "unicode-segmentation",
- "util",
  "workspace-hack 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -9304,16 +9300,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-name = "story"
-version = "0.1.0"
-dependencies = [
- "gpui",
- "itertools 0.14.0",
- "smallvec",
- "workspace-hack 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10086,7 +10072,6 @@ dependencies = [
  "serde",
  "settings",
  "smallvec",
- "story",
  "theme",
  "ui",
  "util",
@@ -10612,14 +10597,12 @@ dependencies = [
  "component",
  "documented",
  "gpui",
- "gpui_macros",
  "icons",
  "itertools 0.14.0",
  "menu",
  "serde",
  "settings",
  "smallvec",
- "story",
  "strum 0.27.1",
  "theme",
  "ui_macros",
