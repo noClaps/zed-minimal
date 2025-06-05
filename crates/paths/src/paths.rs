@@ -94,19 +94,19 @@ pub fn logs_dir() -> &'static PathBuf {
     LOGS_DIR.get_or_init(|| home_dir().join("Library/Logs/ZedMin"))
 }
 
-/// Returns the path to the Zed server directory on this SSH host.
+/// Returns the path to the ZedMin server directory on this SSH host.
 pub fn remote_server_state_dir() -> &'static PathBuf {
     static REMOTE_SERVER_STATE: OnceLock<PathBuf> = OnceLock::new();
     REMOTE_SERVER_STATE.get_or_init(|| data_dir().join("server_state"))
 }
 
-/// Returns the path to the `Zed.log` file.
+/// Returns the path to the `ZedMin.log` file.
 pub fn log_file() -> &'static PathBuf {
     static LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
     LOG_FILE.get_or_init(|| logs_dir().join("ZedMin.log"))
 }
 
-/// Returns the path to the `Zed.log.old` file.
+/// Returns the path to the `ZedMin.log.old` file.
 pub fn old_log_file() -> &'static PathBuf {
     static OLD_LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
     OLD_LOG_FILE.get_or_init(|| logs_dir().join("ZedMin.log.old"))

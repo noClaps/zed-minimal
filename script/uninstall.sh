@@ -40,26 +40,9 @@ main() {
 }
 
 macos() {
-    app="Zed.app"
+    app="ZedMin.app"
     db_suffix="stable"
-    app_id="dev.zed.Zed"
-    case "$channel" in
-      nightly)
-        app="Zed Nightly.app"
-        db_suffix="nightly"
-        app_id="dev.zed.Zed-Nightly"
-        ;;
-      preview)
-        app="Zed Preview.app"
-        db_suffix="preview"
-        app_id="dev.zed.Zed-Preview"
-        ;;
-      dev)
-        app="Zed Dev.app"
-        db_suffix="dev"
-        app_id="dev.zed.Zed-Dev"
-        ;;
-    esac
+    app_id="dev.zerolimits.ZedMin"
 
     # Remove the app bundle
     if [ -d "/Applications/$app" ]; then
@@ -67,10 +50,10 @@ macos() {
     fi
 
     # Remove the binary symlink
-    rm -f "$HOME/.local/bin/zed"
+    rm -f "$HOME/.local/bin/zed-min"
 
     # Remove the database directory for this channel
-    rm -rf "$HOME/Library/Application Support/Zed/db/0-$db_suffix"
+    rm -rf "$HOME/Library/Application Support/ZedMin/db/0-$db_suffix"
 
     # Remove app-specific files and directories
     rm -rf "$HOME/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments/$app_id.sfl"*
@@ -81,13 +64,13 @@ macos() {
 
     # Remove the entire Zed directory if no installations remain
     if check_remaining_installations; then
-        rm -rf "$HOME/Library/Application Support/Zed"
-        rm -rf "$HOME/Library/Logs/Zed"
+        rm -rf "$HOME/Library/Application Support/ZedMin"
+        rm -rf "$HOME/Library/Logs/ZedMin"
 
         prompt_remove_preferences
     fi
 
-    rm -rf $HOME/.zed_server
+    rm -rf $HOME/.zed_min_server
 }
 
 main "$@"

@@ -276,7 +276,7 @@ impl ManagedNodeRuntime {
 
         let os = "darwin";
 
-        let arch = "aarch64";
+        let arch = "arm64";
 
         let version = Self::VERSION;
         let folder_name = format!("node-{version}-{os}-{arch}");
