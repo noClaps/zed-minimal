@@ -1268,7 +1268,9 @@
       "language_servers": ["erlang-ls", "!elp", "..."]
     },
     "Git Commit": {
-      "allow_rewrap": "anywhere"
+      "allow_rewrap": "anywhere",
+      "soft_wrap": "editor_width",
+      "preferred_line_length": 72
     },
     "Go": {
       "code_actions_on_format": {

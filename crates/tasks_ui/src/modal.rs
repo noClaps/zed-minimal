@@ -155,15 +155,30 @@ impl TasksModal {
         }
     }
 
-    pub fn task_contexts_loaded(
+    pub fn tasks_loaded(
         &mut self,
         task_contexts: Arc<TaskContexts>,
+        lsp_tasks: Vec<(TaskSourceKind, task::ResolvedTask)>,
+        used_tasks: Vec<(TaskSourceKind, task::ResolvedTask)>,
+        current_resolved_tasks: Vec<(TaskSourceKind, task::ResolvedTask)>,
+        add_current_language_tasks: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let last_used_candidate_index = if used_tasks.is_empty() {
+            None
+        } else {
+            Some(used_tasks.len() - 1)
+        };
+        let mut new_candidates = used_tasks;
+        new_candidates.extend(lsp_tasks);
+        new_candidates.extend(current_resolved_tasks.into_iter().filter(|(task_kind, _)| {
+            add_current_language_tasks || !matches!(task_kind, TaskSourceKind::Language { .. })
+        }));
         self.picker.update(cx, |picker, cx| {
             picker.delegate.task_contexts = task_contexts;
-            picker.delegate.candidates = None;
+            picker.delegate.last_used_candidate_index = last_used_candidate_index;
+            picker.delegate.candidates = Some(new_candidates);
             picker.refresh(window, cx);
             cx.notify();
         })
