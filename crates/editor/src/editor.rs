@@ -62,8 +62,9 @@ pub use element::{
     CursorLayout, EditorElement, HighlightedRange, HighlightedRangeLine, PointForPosition,
 };
 use futures::{
-    FutureExt,
+    FutureExt, StreamExt as _,
     future::{self, Shared, join},
+    stream::FuturesUnordered,
 };
 use fuzzy::{StringMatch, StringMatchCandidate};
 
@@ -96,9 +97,10 @@ pub use items::MAX_TAB_TITLE_LEN;
 use itertools::Itertools;
 use language::{
     AutoindentMode, BracketMatch, BracketPair, Buffer, Capability, CharKind, CodeLabel,
-    CursorShape, DiagnosticEntry, DiffOptions, DocumentationConfig, EditPredictionsMode,
-    EditPreview, HighlightedText, IndentKind, IndentSize, Language, OffsetRangeExt, Point,
-    Selection, SelectionGoal, TextObject, TransactionId, TreeSitterOptions, WordsQuery,
+    CursorShape, DiagnosticEntry, DiagnosticSourceKind, DiffOptions, DocumentationConfig,
+    EditPredictionsMode, EditPreview, HighlightedText, IndentKind, IndentSize, Language,
+    OffsetRangeExt, Point, Selection, SelectionGoal, TextObject, TransactionId, TreeSitterOptions,
+    WordsQuery,
     language_settings::{
         self, InlayHintSettings, LspInsertMode, RewrapBehavior, WordsCompletionMode,
         all_language_settings, language_settings,
@@ -1631,6 +1633,10 @@ impl Editor {
                                 editor.tasks_update_task =
                                     Some(editor.refresh_runnables(window, cx));
                             }
+                            editor.pull_diagnostics(window, cx);
+                        }
+                        project::Event::RefreshDocumentsDiagnostics => {
+                            editor.pull_diagnostics(window, cx);
                         }
                         project::Event::SnippetEdit(id, snippet_edits) => {
                             if let Some(buffer) = editor.buffer.read(cx).buffer(*id) {
@@ -1709,7 +1715,7 @@ impl Editor {
             code_action_providers.push(Rc::new(project) as Rc<_>);
         }
 
-        let mut this = Self {
+        let mut editor = Self {
             focus_handle,
             show_cursor_when_unfocused: false,
             last_focused_descendant: None,
@@ -1866,6 +1872,7 @@ impl Editor {
                 }),
             ],
             tasks_update_task: None,
+            pull_diagnostics_task: Task::ready(()),
             linked_edit_ranges: Default::default(),
             in_project_search: false,
             previous_search_ranges: None,
@@ -1890,10 +1897,10 @@ impl Editor {
             change_list: ChangeList::new(),
             mode,
         };
-        this.tasks_update_task = Some(this.refresh_runnables(window, cx));
-        this._subscriptions.extend(project_subscriptions);
+        editor.tasks_update_task = Some(this.refresh_runnables(window, cx));
+        editor._subscriptions.extend(project_subscriptions);
 
-        this._subscriptions.push(cx.subscribe_in(
+        editor._subscriptions.push(cx.subscribe_in(
             &cx.entity(),
             window,
             |editor, _, e: &EditorEvent, window, cx| match e {
@@ -1935,33 +1942,36 @@ impl Editor {
             },
         ));
 
-        this.end_selection(window, cx);
-        this.scroll_manager.show_scrollbars(window, cx);
-        jsx_tag_auto_close::refresh_enabled_in_any_buffer(&mut this, &buffer, cx);
+        editor.end_selection(window, cx);
+        editor.scroll_manager.show_scrollbars(window, cx);
+        jsx_tag_auto_close::refresh_enabled_in_any_buffer(&mut editor, &buffer, cx);
 
         if full_mode {
             let should_auto_hide_scrollbars = cx.should_auto_hide_scrollbars();
             cx.set_global(ScrollbarAutoHide(should_auto_hide_scrollbars));
 
-            if this.git_blame_inline_enabled {
-                this.start_git_blame_inline(false, window, cx);
+            if editor.git_blame_inline_enabled {
+                editor.start_git_blame_inline(false, window, cx);
             }
 
             if let Some(buffer) = buffer.read(cx).as_singleton() {
-                if let Some(project) = this.project.as_ref() {
+                if let Some(project) = editor.project.as_ref() {
                     let handle = project.update(cx, |project, cx| {
                         project.register_buffer_with_language_servers(&buffer, cx)
                     });
-                    this.registered_buffers
+                    editor
+                        .registered_buffers
                         .insert(buffer.read(cx).remote_id(), handle);
                 }
             }
 
-            this.minimap = this.create_minimap(EditorSettings::get_global(cx).minimap, window, cx);
+            editor.minimap =
+                editor.create_minimap(EditorSettings::get_global(cx).minimap, window, cx);
+            editor.pull_diagnostics(window, cx);
         }
 
-        this.report_editor_event("Editor Opened", None, cx);
-        this
+        editor.report_editor_event("Editor Opened", None, cx);
+        editor
     }
 
     pub fn deploy_mouse_context_menu(
@@ -2544,7 +2554,9 @@ impl Editor {
             .invalidate(&self.selections.disjoint_anchors(), buffer);
         self.take_rename(false, window, cx);
 
-        let new_cursor_position = self.selections.newest_anchor().head();
+        let newest_selection = self.selections.newest_anchor();
+        let new_cursor_position = newest_selection.head();
+        let selection_start = newest_selection.start;
 
         self.push_to_nav_history(
             *old_cursor_position,
@@ -2554,8 +2566,6 @@ impl Editor {
         );
 
         if local {
-            let new_cursor_position = self.selections.newest_anchor().head();
-
             if let Some(buffer_id) = new_cursor_position.buffer_id {
                 if !self.registered_buffers.contains_key(&buffer_id) {
                     if let Some(project) = self.project.as_ref() {
@@ -2586,15 +2596,15 @@ impl Editor {
 
             if should_update_completions {
                 if let Some(completion_position) = completion_position {
-                    let new_cursor_offset = new_cursor_position.to_offset(buffer);
-                    let position_matches =
-                        new_cursor_offset == completion_position.to_offset(buffer);
+                    let start_offset = selection_start.to_offset(buffer);
+                    let position_matches = start_offset == completion_position.to_offset(buffer);
                     let continue_showing = if position_matches {
-                        let (word_range, kind) = buffer.surrounding_word(new_cursor_offset, true);
-                        if let Some(CharKind::Word) = kind {
-                            word_range.start < new_cursor_offset
+                        if self.snippet_stack.is_empty() {
+                            buffer.char_kind_before(start_offset, true) == Some(CharKind::Word)
                         } else {
-                            false
+                            // Snippet choices can be shown even when the cursor is in whitespace.
+                            // Dismissing the menu when actions like backspace
+                            true
                         }
                     } else {
                         false
@@ -4853,7 +4863,10 @@ impl Editor {
             return;
         }
 
-        let position = self.selections.newest_anchor().head();
+        // Typically `start` == `end`, but with snippet tabstop choices the default choice is
+        // inserted and selected. To handle that case, the start of the selection is used so that
+        // the menu starts with all choices.
+        let position = self.selections.newest_anchor().start;
         if position.diff_base_anchor.is_some() {
             return;
         }
@@ -8254,26 +8267,30 @@ impl Editor {
         selection: Range<Anchor>,
         cx: &mut Context<Self>,
     ) {
-        if selection.start.buffer_id.is_none() {
+        let buffer_id = match (&selection.start.buffer_id, &selection.end.buffer_id) {
+            (Some(a), Some(b)) if a == b => a,
+            _ => {
+                log::error!("expected anchor range to have matching buffer IDs");
+                return;
+            }
+        };
+        let multi_buffer = self.buffer().read(cx);
+        let Some(buffer) = multi_buffer.buffer(*buffer_id) else {
             return;
-        }
-        let buffer_id = selection.start.buffer_id.unwrap();
-        let buffer = self.buffer().read(cx).buffer(buffer_id);
+        };
+
         let id = post_inc(&mut self.next_completion_id);
         let snippet_sort_order = EditorSettings::get_global(cx).snippet_sort_order;
-
-        if let Some(buffer) = buffer {
-            *self.context_menu.borrow_mut() = Some(CodeContextMenu::Completions(
-                CompletionsMenu::new_snippet_choices(
-                    id,
-                    true,
-                    choices,
-                    selection,
-                    buffer,
-                    snippet_sort_order,
-                ),
-            ));
-        }
+        *self.context_menu.borrow_mut() = Some(CodeContextMenu::Completions(
+            CompletionsMenu::new_snippet_choices(
+                id,
+                true,
+                choices,
+                selection,
+                buffer,
+                snippet_sort_order,
+            ),
+        ));
     }
 
     pub fn insert_snippet(
@@ -8327,9 +8344,7 @@ impl Editor {
                             })
                         })
                         .collect::<Vec<_>>();
-                    // Sort in reverse order so that the first range is the newest created
-                    // selection. Completions will use it and autoscroll will prioritize it.
-                    tabstop_ranges.sort_unstable_by(|a, b| b.start.cmp(&a.start, snapshot));
+                    tabstop_ranges.sort_unstable_by(|a, b| a.start.cmp(&b.start, snapshot));
 
                     Tabstop {
                         is_end_tabstop,
@@ -8341,7 +8356,9 @@ impl Editor {
         });
         if let Some(tabstop) = tabstops.first() {
             self.change_selections(Some(Autoscroll::fit()), window, cx, |s| {
-                s.select_ranges(tabstop.ranges.iter().cloned());
+                // Reverse order so that the first range is the newest created selection.
+                // Completions will use it and autoscroll will prioritize it.
+                s.select_ranges(tabstop.ranges.iter().rev().cloned());
             });
 
             if let Some(choices) = &tabstop.choices {
@@ -8457,7 +8474,9 @@ impl Editor {
             }
             if let Some(current_ranges) = snippet.ranges.get(snippet.active_index) {
                 self.change_selections(Some(Autoscroll::fit()), window, cx, |s| {
-                    s.select_ranges(current_ranges.iter().cloned())
+                    // Reverse order so that the first range is the newest created selection.
+                    // Completions will use it and autoscroll will prioritize it.
+                    s.select_ranges(current_ranges.iter().rev().cloned())
                 });
 
                 if let Some(choices) = &snippet.choices[snippet.active_index] {
@@ -14876,6 +14895,49 @@ impl Editor {
         });
     }
 
+    fn pull_diagnostics(&mut self, window: &Window, cx: &mut Context<Self>) -> Option<()> {
+        let project = self.project.as_ref()?.downgrade();
+        let debounce = Duration::from_millis(
+            ProjectSettings::get_global(cx)
+                .diagnostics
+                .lsp_pull_diagnostics_debounce_ms?,
+        );
+        let buffers = self.buffer.read(cx).all_buffers();
+
+        self.pull_diagnostics_task = cx.spawn_in(window, async move |editor, cx| {
+            cx.background_executor().timer(debounce).await;
+
+            let Ok(mut pull_diagnostics_tasks) = cx.update(|_, cx| {
+                buffers
+                    .into_iter()
+                    .flat_map(|buffer| {
+                        Some(project.upgrade()?.pull_diagnostics_for_buffer(buffer, cx))
+                    })
+                    .collect::<FuturesUnordered<_>>()
+            }) else {
+                return;
+            };
+
+            while let Some(pull_task) = pull_diagnostics_tasks.next().await {
+                match pull_task {
+                    Ok(()) => {
+                        if editor
+                            .update_in(cx, |editor, window, cx| {
+                                editor.update_diagnostics_state(window, cx);
+                            })
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                    Err(e) => log::error!("Failed to update project diagnostics: {e:#}"),
+                }
+            }
+        });
+
+        Some(())
+    }
+
     pub fn set_selections_from_remote(
         &mut self,
         selections: Vec<Selection<Anchor>>,
@@ -17399,7 +17461,7 @@ impl Editor {
         match event {
             multi_buffer::Event::Edited {
                 singleton_buffer_edited,
-                edited_buffer: buffer_edited,
+                edited_buffer,
             } => {
                 self.scrollbar_marker_state.dirty = true;
                 self.active_indent_guides_state.dirty = true;
@@ -17410,18 +17472,25 @@ impl Editor {
                 if self.has_active_inline_completion() {
                     self.update_visible_inline_completion(window, cx);
                 }
-                if let Some(buffer) = buffer_edited {
-                    let buffer_id = buffer.read(cx).remote_id();
-                    if !self.registered_buffers.contains_key(&buffer_id) {
-                        if let Some(project) = self.project.as_ref() {
-                            project.update(cx, |project, cx| {
-                                self.registered_buffers.insert(
-                                    buffer_id,
-                                    project.register_buffer_with_language_servers(&buffer, cx),
-                                );
-                            })
+                if let Some(project) = self.project.as_ref() {
+                    project.update(cx, |project, cx| {
+                        // Diagnostics are not local: an edit within one file (`pub mod foo()` -> `pub mod bar()`), may cause errors in another files with `foo()`.
+                        // Hence, emit a project-wide event to pull for every buffer's diagnostics that has an open editor.
+                        if edited_buffer
+                            .as_ref()
+                            .is_some_and(|buffer| buffer.read(cx).file().is_some())
+                        {
+                            cx.emit(project::Event::RefreshDocumentsDiagnostics);
                         }
-                    }
+
+                        if let Some(buffer) = edited_buffer {
+                            self.registered_buffers
+                                .entry(buffer.read(cx).remote_id())
+                                .or_insert_with(|| {
+                                    project.register_buffer_with_language_servers(&buffer, cx)
+                                });
+                        }
+                    });
                 }
                 cx.emit(EditorEvent::BufferEdited);
                 cx.emit(SearchEvent::MatchesInvalidated);
@@ -17540,13 +17609,17 @@ impl Editor {
             | multi_buffer::Event::BufferDiffChanged => cx.emit(EditorEvent::TitleChanged),
             multi_buffer::Event::Closed => cx.emit(EditorEvent::Closed),
             multi_buffer::Event::DiagnosticsUpdated => {
-                self.refresh_active_diagnostics(cx);
-                self.refresh_inline_diagnostics(true, window, cx);
-                self.scrollbar_marker_state.dirty = true;
-                cx.notify();
+                self.update_diagnostics_state(window, cx);
             }
             _ => {}
         };
+    }
+
+    fn update_diagnostics_state(&mut self, window: &mut Window, cx: &mut Context<'_, Editor>) {
+        self.refresh_active_diagnostics(cx);
+        self.refresh_inline_diagnostics(true, window, cx);
+        self.scrollbar_marker_state.dirty = true;
+        cx.notify();
     }
 
     pub fn start_temporary_diff_override(&mut self) {
@@ -18948,6 +19021,12 @@ pub trait SemanticsProvider {
         new_name: String,
         cx: &mut App,
     ) -> Option<Task<Result<ProjectTransaction>>>;
+
+    fn pull_diagnostics_for_buffer(
+        &self,
+        buffer: Entity<Buffer>,
+        cx: &mut App,
+    ) -> Task<anyhow::Result<()>>;
 }
 
 pub trait CompletionProvider {
@@ -18963,11 +19042,13 @@ pub trait CompletionProvider {
 
     fn resolve_completions(
         &self,
-        buffer: Entity<Buffer>,
-        completion_indices: Vec<usize>,
-        completions: Rc<RefCell<Box<[Completion]>>>,
-        cx: &mut Context<Editor>,
-    ) -> Task<Result<bool>>;
+        _buffer: Entity<Buffer>,
+        _completion_indices: Vec<usize>,
+        _completions: Rc<RefCell<Box<[Completion]>>>,
+        _cx: &mut Context<Editor>,
+    ) -> Task<Result<bool>> {
+        Task::ready(Ok(false))
+    }
 
     fn apply_additional_edits_for_completion(
         &self,
@@ -19441,6 +19522,61 @@ impl SemanticsProvider for Entity<Project> {
         Some(self.update(cx, |project, cx| {
             project.perform_rename(buffer.clone(), position, new_name, cx)
         }))
+    }
+
+    fn pull_diagnostics_for_buffer(
+        &self,
+        buffer: Entity<Buffer>,
+        cx: &mut App,
+    ) -> Task<anyhow::Result<()>> {
+        let diagnostics = self.update(cx, |project, cx| {
+            project
+                .lsp_store()
+                .update(cx, |lsp_store, cx| lsp_store.pull_diagnostics(buffer, cx))
+        });
+        let project = self.clone();
+        cx.spawn(async move |cx| {
+            let diagnostics = diagnostics.await.context("pulling diagnostics")?;
+            project.update(cx, |project, cx| {
+                project.lsp_store().update(cx, |lsp_store, cx| {
+                    for diagnostics_set in diagnostics {
+                        let LspPullDiagnostics::Response {
+                            server_id,
+                            uri,
+                            diagnostics: project::PulledDiagnostics::Changed { diagnostics, .. },
+                        } = diagnostics_set
+                        else {
+                            continue;
+                        };
+
+                        let adapter = lsp_store.language_server_adapter_for_id(server_id);
+                        let disk_based_sources = adapter
+                            .as_ref()
+                            .map(|adapter| adapter.disk_based_diagnostic_sources.as_slice())
+                            .unwrap_or(&[]);
+                        lsp_store
+                            .merge_diagnostics(
+                                server_id,
+                                lsp::PublishDiagnosticsParams {
+                                    uri: uri.clone(),
+                                    diagnostics,
+                                    version: None,
+                                },
+                                DiagnosticSourceKind::Pulled,
+                                disk_based_sources,
+                                |old_diagnostic, _| match old_diagnostic.source_kind {
+                                    DiagnosticSourceKind::Pulled => false,
+                                    DiagnosticSourceKind::Other | DiagnosticSourceKind::Pushed => {
+                                        true
+                                    }
+                                },
+                                cx,
+                            )
+                            .log_err();
+                    }
+                })
+            })
+        })
     }
 }
 

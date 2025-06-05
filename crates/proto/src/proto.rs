@@ -305,6 +305,9 @@ messages!(
     (RunDebugLocators, Background),
     (DebugRequest, Background),
     (LogToDebugConsole, Background),
+    (GetDocumentDiagnostics, Background),
+    (GetDocumentDiagnosticsResponse, Background),
+    (RefreshDocumentsDiagnostics, Background)
 );
 
 request_messages!(
@@ -466,6 +469,8 @@ request_messages!(
     (ToggleBreakpoint, Ack),
     (GetDebugAdapterBinary, DebugAdapterBinary),
     (RunDebugLocators, DebugRequest),
+    (GetDocumentDiagnostics, GetDocumentDiagnosticsResponse),
+    (RefreshDocumentsDiagnostics, Ack)
 );
 
 entity_messages!(
@@ -592,6 +597,8 @@ entity_messages!(
     RunDebugLocators,
     GetDebugAdapterBinary,
     LogToDebugConsole,
+    GetDocumentDiagnostics,
+    RefreshDocumentsDiagnostics
 );
 
 entity_messages!(
