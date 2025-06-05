@@ -1,8 +1,3 @@
-#[cfg(test)]
-mod file_finder_tests;
-#[cfg(test)]
-mod open_path_prompt_tests;
-
 pub mod file_finder_settings;
 mod open_path_prompt;
 

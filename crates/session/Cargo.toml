@@ -12,10 +12,6 @@ workspace = true
 path = "src/session.rs"
 doctest = false
 
-[features]
-test-support = [
-    "db/test-support",
-]
 
 [dependencies]
 db.workspace = true

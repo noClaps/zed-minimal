@@ -12,12 +12,9 @@ workspace = true
 path = "src/lsp.rs"
 doctest = false
 
-[features]
-test-support = ["async-pipe"]
 
 [dependencies]
 anyhow.workspace = true
-async-pipe = { workspace = true, optional = true }
 collections.workspace = true
 futures.workspace = true
 gpui.workspace = true
@@ -32,10 +29,3 @@ smol.workspace = true
 util.workspace = true
 release_channel.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-async-pipe.workspace = true
-ctor.workspace = true
-gpui = { workspace = true, features = ["test-support"] }
-util = { workspace = true, features = ["test-support"] }
-zlog.workspace = true

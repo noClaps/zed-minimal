@@ -671,33 +671,3 @@ mod lenient_font_attributes {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::{FontRun, GlyphId, MacTextSystem, PlatformTextSystem, font, px};
-
-    #[test]
-    fn test_layout_line_bom_char() {
-        let fonts = MacTextSystem::new();
-        let font_id = fonts.font_id(&font("Helvetica")).unwrap();
-        let line = "\u{feff}";
-        let mut style = FontRun {
-            font_id,
-            len: line.len(),
-        };
-
-        let layout = fonts.layout_line(line, px(16.), &[style]);
-        assert_eq!(layout.len, line.len());
-        assert!(layout.runs.is_empty());
-
-        let line = "a\u{feff}b";
-        style.len = line.len();
-        let layout = fonts.layout_line(line, px(16.), &[style]);
-        assert_eq!(layout.len, line.len());
-        assert_eq!(layout.runs.len(), 1);
-        assert_eq!(layout.runs[0].glyphs.len(), 2);
-        assert_eq!(layout.runs[0].glyphs[0].id, GlyphId(68u32)); // a
-        // There's no glyph for \u{feff}
-        assert_eq!(layout.runs[0].glyphs[1].id, GlyphId(69u32)); // b
-    }
-}

@@ -97,11 +97,7 @@ impl Display for SystemSpecs {
                 Some(commit_sha) => format!("{} {}", self.release_channel, commit_sha),
                 None => self.release_channel.to_string(),
             },
-            if cfg!(debug_assertions) {
-                "(Taylor's Version)"
-            } else {
-                ""
-            },
+            ""
         );
         let system_specs = [
             app_version_information,

@@ -22,8 +22,6 @@ use std::{
 
 use super::Context;
 use crate::util::atomic_incr_if_not_zero;
-#[cfg(any(test, feature = "leak-detection"))]
-use collections::HashMap;
 
 slotmap::new_key_type! {
     /// A unique identifier for a entity across the application.
@@ -63,8 +61,6 @@ pub(crate) struct EntityMap {
 struct EntityRefCounts {
     counts: SlotMap<EntityId, AtomicUsize>,
     dropped_entity_ids: Vec<EntityId>,
-    #[cfg(any(test, feature = "leak-detection"))]
-    leak_detector: LeakDetector,
 }
 
 impl EntityMap {
@@ -75,11 +71,6 @@ impl EntityMap {
             ref_counts: Arc::new(RwLock::new(EntityRefCounts {
                 counts: SlotMap::with_key(),
                 dropped_entity_ids: Vec::new(),
-                #[cfg(any(test, feature = "leak-detection"))]
-                leak_detector: LeakDetector {
-                    next_handle_id: 0,
-                    entity_handles: HashMap::default(),
-                },
             })),
         }
     }
@@ -223,8 +214,6 @@ pub struct AnyEntity {
     pub(crate) entity_id: EntityId,
     pub(crate) entity_type: TypeId,
     entity_map: Weak<RwLock<EntityRefCounts>>,
-    #[cfg(any(test, feature = "leak-detection"))]
-    handle_id: HandleId,
 }
 
 impl AnyEntity {
@@ -233,13 +222,6 @@ impl AnyEntity {
             entity_id: id,
             entity_type,
             entity_map: entity_map.clone(),
-            #[cfg(any(test, feature = "leak-detection"))]
-            handle_id: entity_map
-                .upgrade()
-                .unwrap()
-                .write()
-                .leak_detector
-                .handle_created(id),
         }
     }
 
@@ -292,14 +274,6 @@ impl Clone for AnyEntity {
             entity_id: self.entity_id,
             entity_type: self.entity_type,
             entity_map: self.entity_map.clone(),
-            #[cfg(any(test, feature = "leak-detection"))]
-            handle_id: self
-                .entity_map
-                .upgrade()
-                .unwrap()
-                .write()
-                .leak_detector
-                .handle_created(self.entity_id),
         }
     }
 }
@@ -319,14 +293,6 @@ impl Drop for AnyEntity {
                 let mut entity_map = RwLockUpgradableReadGuard::upgrade(entity_map);
                 entity_map.dropped_entity_ids.push(self.entity_id);
             }
-        }
-
-        #[cfg(any(test, feature = "leak-detection"))]
-        if let Some(entity_map) = self.entity_map.upgrade() {
-            entity_map
-                .write()
-                .leak_detector
-                .handle_released(self.entity_id, self.handle_id)
         }
     }
 }
@@ -539,37 +505,7 @@ impl AnyWeakEntity {
             entity_id: self.entity_id,
             entity_type: self.entity_type,
             entity_map: self.entity_ref_counts.clone(),
-            #[cfg(any(test, feature = "leak-detection"))]
-            handle_id: self
-                .entity_ref_counts
-                .upgrade()
-                .unwrap()
-                .write()
-                .leak_detector
-                .handle_created(self.entity_id),
         })
-    }
-
-    /// Assert that entity referenced by this weak handle has been released.
-    #[cfg(any(test, feature = "leak-detection"))]
-    pub fn assert_released(&self) {
-        self.entity_ref_counts
-            .upgrade()
-            .unwrap()
-            .write()
-            .leak_detector
-            .assert_released(self.entity_id);
-
-        if self
-            .entity_ref_counts
-            .upgrade()
-            .and_then(|ref_counts| Some(ref_counts.read().counts.get(self.entity_id)?.load(SeqCst)))
-            .is_some()
-        {
-            panic!(
-                "entity was recently dropped but resources are retained until the end of the effect cycle."
-            )
-        }
     }
 
     /// Creates a weak entity that can never be upgraded.
@@ -769,113 +705,5 @@ impl<T: 'static> Ord for WeakEntity<T> {
 impl<T: 'static> PartialOrd for WeakEntity<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-#[cfg(any(test, feature = "leak-detection"))]
-static LEAK_BACKTRACE: std::sync::LazyLock<bool> =
-    std::sync::LazyLock::new(|| std::env::var("LEAK_BACKTRACE").map_or(false, |b| !b.is_empty()));
-
-#[cfg(any(test, feature = "leak-detection"))]
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
-pub(crate) struct HandleId {
-    id: u64, // id of the handle itself, not the pointed at object
-}
-
-#[cfg(any(test, feature = "leak-detection"))]
-pub(crate) struct LeakDetector {
-    next_handle_id: u64,
-    entity_handles: HashMap<EntityId, HashMap<HandleId, Option<backtrace::Backtrace>>>,
-}
-
-#[cfg(any(test, feature = "leak-detection"))]
-impl LeakDetector {
-    #[track_caller]
-    pub fn handle_created(&mut self, entity_id: EntityId) -> HandleId {
-        let id = util::post_inc(&mut self.next_handle_id);
-        let handle_id = HandleId { id };
-        let handles = self.entity_handles.entry(entity_id).or_default();
-        handles.insert(
-            handle_id,
-            LEAK_BACKTRACE.then(backtrace::Backtrace::new_unresolved),
-        );
-        handle_id
-    }
-
-    pub fn handle_released(&mut self, entity_id: EntityId, handle_id: HandleId) {
-        let handles = self.entity_handles.entry(entity_id).or_default();
-        handles.remove(&handle_id);
-    }
-
-    pub fn assert_released(&mut self, entity_id: EntityId) {
-        let handles = self.entity_handles.entry(entity_id).or_default();
-        if !handles.is_empty() {
-            for backtrace in handles.values_mut() {
-                if let Some(mut backtrace) = backtrace.take() {
-                    backtrace.resolve();
-                    eprintln!("Leaked handle: {:#?}", backtrace);
-                } else {
-                    eprintln!("Leaked handle: export LEAK_BACKTRACE to find allocation site");
-                }
-            }
-            panic!();
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::EntityMap;
-
-    struct TestEntity {
-        pub i: i32,
-    }
-
-    #[test]
-    fn test_entity_map_slot_assignment_before_cleanup() {
-        // Tests that slots are not re-used before take_dropped.
-        let mut entity_map = EntityMap::new();
-
-        let slot = entity_map.reserve::<TestEntity>();
-        entity_map.insert(slot, TestEntity { i: 1 });
-
-        let slot = entity_map.reserve::<TestEntity>();
-        entity_map.insert(slot, TestEntity { i: 2 });
-
-        let dropped = entity_map.take_dropped();
-        assert_eq!(dropped.len(), 2);
-
-        assert_eq!(
-            dropped
-                .into_iter()
-                .map(|(_, entity)| entity.downcast::<TestEntity>().unwrap().i)
-                .collect::<Vec<i32>>(),
-            vec![1, 2],
-        );
-    }
-
-    #[test]
-    fn test_entity_map_weak_upgrade_before_cleanup() {
-        // Tests that weak handles are not upgraded before take_dropped
-        let mut entity_map = EntityMap::new();
-
-        let slot = entity_map.reserve::<TestEntity>();
-        let handle = entity_map.insert(slot, TestEntity { i: 1 });
-        let weak = handle.downgrade();
-        drop(handle);
-
-        let strong = weak.upgrade();
-        assert_eq!(strong, None);
-
-        let dropped = entity_map.take_dropped();
-        assert_eq!(dropped.len(), 1);
-
-        assert_eq!(
-            dropped
-                .into_iter()
-                .map(|(_, entity)| entity.downcast::<TestEntity>().unwrap().i)
-                .collect::<Vec<i32>>(),
-            vec![1],
-        );
     }
 }

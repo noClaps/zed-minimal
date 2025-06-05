@@ -8,9 +8,6 @@ license = "Apache-2.0"
 [lints]
 workspace = true
 
-[features]
-inspector = []
-
 [lib]
 path = "src/gpui_macros.rs"
 proc-macro = true
@@ -22,6 +19,3 @@ proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-gpui = { workspace = true, features = ["inspector"] }

@@ -7,8 +7,6 @@ pub mod paths;
 pub mod serde;
 pub mod shell_env;
 pub mod size;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test;
 pub mod time;
 
 use anyhow::Result;
@@ -29,39 +27,6 @@ use std::{
 use unicase::UniCase;
 
 pub use take_until::*;
-#[cfg(any(test, feature = "test-support"))]
-pub use util_macros::{line_endings, separator, uri};
-
-#[macro_export]
-macro_rules! debug_panic {
-    ( $($fmt_arg:tt)* ) => {
-        if cfg!(debug_assertions) {
-            panic!( $($fmt_arg)* );
-        } else {
-            let backtrace = std::backtrace::Backtrace::capture();
-            log::error!("{}\n{:?}", format_args!($($fmt_arg)*), backtrace);
-        }
-    };
-}
-
-/// A macro to add "C:" to the beginning of a path literal on Windows, and replace all
-/// the separator from `/` to `\`.
-/// But on non-Windows platforms, it will return the path literal as is.
-///
-/// # Examples
-/// ```rust
-/// use util::path;
-///
-/// let path = path!("/Users/user/file.txt");
-/// assert_eq!(path, "/Users/user/file.txt");
-/// ```
-#[cfg(any(test, feature = "test-support"))]
-#[macro_export]
-macro_rules! path {
-    ($path:literal) => {
-        $path
-    };
-}
 
 pub fn truncate(s: &str, max_chars: usize) -> &str {
     match s.char_indices().nth(max_chars) {
@@ -154,31 +119,6 @@ pub fn truncate_lines_to_byte_limit(s: &str, max_bytes: usize) -> &str {
     }
 
     truncate_to_byte_limit(s, max_bytes)
-}
-
-#[test]
-fn test_truncate_lines_to_byte_limit() {
-    let text = "Line 1\nLine 2\nLine 3\nLine 4";
-
-    // Limit that includes all lines
-    assert_eq!(truncate_lines_to_byte_limit(text, 100), text);
-
-    // Exactly the first line
-    assert_eq!(truncate_lines_to_byte_limit(text, 7), "Line 1\n");
-
-    // Limit between lines
-    assert_eq!(truncate_lines_to_byte_limit(text, 13), "Line 1\n");
-    assert_eq!(truncate_lines_to_byte_limit(text, 20), "Line 1\nLine 2\n");
-
-    // Limit before first newline
-    assert_eq!(truncate_lines_to_byte_limit(text, 6), "Line ");
-
-    // Test with non-ASCII characters
-    let text_utf8 = "Line 1\nLíne 2\nLine 3";
-    assert_eq!(
-        truncate_lines_to_byte_limit(text_utf8, 15),
-        "Line 1\nLíne 2\n"
-    );
 }
 
 pub fn post_inc<T: From<u8> + AddAssign<T> + Copy>(value: &mut T) -> T {
@@ -479,8 +419,6 @@ pub trait ResultExt<E> {
     type Ok;
 
     fn log_err(self) -> Option<Self::Ok>;
-    /// Assert that this result should never be an error in development or tests.
-    fn debug_assert_ok(self, reason: &str) -> Self;
     fn warn_on_err(self) -> Option<Self::Ok>;
     fn log_with_level(self, level: log::Level) -> Option<Self::Ok>;
     fn anyhow(self) -> anyhow::Result<Self::Ok>
@@ -497,14 +435,6 @@ where
     #[track_caller]
     fn log_err(self) -> Option<T> {
         self.log_with_level(log::Level::Error)
-    }
-
-    #[track_caller]
-    fn debug_assert_ok(self, reason: &str) -> Self {
-        if let Err(error) = &self {
-            debug_panic!("{reason} - {error:?}");
-        }
-        self
     }
 
     #[track_caller]
@@ -679,59 +609,6 @@ pub fn defer<F: FnOnce()>(f: F) -> Deferred<F> {
     Deferred(Some(f))
 }
 
-#[cfg(any(test, feature = "test-support"))]
-mod rng {
-    use rand::{Rng, seq::SliceRandom};
-    pub struct RandomCharIter<T: Rng> {
-        rng: T,
-        simple_text: bool,
-    }
-
-    impl<T: Rng> RandomCharIter<T> {
-        pub fn new(rng: T) -> Self {
-            Self {
-                rng,
-                simple_text: std::env::var("SIMPLE_TEXT").map_or(false, |v| !v.is_empty()),
-            }
-        }
-
-        pub fn with_simple_text(mut self) -> Self {
-            self.simple_text = true;
-            self
-        }
-    }
-
-    impl<T: Rng> Iterator for RandomCharIter<T> {
-        type Item = char;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            if self.simple_text {
-                return if self.rng.gen_range(0..100) < 5 {
-                    Some('\n')
-                } else {
-                    Some(self.rng.gen_range(b'a'..b'z' + 1).into())
-                };
-            }
-
-            match self.rng.gen_range(0..100) {
-                // whitespace
-                0..=19 => [' ', '\n', '\r', '\t'].choose(&mut self.rng).copied(),
-                // two-byte greek letters
-                20..=32 => char::from_u32(self.rng.gen_range(('α' as u32)..('ω' as u32 + 1))),
-                // // three-byte characters
-                33..=45 => ['✋', '✅', '❌', '❎', '⭐']
-                    .choose(&mut self.rng)
-                    .copied(),
-                // // four-byte characters
-                46..=58 => ['🍐', '🏀', '🍗', '🎉'].choose(&mut self.rng).copied(),
-                // ascii letters
-                _ => Some(self.rng.gen_range(b'a'..b'z' + 1).into()),
-            }
-        }
-    }
-}
-#[cfg(any(test, feature = "test-support"))]
-pub use rng::RandomCharIter;
 /// Get an embedded file as a string.
 pub fn asset_str<A: rust_embed::RustEmbed>(path: &str) -> Cow<'static, str> {
     match A::get(path).expect(path).data {
@@ -934,292 +811,5 @@ impl<O> ConnectionResult<O> {
 impl<O> From<anyhow::Result<O>> for ConnectionResult<O> {
     fn from(result: anyhow::Result<O>) -> Self {
         ConnectionResult::Result(result)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_extend_sorted() {
-        let mut vec = vec![];
-
-        extend_sorted(&mut vec, vec![21, 17, 13, 8, 1, 0], 5, |a, b| b.cmp(a));
-        assert_eq!(vec, &[21, 17, 13, 8, 1]);
-
-        extend_sorted(&mut vec, vec![101, 19, 17, 8, 2], 8, |a, b| b.cmp(a));
-        assert_eq!(vec, &[101, 21, 19, 17, 13, 8, 2, 1]);
-
-        extend_sorted(&mut vec, vec![1000, 19, 17, 9, 5], 8, |a, b| b.cmp(a));
-        assert_eq!(vec, &[1000, 101, 21, 19, 17, 13, 9, 8]);
-    }
-
-    #[test]
-    fn test_truncate_to_bottom_n_sorted_by() {
-        let mut vec: Vec<u32> = vec![5, 2, 3, 4, 1];
-        truncate_to_bottom_n_sorted_by(&mut vec, 10, &u32::cmp);
-        assert_eq!(vec, &[1, 2, 3, 4, 5]);
-
-        vec = vec![5, 2, 3, 4, 1];
-        truncate_to_bottom_n_sorted_by(&mut vec, 5, &u32::cmp);
-        assert_eq!(vec, &[1, 2, 3, 4, 5]);
-
-        vec = vec![5, 2, 3, 4, 1];
-        truncate_to_bottom_n_sorted_by(&mut vec, 4, &u32::cmp);
-        assert_eq!(vec, &[1, 2, 3, 4]);
-
-        vec = vec![5, 2, 3, 4, 1];
-        truncate_to_bottom_n_sorted_by(&mut vec, 1, &u32::cmp);
-        assert_eq!(vec, &[1]);
-
-        vec = vec![5, 2, 3, 4, 1];
-        truncate_to_bottom_n_sorted_by(&mut vec, 0, &u32::cmp);
-        assert!(vec.is_empty());
-    }
-
-    #[test]
-    fn test_iife() {
-        fn option_returning_function() -> Option<()> {
-            None
-        }
-
-        let foo = maybe!({
-            option_returning_function()?;
-            Some(())
-        });
-
-        assert_eq!(foo, None);
-    }
-
-    #[test]
-    fn test_truncate_and_trailoff() {
-        assert_eq!(truncate_and_trailoff("", 5), "");
-        assert_eq!(truncate_and_trailoff("aaaaaa", 7), "aaaaaa");
-        assert_eq!(truncate_and_trailoff("aaaaaa", 6), "aaaaaa");
-        assert_eq!(truncate_and_trailoff("aaaaaa", 5), "aaaaa…");
-        assert_eq!(truncate_and_trailoff("èèèèèè", 7), "èèèèèè");
-        assert_eq!(truncate_and_trailoff("èèèèèè", 6), "èèèèèè");
-        assert_eq!(truncate_and_trailoff("èèèèèè", 5), "èèèèè…");
-    }
-
-    #[test]
-    fn test_truncate_and_remove_front() {
-        assert_eq!(truncate_and_remove_front("", 5), "");
-        assert_eq!(truncate_and_remove_front("aaaaaa", 7), "aaaaaa");
-        assert_eq!(truncate_and_remove_front("aaaaaa", 6), "aaaaaa");
-        assert_eq!(truncate_and_remove_front("aaaaaa", 5), "…aaaaa");
-        assert_eq!(truncate_and_remove_front("èèèèèè", 7), "èèèèèè");
-        assert_eq!(truncate_and_remove_front("èèèèèè", 6), "èèèèèè");
-        assert_eq!(truncate_and_remove_front("èèèèèè", 5), "…èèèèè");
-    }
-
-    #[test]
-    fn test_numeric_prefix_str_method() {
-        let target = "1a";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(1), "a")
-        );
-
-        let target = "12ab";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(12), "ab")
-        );
-
-        let target = "12_ab";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(12), "_ab")
-        );
-
-        let target = "1_2ab";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(1), "_2ab")
-        );
-
-        let target = "1.2";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(1), ".2")
-        );
-
-        let target = "1.2_a";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(1), ".2_a")
-        );
-
-        let target = "12.2_a";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(12), ".2_a")
-        );
-
-        let target = "12a.2_a";
-        assert_eq!(
-            NumericPrefixWithSuffix::from_numeric_prefixed_str(target),
-            NumericPrefixWithSuffix(Some(12), "a.2_a")
-        );
-    }
-
-    #[test]
-    fn test_numeric_prefix_with_suffix() {
-        let mut sorted = vec!["1-abc", "10", "11def", "2", "21-abc"];
-        sorted.sort_by_key(|s| NumericPrefixWithSuffix::from_numeric_prefixed_str(s));
-        assert_eq!(sorted, ["1-abc", "2", "10", "11def", "21-abc"]);
-
-        for numeric_prefix_less in ["numeric_prefix_less", "aaa", "~™£"] {
-            assert_eq!(
-                NumericPrefixWithSuffix::from_numeric_prefixed_str(numeric_prefix_less),
-                NumericPrefixWithSuffix(None, numeric_prefix_less),
-                "String without numeric prefix `{numeric_prefix_less}` should not be converted into NumericPrefixWithSuffix"
-            )
-        }
-    }
-
-    #[test]
-    fn test_word_consists_of_emojis() {
-        let words_to_test = vec![
-            ("👨‍👩‍👧‍👧👋🥒", true),
-            ("👋", true),
-            ("!👋", false),
-            ("👋!", false),
-            ("👋 ", false),
-            (" 👋", false),
-            ("Test", false),
-        ];
-
-        for (text, expected_result) in words_to_test {
-            assert_eq!(word_consists_of_emojis(text), expected_result);
-        }
-    }
-
-    #[test]
-    fn test_truncate_lines_and_trailoff() {
-        let text = r#"Line 1
-Line 2
-Line 3"#;
-
-        assert_eq!(
-            truncate_lines_and_trailoff(text, 2),
-            r#"Line 1
-…"#
-        );
-
-        assert_eq!(
-            truncate_lines_and_trailoff(text, 3),
-            r#"Line 1
-Line 2
-…"#
-        );
-
-        assert_eq!(
-            truncate_lines_and_trailoff(text, 4),
-            r#"Line 1
-Line 2
-Line 3"#
-        );
-    }
-
-    #[test]
-    fn test_expanded_and_wrapped_usize_range() {
-        // Neither wrap
-        assert_eq!(
-            expanded_and_wrapped_usize_range(2..4, 1, 1, 8).collect::<Vec<usize>>(),
-            (1..5).collect::<Vec<usize>>()
-        );
-        // Start wraps
-        assert_eq!(
-            expanded_and_wrapped_usize_range(2..4, 3, 1, 8).collect::<Vec<usize>>(),
-            ((0..5).chain(7..8)).collect::<Vec<usize>>()
-        );
-        // Start wraps all the way around
-        assert_eq!(
-            expanded_and_wrapped_usize_range(2..4, 5, 1, 8).collect::<Vec<usize>>(),
-            (0..8).collect::<Vec<usize>>()
-        );
-        // Start wraps all the way around and past 0
-        assert_eq!(
-            expanded_and_wrapped_usize_range(2..4, 10, 1, 8).collect::<Vec<usize>>(),
-            (0..8).collect::<Vec<usize>>()
-        );
-        // End wraps
-        assert_eq!(
-            expanded_and_wrapped_usize_range(3..5, 1, 4, 8).collect::<Vec<usize>>(),
-            (0..1).chain(2..8).collect::<Vec<usize>>()
-        );
-        // End wraps all the way around
-        assert_eq!(
-            expanded_and_wrapped_usize_range(3..5, 1, 5, 8).collect::<Vec<usize>>(),
-            (0..8).collect::<Vec<usize>>()
-        );
-        // End wraps all the way around and past the end
-        assert_eq!(
-            expanded_and_wrapped_usize_range(3..5, 1, 10, 8).collect::<Vec<usize>>(),
-            (0..8).collect::<Vec<usize>>()
-        );
-        // Both start and end wrap
-        assert_eq!(
-            expanded_and_wrapped_usize_range(3..5, 4, 4, 8).collect::<Vec<usize>>(),
-            (0..8).collect::<Vec<usize>>()
-        );
-    }
-
-    #[test]
-    fn test_wrapped_usize_outward_from() {
-        // No wrapping
-        assert_eq!(
-            wrapped_usize_outward_from(4, 2, 2, 10).collect::<Vec<usize>>(),
-            vec![4, 5, 3, 6, 2]
-        );
-        // Wrapping at end
-        assert_eq!(
-            wrapped_usize_outward_from(8, 2, 3, 10).collect::<Vec<usize>>(),
-            vec![8, 9, 7, 0, 6, 1]
-        );
-        // Wrapping at start
-        assert_eq!(
-            wrapped_usize_outward_from(1, 3, 2, 10).collect::<Vec<usize>>(),
-            vec![1, 2, 0, 3, 9, 8]
-        );
-        // All values wrap around
-        assert_eq!(
-            wrapped_usize_outward_from(5, 10, 10, 8).collect::<Vec<usize>>(),
-            vec![5, 6, 4, 7, 3, 0, 2, 1]
-        );
-        // None before / after
-        assert_eq!(
-            wrapped_usize_outward_from(3, 0, 0, 8).collect::<Vec<usize>>(),
-            vec![3]
-        );
-        // Starting point already wrapped
-        assert_eq!(
-            wrapped_usize_outward_from(15, 2, 2, 10).collect::<Vec<usize>>(),
-            vec![5, 6, 4, 7, 3]
-        );
-        // wrap_length of 0
-        assert_eq!(
-            wrapped_usize_outward_from(4, 2, 2, 0).collect::<Vec<usize>>(),
-            Vec::<usize>::new()
-        );
-    }
-
-    #[test]
-    fn test_split_with_ranges() {
-        let input = "hi";
-        let result = split_str_with_ranges(input, |c| c == ' ');
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], (0..2, "hi"));
-
-        let input = "héllo🦀world";
-        let result = split_str_with_ranges(input, |c| c == '🦀');
-
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], (0..6, "héllo")); // 'é' is 2 bytes
-        assert_eq!(result[1], (10..15, "world")); // '🦀' is 4 bytes
     }
 }

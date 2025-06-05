@@ -12,17 +12,6 @@ workspace = true
 path = "src/workspace.rs"
 doctest = false
 
-[features]
-test-support = [
-    "client/test-support",
-    "http_client/test-support",
-    "db/test-support",
-    "project/test-support",
-    "session/test-support",
-    "settings/test-support",
-    "gpui/test-support",
-    "fs/test-support",
-]
 
 [dependencies]
 any_vec.workspace = true
@@ -30,14 +19,12 @@ anyhow.workspace = true
 async-recursion.workspace = true
 bincode = "1.2.1"
 client.workspace = true
-clock.workspace = true
 collections.workspace = true
 component.workspace = true
 db.workspace = true
 fs.workspace = true
 futures.workspace = true
 gpui.workspace = true
-http_client.workspace = true
 itertools.workspace = true
 language.workspace = true
 log.workspace = true
@@ -63,15 +50,3 @@ util.workspace = true
 uuid.workspace = true
 zed_actions.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-client = { workspace = true, features = ["test-support"] }
-db = { workspace = true, features = ["test-support"] }
-fs = { workspace = true, features = ["test-support"] }
-gpui = { workspace = true, features = ["test-support"] }
-project = { workspace = true, features = ["test-support"] }
-session = { workspace = true, features = ["test-support"] }
-settings = { workspace = true, features = ["test-support"] }
-http_client = { workspace = true, features = ["test-support"] }
-tempfile.workspace = true
-zlog.workspace = true

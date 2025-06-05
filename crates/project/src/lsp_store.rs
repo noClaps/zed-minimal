@@ -89,15 +89,13 @@ use std::{
 use text::{Anchor, BufferId, LineEnding, OffsetRangeExt};
 use url::Url;
 use util::{
-    ResultExt as _, debug_panic, defer, maybe, merge_json_value_into,
+    ResultExt as _, defer, maybe, merge_json_value_into,
     paths::{PathExt, SanitizedPath},
     post_inc,
 };
 
 pub use fs::*;
 pub use language::Location;
-#[cfg(any(test, feature = "test-support"))]
-pub use prettier::FORMAT_SUFFIX as TEST_PRETTIER_FORMAT_SUFFIX;
 pub use worktree::{
     Entry, EntryKind, FS_WATCH_LATENCY, File, LocalWorktree, PathChange, ProjectEntryId,
     UpdatedEntriesSet, UpdatedGitRepositoriesSet, Worktree, WorktreeId, WorktreeSettings,
@@ -210,26 +208,9 @@ impl LocalLspStore {
             let adapter = adapter.clone();
             let server_name = adapter.name.clone();
             let stderr_capture = stderr_capture.clone();
-            #[cfg(any(test, feature = "test-support"))]
-            let lsp_store = self.weak.clone();
             let pending_workspace_folders = pending_workspace_folders.clone();
             async move |cx| {
                 let binary = binary.await?;
-                #[cfg(any(test, feature = "test-support"))]
-                if let Some(server) = lsp_store
-                    .update(&mut cx.clone(), |this, cx| {
-                        this.languages.create_fake_language_server(
-                            server_id,
-                            &server_name,
-                            binary.clone(),
-                            &mut cx.to_async(),
-                        )
-                    })
-                    .ok()
-                    .flatten()
-                {
-                    return Ok(server);
-                }
 
                 lsp::LanguageServer::new(
                     stderr_capture,
@@ -2501,10 +2482,6 @@ impl LocalLspStore {
         };
 
         let Ok(file_url) = lsp::Url::from_file_path(old_path.as_path()) else {
-            debug_panic!(
-                "`{}` is not parseable as an URI",
-                old_path.to_string_lossy()
-            );
             return;
         };
         self.unregister_buffer_from_language_servers(buffer, &file_url, cx);
@@ -3133,13 +3110,7 @@ impl LocalLspStore {
                             .as_path()
                             .strip_prefix(&path)
                             .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_else(|e| {
-                                debug_panic!(
-                                    "Failed to strip prefix for string pattern: {}, with prefix: {}, with error: {}",
-                                    s,
-                                    path.display(),
-                                    e
-                                );
+                            .unwrap_or_else(|_| {
                                 watcher_path.as_path().to_string_lossy().to_string()
                             });
                         (path, pattern)
@@ -3157,15 +3128,7 @@ impl LocalLspStore {
                         let pattern = Path::new(&rp.pattern)
                             .strip_prefix(&path)
                             .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_else(|e| {
-                                debug_panic!(
-                                    "Failed to strip prefix for relative pattern: {}, with prefix: {}, with error: {}",
-                                    rp.pattern,
-                                    path.display(),
-                                    e
-                                );
-                                rp.pattern.clone()
-                            });
+                            .unwrap_or_else(|_| rp.pattern.clone());
                         base_uri.push(path);
                         (base_uri, pattern)
                     }
@@ -3979,7 +3942,6 @@ impl LspStore {
                 cx.observe_release(&handle, move |this, buffer, cx| {
                     let local = this.as_local_mut().unwrap();
                     let Some(refcount) = local.registered_buffers.get_mut(&buffer_id) else {
-                        debug_panic!("bad refcounting");
                         return;
                     };
 
@@ -4952,10 +4914,7 @@ impl LspStore {
                             proto::lsp_response::Response::GetCodeActionsResponse(response) => {
                                 Some(response)
                             }
-                            unexpected => {
-                                debug_panic!("Unexpected response: {unexpected:?}");
-                                None
-                            }
+                            _ => None,
                         })
                         .map(|code_actions_response| {
                             GetCodeActions {
@@ -5023,10 +4982,7 @@ impl LspStore {
                             proto::lsp_response::Response::GetCodeLensResponse(response) => {
                                 Some(response)
                             }
-                            unexpected => {
-                                debug_panic!("Unexpected response: {unexpected:?}");
-                                None
-                            }
+                            _ => None,
                         })
                         .map(|code_lens_response| {
                             GetCodeLens.response_from_proto(
@@ -5760,10 +5716,7 @@ impl LspStore {
                             proto::lsp_response::Response::GetSignatureHelpResponse(response) => {
                                 Some(response)
                             }
-                            unexpected => {
-                                debug_panic!("Unexpected response: {unexpected:?}");
-                                None
-                            }
+                            _ => None,
                         })
                         .map(|signature_response| {
                             let response = GetSignatureHelp { position }.response_from_proto(
@@ -5832,10 +5785,7 @@ impl LspStore {
                             proto::lsp_response::Response::GetHoverResponse(response) => {
                                 Some(response)
                             }
-                            unexpected => {
-                                debug_panic!("Unexpected response: {unexpected:?}");
-                                None
-                            }
+                            _ => None,
                         })
                         .map(|hover_response| {
                             let response = GetHover { position }.response_from_proto(
@@ -6171,15 +6121,7 @@ impl LspStore {
                 }
                 Some(lsp::TextDocumentSyncKind::INCREMENTAL) => build_incremental_change(),
                 _ => {
-                    #[cfg(any(test, feature = "test-support"))]
-                    {
-                        build_incremental_change()
-                    }
-
-                    #[cfg(not(any(test, feature = "test-support")))]
-                    {
-                        continue;
-                    }
+                    continue;
                 }
             };
 
@@ -10512,46 +10454,4 @@ fn ensure_uniform_list_compatible_label(label: &mut CodeLabel) {
     }
 
     label.text = new_text;
-}
-
-#[cfg(test)]
-mod tests {
-    use language::HighlightId;
-
-    use super::*;
-
-    #[test]
-    fn test_glob_literal_prefix() {
-        assert_eq!(glob_literal_prefix(Path::new("**/*.js")), Path::new(""));
-        assert_eq!(
-            glob_literal_prefix(Path::new("node_modules/**/*.js")),
-            Path::new("node_modules")
-        );
-        assert_eq!(
-            glob_literal_prefix(Path::new("foo/{bar,baz}.js")),
-            Path::new("foo")
-        );
-        assert_eq!(
-            glob_literal_prefix(Path::new("foo/bar/baz.js")),
-            Path::new("foo/bar/baz.js")
-        );
-    }
-
-    #[test]
-    fn test_multi_len_chars_normalization() {
-        let mut label = CodeLabel {
-            text: "myElˇ (parameter) myElˇ: {\n    foo: string;\n}".to_string(),
-            runs: vec![(0..6, HighlightId(1))],
-            filter_range: 0..6,
-        };
-        ensure_uniform_list_compatible_label(&mut label);
-        assert_eq!(
-            label,
-            CodeLabel {
-                text: "myElˇ (parameter) myElˇ: { foo: string; }".to_string(),
-                runs: vec![(0..6, HighlightId(1))],
-                filter_range: 0..6,
-            }
-        );
-    }
 }

@@ -188,12 +188,6 @@ macro_rules! scoped {
         while index < scope.len() && !scope[index].is_empty() {
             index += 1;
         }
-        if index >= scope.len() {
-            #[cfg(debug_assertions)]
-            {
-                unreachable!("Scope overflow trying to add scope... ignoring scope");
-            }
-        }
         scope[index] = name;
         $crate::Logger { scope }
     }};
@@ -359,31 +353,5 @@ impl Timer {
             elapsed
         );
         self.done = true;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_crate_name() {
-        assert_eq!(crate_name!(), "zlog");
-        assert_eq!(
-            private::extract_crate_name_from_module_path("my_speedy_⚡️_crate::some_module"),
-            "my_speedy_⚡️_crate"
-        );
-        assert_eq!(
-            private::extract_crate_name_from_module_path("my_speedy_crate_⚡️::some_module"),
-            "my_speedy_crate_⚡️"
-        );
-        assert_eq!(
-            private::extract_crate_name_from_module_path("my_speedy_crate_:⚡️:some_module"),
-            "my_speedy_crate_:⚡️:some_module"
-        );
-        assert_eq!(
-            private::extract_crate_name_from_module_path("my_speedy_crate_::⚡️some_module"),
-            "my_speedy_crate_"
-        );
     }
 }

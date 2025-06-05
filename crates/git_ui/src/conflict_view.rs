@@ -15,7 +15,7 @@ use ui::{
     ActiveTheme, AnyElement, Element as _, StatefulInteractiveElement, Styled,
     StyledTypography as _, Window, div, h_flex, rems,
 };
-use util::{ResultExt as _, debug_panic, maybe};
+use util::{ResultExt as _, maybe};
 
 pub(crate) struct ConflictAddon {
     buffers: HashMap<BufferId, BufferConflicts>,
@@ -193,11 +193,6 @@ fn conflicts_updated(
         match buffer_conflicts.block_ids.get(event.old_range.clone()) {
             Some(_) => Some(event.old_range.clone()),
             None => {
-                debug_panic!(
-                    "conflicts updated event old range is invalid for buffer conflicts view (block_ids len is {:?}, old_range is {:?})",
-                    buffer_conflicts.block_ids.len(),
-                    event.old_range,
-                );
                 if event.old_range.start <= event.old_range.end {
                     Some(
                         event.old_range.start.min(buffer_conflicts.block_ids.len())

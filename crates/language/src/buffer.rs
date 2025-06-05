@@ -64,12 +64,7 @@ pub use text::{
     ToPointUtf16, Transaction, TransactionId, Unclipped,
 };
 use theme::{ActiveTheme as _, SyntaxTheme};
-#[cfg(any(test, feature = "test-support"))]
-use util::RandomCharIter;
-use util::{RangeExt, debug_panic, maybe};
-
-#[cfg(any(test, feature = "test-support"))]
-pub use {tree_sitter_python, tree_sitter_rust, tree_sitter_typescript};
+use util::{RangeExt, maybe};
 
 pub use lsp::DiagnosticSeverity;
 
@@ -998,34 +993,6 @@ impl Buffer {
         }
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn build_snapshot_sync(
-        text: Rope,
-        language: Option<Arc<Language>>,
-        language_registry: Option<Arc<LanguageRegistry>>,
-        cx: &mut App,
-    ) -> BufferSnapshot {
-        let entity_id = cx.reserve_entity::<Self>().entity_id();
-        let buffer_id = entity_id.as_non_zero_u64().into();
-        let text = TextBuffer::new_normalized(0, buffer_id, Default::default(), text).snapshot();
-        let mut syntax = SyntaxMap::new(&text).snapshot();
-        if let Some(language) = language.clone() {
-            let text = text.clone();
-            let language = language.clone();
-            let language_registry = language_registry.clone();
-            syntax.reparse(&text, language_registry, language);
-        }
-        BufferSnapshot {
-            text,
-            syntax,
-            file: None,
-            diagnostics: Default::default(),
-            remote_selections: Default::default(),
-            language,
-            non_text_state_update_count: 0,
-        }
-    }
-
     /// Retrieve a snapshot of the buffer's current state. This is computationally
     /// cheap, and allows reading from the buffer on a background thread.
     pub fn snapshot(&self) -> BufferSnapshot {
@@ -1109,7 +1076,6 @@ impl Buffer {
     /// be a branch buffer to call this method.
     pub fn merge_into_base(&mut self, ranges: Vec<Range<usize>>, cx: &mut Context<Self>) {
         let Some(base_buffer) = self.base_buffer() else {
-            debug_panic!("not a branch buffer");
             return;
         };
 
@@ -1188,11 +1154,6 @@ impl Buffer {
             let counts = [(timestamp, u32::MAX)].into_iter().collect();
             self.undo_operations(counts, cx);
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn as_text_snapshot(&self) -> &text::BufferSnapshot {
-        &self.text
     }
 
     /// Retrieve a snapshot of the buffer's raw text, without any
@@ -1408,21 +1369,10 @@ impl Buffer {
         self.non_text_state_update_count
     }
 
-    /// Whether the buffer is being parsed in the background.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn is_parsing(&self) -> bool {
-        self.reparse.is_some()
-    }
-
     /// Indicates whether the buffer contains any regions that may be
     /// written in a language that hasn't been loaded yet.
     pub fn contains_unknown_injections(&self) -> bool {
         self.syntax_map.lock().contains_unknown_injections()
-    }
-
-    #[cfg(test)]
-    pub fn set_sync_parse_timeout(&mut self, timeout: Duration) {
-        self.sync_parse_timeout = timeout;
     }
 
     /// Called after an edit to synchronize the buffer's main parse tree with
@@ -2705,65 +2655,6 @@ impl Buffer {
     /// Whether we should preserve the preview status of a tab containing this buffer.
     pub fn preserve_preview(&self) -> bool {
         !self.has_edits_since(&self.preview_version)
-    }
-}
-
-#[doc(hidden)]
-#[cfg(any(test, feature = "test-support"))]
-impl Buffer {
-    pub fn edit_via_marked_text(
-        &mut self,
-        marked_string: &str,
-        autoindent_mode: Option<AutoindentMode>,
-        cx: &mut Context<Self>,
-    ) {
-        let edits = self.edits_for_marked_text(marked_string);
-        self.edit(edits, autoindent_mode, cx);
-    }
-
-    pub fn set_group_interval(&mut self, group_interval: Duration) {
-        self.text.set_group_interval(group_interval);
-    }
-
-    pub fn randomly_edit<T>(&mut self, rng: &mut T, old_range_count: usize, cx: &mut Context<Self>)
-    where
-        T: rand::Rng,
-    {
-        let mut edits: Vec<(Range<usize>, String)> = Vec::new();
-        let mut last_end = None;
-        for _ in 0..old_range_count {
-            if last_end.map_or(false, |last_end| last_end >= self.len()) {
-                break;
-            }
-
-            let new_start = last_end.map_or(0, |last_end| last_end + 1);
-            let mut range = self.random_byte_range(new_start, rng);
-            if rng.gen_bool(0.2) {
-                mem::swap(&mut range.start, &mut range.end);
-            }
-            last_end = Some(range.end);
-
-            let new_text_len = rng.gen_range(0..10);
-            let mut new_text: String = RandomCharIter::new(&mut *rng).take(new_text_len).collect();
-            new_text = new_text.to_uppercase();
-
-            edits.push((range, new_text));
-        }
-        log::info!("mutating buffer {} with {:?}", self.replica_id(), edits);
-        self.edit(edits, None, cx);
-    }
-
-    pub fn randomly_undo_redo(&mut self, rng: &mut impl rand::Rng, cx: &mut Context<Self>) {
-        let was_dirty = self.is_dirty();
-        let old_version = self.version.clone();
-
-        let ops = self.text.randomly_undo_redo(rng);
-        if !ops.is_empty() {
-            for op in ops {
-                self.send_operation(Operation::Buffer(op), true, cx);
-                self.did_edit(&old_version, was_dirty, cx);
-            }
-        }
     }
 }
 
@@ -4682,69 +4573,6 @@ impl IndentSize {
             IndentKind::Space => self.len as usize,
             IndentKind::Tab => self.len as usize * tab_size.get() as usize,
         }
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub struct TestFile {
-    pub path: Arc<Path>,
-    pub root_name: String,
-    pub local_root: Option<PathBuf>,
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl File for TestFile {
-    fn path(&self) -> &Arc<Path> {
-        &self.path
-    }
-
-    fn full_path(&self, _: &gpui::App) -> PathBuf {
-        PathBuf::from(&self.root_name).join(self.path.as_ref())
-    }
-
-    fn as_local(&self) -> Option<&dyn LocalFile> {
-        if self.local_root.is_some() {
-            Some(self)
-        } else {
-            None
-        }
-    }
-
-    fn disk_state(&self) -> DiskState {
-        unimplemented!()
-    }
-
-    fn file_name<'a>(&'a self, _: &'a gpui::App) -> &'a std::ffi::OsStr {
-        self.path().file_name().unwrap_or(self.root_name.as_ref())
-    }
-
-    fn worktree_id(&self, _: &App) -> WorktreeId {
-        WorktreeId::from_usize(0)
-    }
-
-    fn to_proto(&self, _: &App) -> rpc::proto::File {
-        unimplemented!()
-    }
-
-    fn is_private(&self) -> bool {
-        false
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl LocalFile for TestFile {
-    fn abs_path(&self, _cx: &App) -> PathBuf {
-        PathBuf::from(self.local_root.as_ref().unwrap())
-            .join(&self.root_name)
-            .join(self.path.as_ref())
-    }
-
-    fn load(&self, _cx: &App) -> Task<Result<String>> {
-        unimplemented!()
-    }
-
-    fn load_bytes(&self, _cx: &App) -> Task<Result<Vec<u8>>> {
-        unimplemented!()
     }
 }
 

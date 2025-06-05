@@ -15,7 +15,6 @@ doctest = false
 
 [features]
 default = []
-test-support = ["fs/test-support"]
 
 [dependencies]
 anyhow.workspace = true
@@ -42,7 +41,3 @@ thiserror.workspace = true
 urlencoding.workspace = true
 util.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
-fs = { workspace = true, features = ["test-support"] }

@@ -43,15 +43,6 @@ impl Session {
         }
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn test() -> Self {
-        Self {
-            session_id: Uuid::new_v4().to_string(),
-            old_session_id: None,
-            old_window_ids: None,
-        }
-    }
-
     pub fn id(&self) -> &str {
         &self.session_id
     }

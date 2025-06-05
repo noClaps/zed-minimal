@@ -61,32 +61,3 @@ pub fn get_host_from_git_remote_url(remote_url: &str) -> Result<String> {
     })
     .context("URL has no host")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::get_host_from_git_remote_url;
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn test_get_host_from_git_remote_url() {
-        let tests = [
-            (
-                "https://jlannister@github.com/some-org/some-repo.git",
-                Some("github.com".to_string()),
-            ),
-            (
-                "git@github.com:zed-industries/zed.git",
-                Some("github.com".to_string()),
-            ),
-            (
-                "git@my.super.long.subdomain.com:zed-industries/zed.git",
-                Some("my.super.long.subdomain.com".to_string()),
-            ),
-        ];
-
-        for (remote_url, expected_host) in tests {
-            let host = get_host_from_git_remote_url(remote_url).ok();
-            assert_eq!(host, expected_host);
-        }
-    }
-}

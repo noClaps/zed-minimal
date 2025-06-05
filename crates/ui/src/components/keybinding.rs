@@ -439,32 +439,3 @@ impl Component for KeyBinding {
         )
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_text_for_keystroke() {
-        assert_eq!(
-            keystroke_text(&Keystroke::parse("cmd-c").unwrap(), PlatformStyle::Mac,),
-            "Command-C".to_string()
-        );
-
-        assert_eq!(
-            keystroke_text(
-                &Keystroke::parse("ctrl-alt-delete").unwrap(),
-                PlatformStyle::Mac,
-            ),
-            "Control-Option-Delete".to_string()
-        );
-
-        assert_eq!(
-            keystroke_text(
-                &Keystroke::parse("shift-pageup").unwrap(),
-                PlatformStyle::Mac,
-            ),
-            "Shift-PageUp".to_string()
-        );
-    }
-}

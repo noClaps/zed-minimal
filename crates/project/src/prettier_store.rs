@@ -515,15 +515,6 @@ impl PrettierStore {
         plugins: impl Iterator<Item = Arc<str>>,
         cx: &mut Context<Self>,
     ) {
-        if cfg!(any(test, feature = "test-support")) {
-            self.default_prettier.installed_plugins.extend(plugins);
-            self.default_prettier.prettier = PrettierInstallation::Installed(PrettierInstance {
-                attempt: 0,
-                prettier: None,
-            });
-            return;
-        }
-
         let mut new_plugins = plugins.collect::<HashSet<_>>();
         let node = self.node.clone();
 

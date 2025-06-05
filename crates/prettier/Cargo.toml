@@ -12,8 +12,6 @@ workspace = true
 path = "src/prettier.rs"
 doctest = false
 
-[features]
-test-support = []
 
 [dependencies]
 anyhow.workspace = true
@@ -30,8 +28,3 @@ serde.workspace = true
 serde_json.workspace = true
 util.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-fs = { workspace = true,  features = ["test-support"] }
-gpui = { workspace = true, features = ["test-support"] }
-language = { workspace = true, features = ["test-support"] }

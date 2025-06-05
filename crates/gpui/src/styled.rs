@@ -14,10 +14,6 @@ const ELLIPSIS: SharedString = SharedString::new_static("…");
 
 /// A trait for elements that can be styled.
 /// Use this to opt-in to a utility CSS-like styling API.
-#[cfg_attr(
-    any(feature = "inspector", debug_assertions),
-    gpui_macros::derive_inspector_reflection
-)]
 pub trait Styled: Sized {
     /// Returns a reference to the style memory of this element.
     fn style(&mut self) -> &mut StyleRefinement;
@@ -637,20 +633,6 @@ pub trait Styled: Sized {
     /// Sets the opacity of this element and its children.
     fn opacity(mut self, opacity: f32) -> Self {
         self.style().opacity = Some(opacity);
-        self
-    }
-
-    /// Draws a debug border around this element.
-    #[cfg(debug_assertions)]
-    fn debug(mut self) -> Self {
-        self.style().debug = Some(true);
-        self
-    }
-
-    /// Draws a debug border on all conforming elements below this element.
-    #[cfg(debug_assertions)]
-    fn debug_below(mut self) -> Self {
-        self.style().debug_below = Some(true);
         self
     }
 }

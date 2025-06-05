@@ -33,6 +33,3 @@ thiserror.workspace = true
 util.workspace = true
 regex.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-rand.workspace = true

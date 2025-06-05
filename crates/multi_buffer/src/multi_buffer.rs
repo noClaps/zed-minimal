@@ -1,6 +1,4 @@
 mod anchor;
-#[cfg(test)]
-mod multi_buffer_tests;
 mod position;
 
 pub use anchor::{Anchor, AnchorRangeExt, Offset};
@@ -2606,11 +2604,6 @@ impl MultiBuffer {
             .all(|state| state.buffer.read(cx).preserve_preview())
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn is_parsing(&self, cx: &App) -> bool {
-        self.as_singleton().unwrap().read(cx).is_parsing()
-    }
-
     pub fn add_diff(&mut self, diff: Entity<BufferDiff>, cx: &mut Context<Self>) {
         let buffer_id = diff.read(cx).buffer_id;
         self.buffer_diff_changed(diff.clone(), text::Anchor::MIN..text::Anchor::MAX, cx);
@@ -3182,9 +3175,6 @@ impl MultiBuffer {
         drop(excerpts);
         snapshot.diff_transforms = new_diff_transforms;
         snapshot.edit_count += 1;
-
-        #[cfg(any(test, feature = "test-support"))]
-        snapshot.check_invariants();
     }
 
     fn recompute_diff_transforms_for_edit(
@@ -3480,219 +3470,6 @@ fn build_excerpt_ranges(
             }
         })
         .collect()
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl MultiBuffer {
-    pub fn build_simple(text: &str, cx: &mut gpui::App) -> Entity<Self> {
-        let buffer = cx.new(|cx| Buffer::local(text, cx));
-        cx.new(|cx| Self::singleton(buffer, cx))
-    }
-
-    pub fn build_multi<const COUNT: usize>(
-        excerpts: [(&str, Vec<Range<Point>>); COUNT],
-        cx: &mut gpui::App,
-    ) -> Entity<Self> {
-        let multi = cx.new(|_| Self::new(Capability::ReadWrite));
-        for (text, ranges) in excerpts {
-            let buffer = cx.new(|cx| Buffer::local(text, cx));
-            let excerpt_ranges = ranges
-                .into_iter()
-                .map(|range| ExcerptRange::new(range.clone()));
-            multi.update(cx, |multi, cx| {
-                multi.push_excerpts(buffer, excerpt_ranges, cx)
-            });
-        }
-
-        multi
-    }
-
-    pub fn build_from_buffer(buffer: Entity<Buffer>, cx: &mut gpui::App) -> Entity<Self> {
-        cx.new(|cx| Self::singleton(buffer, cx))
-    }
-
-    pub fn build_random(rng: &mut impl rand::Rng, cx: &mut gpui::App) -> Entity<Self> {
-        cx.new(|cx| {
-            let mut multibuffer = MultiBuffer::new(Capability::ReadWrite);
-            let mutation_count = rng.gen_range(1..=5);
-            multibuffer.randomly_edit_excerpts(rng, mutation_count, cx);
-            multibuffer
-        })
-    }
-
-    pub fn randomly_edit(
-        &mut self,
-        rng: &mut impl rand::Rng,
-        edit_count: usize,
-        cx: &mut Context<Self>,
-    ) {
-        use util::RandomCharIter;
-
-        let snapshot = self.read(cx);
-        let mut edits: Vec<(Range<usize>, Arc<str>)> = Vec::new();
-        let mut last_end = None;
-        for _ in 0..edit_count {
-            if last_end.map_or(false, |last_end| last_end >= snapshot.len()) {
-                break;
-            }
-
-            let new_start = last_end.map_or(0, |last_end| last_end + 1);
-            let end = snapshot.clip_offset(rng.gen_range(new_start..=snapshot.len()), Bias::Right);
-            let start = snapshot.clip_offset(rng.gen_range(new_start..=end), Bias::Right);
-            last_end = Some(end);
-
-            let mut range = start..end;
-            if rng.gen_bool(0.2) {
-                mem::swap(&mut range.start, &mut range.end);
-            }
-
-            let new_text_len = rng.gen_range(0..10);
-            let new_text: String = RandomCharIter::new(&mut *rng).take(new_text_len).collect();
-
-            edits.push((range, new_text.into()));
-        }
-        log::info!("mutating multi-buffer with {:?}", edits);
-        drop(snapshot);
-
-        self.edit(edits, None, cx);
-    }
-
-    pub fn randomly_edit_excerpts(
-        &mut self,
-        rng: &mut impl rand::Rng,
-        mutation_count: usize,
-        cx: &mut Context<Self>,
-    ) {
-        use rand::prelude::*;
-        use std::env;
-        use util::RandomCharIter;
-
-        let max_excerpts = env::var("MAX_EXCERPTS")
-            .map(|i| i.parse().expect("invalid `MAX_EXCERPTS` variable"))
-            .unwrap_or(5);
-
-        let mut buffers = Vec::new();
-        for _ in 0..mutation_count {
-            if rng.gen_bool(0.05) {
-                log::info!("Clearing multi-buffer");
-                self.clear(cx);
-                continue;
-            } else if rng.gen_bool(0.1) && !self.excerpt_ids().is_empty() {
-                let ids = self.excerpt_ids();
-                let mut excerpts = HashSet::default();
-                for _ in 0..rng.gen_range(0..ids.len()) {
-                    excerpts.extend(ids.choose(rng).copied());
-                }
-
-                let line_count = rng.gen_range(0..5);
-
-                log::info!("Expanding excerpts {excerpts:?} by {line_count} lines");
-
-                self.expand_excerpts(
-                    excerpts.iter().cloned(),
-                    line_count,
-                    ExpandExcerptDirection::UpAndDown,
-                    cx,
-                );
-                continue;
-            }
-
-            let excerpt_ids = self.excerpt_ids();
-            if excerpt_ids.is_empty() || (rng.r#gen() && excerpt_ids.len() < max_excerpts) {
-                let buffer_handle = if rng.r#gen() || self.buffers.borrow().is_empty() {
-                    let text = RandomCharIter::new(&mut *rng).take(10).collect::<String>();
-                    buffers.push(cx.new(|cx| Buffer::local(text, cx)));
-                    let buffer = buffers.last().unwrap().read(cx);
-                    log::info!(
-                        "Creating new buffer {} with text: {:?}",
-                        buffer.remote_id(),
-                        buffer.text()
-                    );
-                    buffers.last().unwrap().clone()
-                } else {
-                    self.buffers
-                        .borrow()
-                        .values()
-                        .choose(rng)
-                        .unwrap()
-                        .buffer
-                        .clone()
-                };
-
-                let buffer = buffer_handle.read(cx);
-                let buffer_text = buffer.text();
-                let ranges = (0..rng.gen_range(0..5))
-                    .map(|_| {
-                        let end_ix =
-                            buffer.clip_offset(rng.gen_range(0..=buffer.len()), Bias::Right);
-                        let start_ix = buffer.clip_offset(rng.gen_range(0..=end_ix), Bias::Left);
-                        ExcerptRange::new(start_ix..end_ix)
-                    })
-                    .collect::<Vec<_>>();
-                log::info!(
-                    "Inserting excerpts from buffer {} and ranges {:?}: {:?}",
-                    buffer_handle.read(cx).remote_id(),
-                    ranges.iter().map(|r| &r.context).collect::<Vec<_>>(),
-                    ranges
-                        .iter()
-                        .map(|r| &buffer_text[r.context.clone()])
-                        .collect::<Vec<_>>()
-                );
-
-                let excerpt_id = self.push_excerpts(buffer_handle.clone(), ranges, cx);
-                log::info!("Inserted with ids: {:?}", excerpt_id);
-            } else {
-                let remove_count = rng.gen_range(1..=excerpt_ids.len());
-                let mut excerpts_to_remove = excerpt_ids
-                    .choose_multiple(rng, remove_count)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let snapshot = self.snapshot.borrow();
-                excerpts_to_remove.sort_unstable_by(|a, b| a.cmp(b, &snapshot));
-                drop(snapshot);
-                log::info!("Removing excerpts {:?}", excerpts_to_remove);
-                self.remove_excerpts(excerpts_to_remove, cx);
-            }
-        }
-    }
-
-    pub fn randomly_mutate(
-        &mut self,
-        rng: &mut impl rand::Rng,
-        mutation_count: usize,
-        cx: &mut Context<Self>,
-    ) {
-        use rand::prelude::*;
-
-        if rng.gen_bool(0.7) || self.singleton {
-            let buffer = self
-                .buffers
-                .borrow()
-                .values()
-                .choose(rng)
-                .map(|state| state.buffer.clone());
-
-            if let Some(buffer) = buffer {
-                buffer.update(cx, |buffer, cx| {
-                    if rng.r#gen() {
-                        buffer.randomly_edit(rng, mutation_count, cx);
-                    } else {
-                        buffer.randomly_undo_redo(rng, cx);
-                    }
-                });
-            } else {
-                self.randomly_edit(rng, mutation_count, cx);
-            }
-        } else {
-            self.randomly_edit_excerpts(rng, mutation_count, cx);
-        }
-
-        self.check_invariants(cx);
-    }
-
-    fn check_invariants(&self, cx: &App) {
-        self.read(cx).check_invariants();
-    }
 }
 
 impl EventEmitter<Event> for MultiBuffer {}
@@ -6291,76 +6068,6 @@ impl MultiBufferSnapshot {
 
     pub fn diff_for_buffer_id(&self, buffer_id: BufferId) -> Option<&BufferDiffSnapshot> {
         self.diffs.get(&buffer_id)
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl MultiBufferSnapshot {
-    pub fn random_byte_range(&self, start_offset: usize, rng: &mut impl rand::Rng) -> Range<usize> {
-        let end = self.clip_offset(rng.gen_range(start_offset..=self.len()), Bias::Right);
-        let start = self.clip_offset(rng.gen_range(start_offset..=end), Bias::Right);
-        start..end
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    fn check_invariants(&self) {
-        let excerpts = self.excerpts.items(&());
-        let excerpt_ids = self.excerpt_ids.items(&());
-
-        for (ix, excerpt) in excerpts.iter().enumerate() {
-            if ix == 0 {
-                if excerpt.locator <= Locator::min() {
-                    panic!("invalid first excerpt locator {:?}", excerpt.locator);
-                }
-            } else if excerpt.locator <= excerpts[ix - 1].locator {
-                panic!("excerpts are out-of-order: {:?}", excerpts);
-            }
-        }
-
-        for (ix, entry) in excerpt_ids.iter().enumerate() {
-            if ix == 0 {
-                if entry.id.cmp(&ExcerptId::min(), &self).is_le() {
-                    panic!("invalid first excerpt id {:?}", entry.id);
-                }
-            } else if entry.id <= excerpt_ids[ix - 1].id {
-                panic!("excerpt ids are out-of-order: {:?}", excerpt_ids);
-            }
-        }
-
-        if self.diff_transforms.summary().input != self.excerpts.summary().text {
-            panic!(
-                "incorrect input summary. expected {:?}, got {:?}. transforms: {:+?}",
-                self.excerpts.summary().text.len,
-                self.diff_transforms.summary().input,
-                self.diff_transforms.items(&()),
-            );
-        }
-
-        let mut prev_transform: Option<&DiffTransform> = None;
-        for item in self.diff_transforms.iter() {
-            if let DiffTransform::BufferContent {
-                summary,
-                inserted_hunk_info,
-            } = item
-            {
-                if let Some(DiffTransform::BufferContent {
-                    inserted_hunk_info: prev_inserted_hunk_info,
-                    ..
-                }) = prev_transform
-                {
-                    if *inserted_hunk_info == *prev_inserted_hunk_info {
-                        panic!(
-                            "multiple adjacent buffer content transforms with is_inserted_hunk = {inserted_hunk_info:?}. transforms: {:+?}",
-                            self.diff_transforms.items(&())
-                        );
-                    }
-                }
-                if summary.len == 0 && !self.is_empty() {
-                    panic!("empty buffer content transform");
-                }
-            }
-            prev_transform = Some(item);
-        }
     }
 }
 

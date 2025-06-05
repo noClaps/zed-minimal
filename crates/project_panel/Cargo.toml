@@ -23,7 +23,6 @@ indexmap.workspace = true
 git.workspace = true
 gpui.workspace = true
 menu.workspace = true
-pretty_assertions.workspace = true
 project.workspace = true
 schemars.workspace = true
 search.workspace = true
@@ -41,11 +40,3 @@ workspace.workspace = true
 language.workspace = true
 zed_actions.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-client = { workspace = true, features = ["test-support"] }
-editor = { workspace = true, features = ["test-support"] }
-gpui = { workspace = true, features = ["test-support"] }
-language = { workspace = true, features = ["test-support"] }
-serde_json.workspace = true
-workspace = { workspace = true, features = ["test-support"] }

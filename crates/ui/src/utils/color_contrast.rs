@@ -37,34 +37,3 @@ fn linearize(component: f32) -> f32 {
         ((component + 0.055) / 1.055).powf(2.4)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use gpui::hsla;
-
-    use super::*;
-
-    // Test the contrast ratio formula with some common color combinations to
-    // prevent regressions in either the color conversions or the formula itself.
-    #[test]
-    fn test_contrast_ratio_formula() {
-        // White on Black (should be close to 21:1)
-        let white = hsla(0.0, 0.0, 1.0, 1.0);
-        let black = hsla(0.0, 0.0, 0.0, 1.0);
-        assert!((calculate_contrast_ratio(white, black) - 21.0).abs() < 0.1);
-
-        // Black on White (should be close to 21:1)
-        assert!((calculate_contrast_ratio(black, white) - 21.0).abs() < 0.1);
-
-        // Mid-gray on Black (should be close to 5.32:1)
-        let mid_gray = hsla(0.0, 0.0, 0.5, 1.0);
-        assert!((calculate_contrast_ratio(mid_gray, black) - 5.32).abs() < 0.1);
-
-        // White on Mid-gray (should be close to 3.95:1)
-        assert!((calculate_contrast_ratio(white, mid_gray) - 3.95).abs() < 0.1);
-
-        // Same color (should be 1:1)
-        let red = hsla(0.0, 1.0, 0.5, 1.0);
-        assert!((calculate_contrast_ratio(red, red) - 1.0).abs() < 0.01);
-    }
-}

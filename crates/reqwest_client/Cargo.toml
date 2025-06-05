@@ -8,8 +8,6 @@ license = "Apache-2.0"
 [lints]
 workspace = true
 
-[features]
-test-support = []
 
 [lib]
 path = "src/reqwest_client.rs"
@@ -32,6 +30,3 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 regex.workspace = true
 reqwest.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-gpui.workspace = true

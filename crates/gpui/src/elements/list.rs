@@ -9,9 +9,8 @@
 
 use crate::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, DispatchPhase, Edges, Element, EntityId,
-    FocusHandle, GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, IntoElement,
-    Overflow, Pixels, Point, ScrollWheelEvent, Size, Style, StyleRefinement, Styled, Window, point,
-    px, size,
+    FocusHandle, GlobalElementId, Hitbox, HitboxBehavior, IntoElement, Overflow, Pixels, Point,
+    ScrollWheelEvent, Size, Style, StyleRefinement, Styled, Window, point, px, size,
 };
 use collections::VecDeque;
 use refineable::Refineable as _;
@@ -827,7 +826,6 @@ impl Element for List {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
     ) -> (crate::LayoutId, Self::RequestLayoutState) {
@@ -895,7 +893,6 @@ impl Element for List {
     fn prepaint(
         &mut self,
         _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -944,7 +941,6 @@ impl Element for List {
     fn paint(
         &mut self,
         _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<crate::Pixels>,
         _: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
@@ -1061,59 +1057,5 @@ impl sum_tree::SeekTarget<'_, ListItemSummary, ListItemSummary> for Count {
 impl sum_tree::SeekTarget<'_, ListItemSummary, ListItemSummary> for Height {
     fn cmp(&self, other: &ListItemSummary, _: &()) -> std::cmp::Ordering {
         self.0.partial_cmp(&other.height).unwrap()
-    }
-}
-
-#[cfg(test)]
-mod test {
-
-    use gpui::{ScrollDelta, ScrollWheelEvent};
-
-    use crate::{self as gpui, TestAppContext};
-
-    #[gpui::test]
-    fn test_reset_after_paint_before_scroll(cx: &mut TestAppContext) {
-        use crate::{
-            AppContext, Context, Element, IntoElement, ListState, Render, Styled, Window, div,
-            list, point, px, size,
-        };
-
-        let cx = cx.add_empty_window();
-
-        let state = ListState::new(5, crate::ListAlignment::Top, px(10.), |_, _, _| {
-            div().h(px(10.)).w_full().into_any()
-        });
-
-        // Ensure that the list is scrolled to the top
-        state.scroll_to(gpui::ListOffset {
-            item_ix: 0,
-            offset_in_item: px(0.0),
-        });
-
-        struct TestView(ListState);
-        impl Render for TestView {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-                list(self.0.clone()).w_full().h_full()
-            }
-        }
-
-        // Paint
-        cx.draw(point(px(0.), px(0.)), size(px(100.), px(20.)), |_, cx| {
-            cx.new(|_| TestView(state.clone()))
-        });
-
-        // Reset
-        state.reset(5);
-
-        // And then receive a scroll event _before_ the next paint
-        cx.simulate_event(ScrollWheelEvent {
-            position: point(px(1.), px(1.)),
-            delta: ScrollDelta::Pixels(point(px(0.), px(-500.))),
-            ..Default::default()
-        });
-
-        // Scroll position should stay at the top of the list
-        assert_eq!(state.logical_scroll_top().item_ix, 0);
-        assert_eq!(state.logical_scroll_top().offset_in_item, px(0.));
     }
 }

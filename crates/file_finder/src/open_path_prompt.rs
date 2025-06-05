@@ -84,38 +84,6 @@ impl OpenPathDelegate {
             DirectoryState::None { .. } => None,
         }
     }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn collect_match_candidates(&self) -> Vec<String> {
-        match &self.directory_state {
-            DirectoryState::List { entries, .. } => self
-                .string_matches
-                .iter()
-                .filter_map(|string_match| {
-                    entries
-                        .iter()
-                        .find(|entry| entry.path.id == string_match.candidate_id)
-                        .map(|candidate| candidate.path.string.clone())
-                })
-                .collect(),
-            DirectoryState::Create {
-                user_input,
-                entries,
-                ..
-            } => user_input
-                .into_iter()
-                .filter(|user_input| !user_input.exists || !user_input.is_dir)
-                .map(|user_input| user_input.file.string.clone())
-                .chain(self.string_matches.iter().filter_map(|string_match| {
-                    entries
-                        .iter()
-                        .find(|entry| entry.path.id == string_match.candidate_id)
-                        .map(|candidate| candidate.path.string.clone())
-                }))
-                .collect(),
-            DirectoryState::None { .. } => Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug)]

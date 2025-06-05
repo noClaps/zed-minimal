@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod syntax_map_tests;
-
 use crate::{
     Grammar, InjectionConfig, Language, LanguageId, LanguageRegistry, QUERY_CURSORS, with_parser,
 };
@@ -234,12 +231,6 @@ impl SyntaxMap {
 
     pub fn interpolate(&mut self, text: &BufferSnapshot) {
         self.snapshot.interpolate(text);
-    }
-
-    #[cfg(test)]
-    pub fn reparse(&mut self, language: Arc<Language>, text: &BufferSnapshot) {
-        self.snapshot
-            .reparse(text, self.language_registry.clone(), language);
     }
 
     pub fn did_parse(&mut self, snapshot: SyntaxSnapshot) {
@@ -738,36 +729,6 @@ impl SyntaxSnapshot {
         self.layers = layers;
         self.interpolated_version = text.version.clone();
         self.parsed_version = text.version.clone();
-        #[cfg(debug_assertions)]
-        self.check_invariants(text);
-    }
-
-    #[cfg(debug_assertions)]
-    fn check_invariants(&self, text: &BufferSnapshot) {
-        let mut max_depth = 0;
-        let mut prev_range: Option<Range<Anchor>> = None;
-        for layer in self.layers.iter() {
-            match Ord::cmp(&layer.depth, &max_depth) {
-                Ordering::Less => {
-                    panic!("layers out of order")
-                }
-                Ordering::Equal => {
-                    if let Some(prev_range) = prev_range {
-                        match layer.range.start.cmp(&prev_range.start, text) {
-                            Ordering::Less => panic!("layers out of order"),
-                            Ordering::Equal => {
-                                assert!(layer.range.end.cmp(&prev_range.end, text).is_ge())
-                            }
-                            Ordering::Greater => {}
-                        }
-                    }
-                }
-                Ordering::Greater => {}
-            }
-
-            max_depth = layer.depth;
-            prev_range = Some(layer.range.clone());
-        }
     }
 
     pub fn single_tree_captures<'a>(
@@ -834,12 +795,6 @@ impl SyntaxSnapshot {
             query,
             options,
         )
-    }
-
-    #[cfg(test)]
-    pub fn layers<'a>(&'a self, buffer: &'a BufferSnapshot) -> Vec<SyntaxLayer<'a>> {
-        self.layers_for_range(0..buffer.len(), buffer, true)
-            .collect()
     }
 
     pub fn layers_for_range<'a, T: ToOffset>(

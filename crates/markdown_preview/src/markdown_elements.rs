@@ -5,7 +5,6 @@ use language::HighlightId;
 use std::{fmt::Display, ops::Range, path::PathBuf};
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum ParsedMarkdownElement {
     Heading(ParsedMarkdownHeading),
     ListItem(ParsedMarkdownListItem),
@@ -41,20 +40,17 @@ impl ParsedMarkdownElement {
 pub type MarkdownParagraph = Vec<MarkdownParagraphChunk>;
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum MarkdownParagraphChunk {
     Text(ParsedMarkdownText),
     Image(Image),
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedMarkdown {
     pub children: Vec<ParsedMarkdownElement>,
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedMarkdownListItem {
     pub source_range: Range<usize>,
     /// How many indentations deep this item is.
@@ -64,7 +60,6 @@ pub struct ParsedMarkdownListItem {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum ParsedMarkdownListItemType {
     Ordered(u64),
     Task(bool, Range<usize>),
@@ -72,7 +67,6 @@ pub enum ParsedMarkdownListItemType {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedMarkdownCodeBlock {
     pub source_range: Range<usize>,
     pub language: Option<String>,
@@ -81,7 +75,6 @@ pub struct ParsedMarkdownCodeBlock {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedMarkdownHeading {
     pub source_range: Range<usize>,
     pub level: HeadingLevel,
@@ -107,7 +100,6 @@ pub struct ParsedMarkdownTable {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum ParsedMarkdownTableAlignment {
     /// Default text alignment.
     None,
@@ -117,7 +109,6 @@ pub enum ParsedMarkdownTableAlignment {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedMarkdownTableRow {
     pub children: Vec<MarkdownParagraph>,
 }
@@ -141,7 +132,6 @@ impl ParsedMarkdownTableRow {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedMarkdownBlockQuote {
     pub source_range: Range<usize>,
     pub children: Vec<ParsedMarkdownElement>,
@@ -222,7 +212,6 @@ pub struct MarkdownHighlightStyle {
 
 /// A parsed region in a Markdown document.
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct ParsedRegion {
     /// Whether the region is a code block.
     pub code: bool,
@@ -232,7 +221,6 @@ pub struct ParsedRegion {
 
 /// A Markdown link.
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum Link {
     /// A link to a webpage.
     Web {
@@ -285,7 +273,6 @@ impl Display for Link {
 
 /// A Markdown Image
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Image {
     pub link: Link,
     pub source_range: Range<usize>,

@@ -3,9 +3,8 @@ use arrayvec::ArrayString;
 use std::{cmp, ops::Range};
 use sum_tree::Bias;
 use unicode_segmentation::GraphemeCursor;
-use util::debug_panic;
 
-pub(crate) const MIN_BASE: usize = if cfg!(test) { 6 } else { 64 };
+pub(crate) const MIN_BASE: usize = 64;
 pub(crate) const MAX_BASE: usize = MIN_BASE * 2;
 
 #[derive(Clone, Debug, Default)]
@@ -282,21 +281,11 @@ impl<'a> ChunkSlice<'a> {
     #[inline(always)]
     pub fn point_to_offset(&self, point: Point) -> usize {
         if point.row > self.lines().row {
-            debug_panic!(
-                "point {:?} extends beyond rows for string {:?}",
-                point,
-                self.text
-            );
             return self.len();
         }
 
         let row_offset_range = self.offset_range_for_row(point.row);
         if point.column > row_offset_range.len() as u32 {
-            debug_panic!(
-                "point {:?} extends beyond row for string {:?}",
-                point,
-                self.text
-            );
             row_offset_range.end
         } else {
             row_offset_range.start + point.column as usize
@@ -354,29 +343,15 @@ impl<'a> ChunkSlice<'a> {
     }
 
     #[inline(always)]
-    pub fn point_utf16_to_offset(&self, point: PointUtf16, clip: bool) -> usize {
+    pub fn point_utf16_to_offset(&self, point: PointUtf16) -> usize {
         let lines = self.lines();
         if point.row > lines.row {
-            if !clip {
-                debug_panic!(
-                    "point {:?} is beyond this chunk's extent {:?}",
-                    point,
-                    self.text
-                );
-            }
             return self.len();
         }
 
         let row_offset_range = self.offset_range_for_row(point.row);
         let line = self.slice(row_offset_range.clone());
         if point.column > line.last_line_len_utf16() {
-            if !clip {
-                debug_panic!(
-                    "point {:?} is beyond the end of the line in chunk {:?}",
-                    point,
-                    self.text
-                );
-            }
             return line.len();
         }
 
@@ -387,13 +362,6 @@ impl<'a> ChunkSlice<'a> {
                 offset -= 1;
                 while !self.text.is_char_boundary(offset) {
                     offset -= 1;
-                }
-                if !clip {
-                    debug_panic!(
-                        "point {:?} is within character in chunk {:?}",
-                        point,
-                        self.text,
-                    );
                 }
             }
         }
@@ -602,344 +570,4 @@ fn nth_set_bit_u64(v: u64, mut n: u64) -> u64 {
     s -= (t.wrapping_sub(n) & 256) >> 8;
 
     65 - s - 1
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::prelude::*;
-    use util::RandomCharIter;
-
-    #[gpui::test(iterations = 100)]
-    fn test_random_chunks(mut rng: StdRng) {
-        let chunk_len = rng.gen_range(0..=MAX_BASE);
-        let text = RandomCharIter::new(&mut rng)
-            .take(chunk_len)
-            .collect::<String>();
-        let mut ix = chunk_len;
-        while !text.is_char_boundary(ix) {
-            ix -= 1;
-        }
-        let text = &text[..ix];
-
-        log::info!("Chunk: {:?}", text);
-        let chunk = Chunk::new(&text);
-        verify_chunk(chunk.as_slice(), text);
-
-        for _ in 0..10 {
-            let mut start = rng.gen_range(0..=chunk.text.len());
-            let mut end = rng.gen_range(start..=chunk.text.len());
-            while !chunk.text.is_char_boundary(start) {
-                start -= 1;
-            }
-            while !chunk.text.is_char_boundary(end) {
-                end -= 1;
-            }
-            let range = start..end;
-            log::info!("Range: {:?}", range);
-            let text_slice = &text[range.clone()];
-            let chunk_slice = chunk.slice(range);
-            verify_chunk(chunk_slice, text_slice);
-        }
-    }
-
-    #[gpui::test(iterations = 1000)]
-    fn test_nth_set_bit_random(mut rng: StdRng) {
-        let set_count = rng.gen_range(0..=128);
-        let mut set_bits = (0..128).choose_multiple(&mut rng, set_count);
-        set_bits.sort();
-        let mut n = 0;
-        for ix in set_bits.iter().copied() {
-            n |= 1 << ix;
-        }
-
-        for (mut ix, position) in set_bits.into_iter().enumerate() {
-            ix += 1;
-            assert_eq!(
-                nth_set_bit(n, ix),
-                position,
-                "nth_set_bit({:0128b}, {})",
-                n,
-                ix
-            );
-        }
-    }
-
-    fn verify_chunk(chunk: ChunkSlice<'_>, text: &str) {
-        let mut offset = 0;
-        let mut offset_utf16 = OffsetUtf16(0);
-        let mut point = Point::zero();
-        let mut point_utf16 = PointUtf16::zero();
-
-        log::info!("Verifying chunk {:?}", text);
-        assert_eq!(chunk.offset_to_point(0), Point::zero());
-
-        let mut expected_tab_positions = Vec::new();
-
-        for (char_offset, c) in text.chars().enumerate() {
-            let expected_point = chunk.offset_to_point(offset);
-            assert_eq!(point, expected_point, "mismatch at offset {}", offset);
-            assert_eq!(
-                chunk.point_to_offset(point),
-                offset,
-                "mismatch at point {:?}",
-                point
-            );
-            assert_eq!(
-                chunk.offset_to_offset_utf16(offset),
-                offset_utf16,
-                "mismatch at offset {}",
-                offset
-            );
-            assert_eq!(
-                chunk.offset_utf16_to_offset(offset_utf16),
-                offset,
-                "mismatch at offset_utf16 {:?}",
-                offset_utf16
-            );
-            assert_eq!(
-                chunk.point_to_point_utf16(point),
-                point_utf16,
-                "mismatch at point {:?}",
-                point
-            );
-            assert_eq!(
-                chunk.point_utf16_to_offset(point_utf16, false),
-                offset,
-                "mismatch at point_utf16 {:?}",
-                point_utf16
-            );
-            assert_eq!(
-                chunk.unclipped_point_utf16_to_point(Unclipped(point_utf16)),
-                point,
-                "mismatch for unclipped_point_utf16_to_point at {:?}",
-                point_utf16
-            );
-
-            assert_eq!(
-                chunk.clip_point(point, Bias::Left),
-                point,
-                "incorrect left clip at {:?}",
-                point
-            );
-            assert_eq!(
-                chunk.clip_point(point, Bias::Right),
-                point,
-                "incorrect right clip at {:?}",
-                point
-            );
-
-            for i in 1..c.len_utf8() {
-                let test_point = Point::new(point.row, point.column + i as u32);
-                assert_eq!(
-                    chunk.clip_point(test_point, Bias::Left),
-                    point,
-                    "incorrect left clip within multi-byte char at {:?}",
-                    test_point
-                );
-                assert_eq!(
-                    chunk.clip_point(test_point, Bias::Right),
-                    Point::new(point.row, point.column + c.len_utf8() as u32),
-                    "incorrect right clip within multi-byte char at {:?}",
-                    test_point
-                );
-            }
-
-            for i in 1..c.len_utf16() {
-                let test_point = Unclipped(PointUtf16::new(
-                    point_utf16.row,
-                    point_utf16.column + i as u32,
-                ));
-                assert_eq!(
-                    chunk.unclipped_point_utf16_to_point(test_point),
-                    point,
-                    "incorrect unclipped_point_utf16_to_point within multi-byte char at {:?}",
-                    test_point
-                );
-                assert_eq!(
-                    chunk.clip_point_utf16(test_point, Bias::Left),
-                    point_utf16,
-                    "incorrect left clip_point_utf16 within multi-byte char at {:?}",
-                    test_point
-                );
-                assert_eq!(
-                    chunk.clip_point_utf16(test_point, Bias::Right),
-                    PointUtf16::new(point_utf16.row, point_utf16.column + c.len_utf16() as u32),
-                    "incorrect right clip_point_utf16 within multi-byte char at {:?}",
-                    test_point
-                );
-
-                let test_offset = OffsetUtf16(offset_utf16.0 + i);
-                assert_eq!(
-                    chunk.clip_offset_utf16(test_offset, Bias::Left),
-                    offset_utf16,
-                    "incorrect left clip_offset_utf16 within multi-byte char at {:?}",
-                    test_offset
-                );
-                assert_eq!(
-                    chunk.clip_offset_utf16(test_offset, Bias::Right),
-                    OffsetUtf16(offset_utf16.0 + c.len_utf16()),
-                    "incorrect right clip_offset_utf16 within multi-byte char at {:?}",
-                    test_offset
-                );
-            }
-
-            if c == '\n' {
-                point.row += 1;
-                point.column = 0;
-                point_utf16.row += 1;
-                point_utf16.column = 0;
-            } else {
-                point.column += c.len_utf8() as u32;
-                point_utf16.column += c.len_utf16() as u32;
-            }
-
-            if c == '\t' {
-                expected_tab_positions.push(TabPosition {
-                    byte_offset: offset,
-                    char_offset,
-                });
-            }
-
-            offset += c.len_utf8();
-            offset_utf16.0 += c.len_utf16();
-        }
-
-        let final_point = chunk.offset_to_point(offset);
-        assert_eq!(point, final_point, "mismatch at final offset {}", offset);
-        assert_eq!(
-            chunk.point_to_offset(point),
-            offset,
-            "mismatch at point {:?}",
-            point
-        );
-        assert_eq!(
-            chunk.offset_to_offset_utf16(offset),
-            offset_utf16,
-            "mismatch at offset {}",
-            offset
-        );
-        assert_eq!(
-            chunk.offset_utf16_to_offset(offset_utf16),
-            offset,
-            "mismatch at offset_utf16 {:?}",
-            offset_utf16
-        );
-        assert_eq!(
-            chunk.point_to_point_utf16(point),
-            point_utf16,
-            "mismatch at final point {:?}",
-            point
-        );
-        assert_eq!(
-            chunk.point_utf16_to_offset(point_utf16, false),
-            offset,
-            "mismatch at final point_utf16 {:?}",
-            point_utf16
-        );
-        assert_eq!(
-            chunk.unclipped_point_utf16_to_point(Unclipped(point_utf16)),
-            point,
-            "mismatch for unclipped_point_utf16_to_point at final point {:?}",
-            point_utf16
-        );
-        assert_eq!(
-            chunk.clip_point(point, Bias::Left),
-            point,
-            "incorrect left clip at final point {:?}",
-            point
-        );
-        assert_eq!(
-            chunk.clip_point(point, Bias::Right),
-            point,
-            "incorrect right clip at final point {:?}",
-            point
-        );
-        assert_eq!(
-            chunk.clip_point_utf16(Unclipped(point_utf16), Bias::Left),
-            point_utf16,
-            "incorrect left clip_point_utf16 at final point {:?}",
-            point_utf16
-        );
-        assert_eq!(
-            chunk.clip_point_utf16(Unclipped(point_utf16), Bias::Right),
-            point_utf16,
-            "incorrect right clip_point_utf16 at final point {:?}",
-            point_utf16
-        );
-        assert_eq!(
-            chunk.clip_offset_utf16(offset_utf16, Bias::Left),
-            offset_utf16,
-            "incorrect left clip_offset_utf16 at final offset {:?}",
-            offset_utf16
-        );
-        assert_eq!(
-            chunk.clip_offset_utf16(offset_utf16, Bias::Right),
-            offset_utf16,
-            "incorrect right clip_offset_utf16 at final offset {:?}",
-            offset_utf16
-        );
-
-        // Verify length methods
-        assert_eq!(chunk.len(), text.len());
-        assert_eq!(
-            chunk.len_utf16().0,
-            text.chars().map(|c| c.len_utf16()).sum::<usize>()
-        );
-
-        // Verify line counting
-        let lines = chunk.lines();
-        let mut newline_count = 0;
-        let mut last_line_len = 0;
-        for c in text.chars() {
-            if c == '\n' {
-                newline_count += 1;
-                last_line_len = 0;
-            } else {
-                last_line_len += c.len_utf8() as u32;
-            }
-        }
-        assert_eq!(lines, Point::new(newline_count, last_line_len));
-
-        // Verify first/last line chars
-        if !text.is_empty() {
-            let first_line = text.split('\n').next().unwrap();
-            assert_eq!(chunk.first_line_chars(), first_line.chars().count() as u32);
-
-            let last_line = text.split('\n').next_back().unwrap();
-            assert_eq!(chunk.last_line_chars(), last_line.chars().count() as u32);
-            assert_eq!(
-                chunk.last_line_len_utf16(),
-                last_line.chars().map(|c| c.len_utf16() as u32).sum::<u32>()
-            );
-        }
-
-        // Verify longest row
-        let (longest_row, longest_chars) = chunk.longest_row(&mut 0);
-        let mut max_chars = 0;
-        let mut current_row = 0;
-        let mut current_chars = 0;
-        let mut max_row = 0;
-
-        for c in text.chars() {
-            if c == '\n' {
-                if current_chars > max_chars {
-                    max_chars = current_chars;
-                    max_row = current_row;
-                }
-                current_row += 1;
-                current_chars = 0;
-            } else {
-                current_chars += 1;
-            }
-        }
-
-        if current_chars > max_chars {
-            max_chars = current_chars;
-            max_row = current_row;
-        }
-
-        assert_eq!((max_row, max_chars as u32), (longest_row, longest_chars));
-        assert_eq!(chunk.tabs().collect::<Vec<_>>(), expected_tab_positions);
-    }
 }

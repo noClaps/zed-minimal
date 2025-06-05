@@ -125,17 +125,6 @@ struct LanguageRegistryState {
     theme: Option<Arc<Theme>>,
     version: usize,
     reload_count: usize,
-
-    #[cfg(any(test, feature = "test-support"))]
-    fake_server_entries: HashMap<LanguageServerName, FakeLanguageServerEntry>,
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub struct FakeLanguageServerEntry {
-    pub capabilities: lsp::ServerCapabilities,
-    pub initializer: Option<Box<dyn 'static + Send + Sync + Fn(&mut lsp::FakeLanguageServer)>>,
-    pub tx: futures::channel::mpsc::UnboundedSender<lsp::FakeLanguageServer>,
-    pub _server: Option<lsp::FakeLanguageServer>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -261,22 +250,12 @@ impl LanguageRegistry {
                 theme: Default::default(),
                 version: 0,
                 reload_count: 0,
-
-                #[cfg(any(test, feature = "test-support"))]
-                fake_server_entries: Default::default(),
             }),
             language_server_download_dir: None,
             lsp_binary_status_tx: Default::default(),
             executor,
         };
         this.add(PLAIN_TEXT.clone());
-        this
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn test(executor: BackgroundExecutor) -> Self {
-        let mut this = Self::new(executor);
-        this.language_server_download_dir = Some(Path::new("/the-download-dir").into());
         this
     }
 
@@ -320,24 +299,6 @@ impl LanguageRegistry {
         state.version += 1;
         state.reload_count += 1;
         *state.subscription.0.borrow_mut() = ();
-    }
-
-    #[cfg(any(feature = "test-support", test))]
-    pub fn register_test_language(&self, config: LanguageConfig) {
-        self.register_language(
-            config.name.clone(),
-            config.grammar.clone(),
-            config.matcher.clone(),
-            config.hidden,
-            Arc::new(move || {
-                Ok(LoadedLanguage {
-                    config: config.clone(),
-                    queries: Default::default(),
-                    toolchain_provider: None,
-                    context_provider: None,
-                })
-            }),
-        )
     }
 
     /// Registers an available language server adapter.
@@ -413,75 +374,6 @@ impl LanguageRegistry {
             let adapter = build_adapter();
             self.register_lsp_adapter(language_name, adapter)
         }
-    }
-
-    /// Register a fake language server and adapter
-    /// The returned channel receives a new instance of the language server every time it is started
-    #[cfg(any(feature = "test-support", test))]
-    pub fn register_fake_lsp(
-        &self,
-        language_name: impl Into<LanguageName>,
-        mut adapter: crate::FakeLspAdapter,
-    ) -> futures::channel::mpsc::UnboundedReceiver<lsp::FakeLanguageServer> {
-        let language_name = language_name.into();
-        let adapter_name = LanguageServerName(adapter.name.into());
-        let capabilities = adapter.capabilities.clone();
-        let initializer = adapter.initializer.take();
-        let adapter = CachedLspAdapter::new(Arc::new(adapter));
-        {
-            let mut state = self.state.write();
-            state
-                .lsp_adapters
-                .entry(language_name.clone())
-                .or_default()
-                .push(adapter.clone());
-            state.all_lsp_adapters.insert(adapter.name(), adapter);
-        }
-
-        self.register_fake_language_server(adapter_name, capabilities, initializer)
-    }
-
-    /// Register a fake lsp adapter (without the language server)
-    /// The returned channel receives a new instance of the language server every time it is started
-    #[cfg(any(feature = "test-support", test))]
-    pub fn register_fake_lsp_adapter(
-        &self,
-        language_name: impl Into<LanguageName>,
-        adapter: crate::FakeLspAdapter,
-    ) {
-        let language_name = language_name.into();
-        let mut state = self.state.write();
-        let cached_adapter = CachedLspAdapter::new(Arc::new(adapter));
-        state
-            .lsp_adapters
-            .entry(language_name.clone())
-            .or_default()
-            .push(cached_adapter.clone());
-        state
-            .all_lsp_adapters
-            .insert(cached_adapter.name(), cached_adapter);
-    }
-
-    /// Register a fake language server (without the adapter)
-    /// The returned channel receives a new instance of the language server every time it is started
-    #[cfg(any(feature = "test-support", test))]
-    pub fn register_fake_language_server(
-        &self,
-        lsp_name: LanguageServerName,
-        capabilities: lsp::ServerCapabilities,
-        initializer: Option<Box<dyn Fn(&mut lsp::FakeLanguageServer) + Send + Sync>>,
-    ) -> futures::channel::mpsc::UnboundedReceiver<lsp::FakeLanguageServer> {
-        let (servers_tx, servers_rx) = futures::channel::mpsc::unbounded();
-        self.state.write().fake_server_entries.insert(
-            lsp_name,
-            FakeLanguageServerEntry {
-                tx: servers_tx,
-                capabilities,
-                initializer,
-                _server: None,
-            },
-        );
-        servers_rx
     }
 
     /// Adds a language to the registry, which can be loaded if needed.
@@ -1081,46 +973,6 @@ impl LanguageRegistry {
         self.language_server_download_dir
             .as_ref()
             .map(|dir| Arc::from(dir.join(name.0.as_ref())))
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn create_fake_language_server(
-        &self,
-        server_id: LanguageServerId,
-        name: &LanguageServerName,
-        binary: lsp::LanguageServerBinary,
-        cx: &mut gpui::AsyncApp,
-    ) -> Option<lsp::LanguageServer> {
-        use gpui::AppContext as _;
-
-        let mut state = self.state.write();
-        let fake_entry = state.fake_server_entries.get_mut(&name)?;
-        let (server, mut fake_server) = lsp::FakeLanguageServer::new(
-            server_id,
-            binary,
-            name.0.to_string(),
-            fake_entry.capabilities.clone(),
-            cx,
-        );
-        fake_entry._server = Some(fake_server.clone());
-
-        if let Some(initializer) = &fake_entry.initializer {
-            initializer(&mut fake_server);
-        }
-
-        let tx = fake_entry.tx.clone();
-        cx.background_spawn(async move {
-            if fake_server
-                .try_receive_notification::<lsp::notification::Initialized>()
-                .await
-                .is_some()
-            {
-                tx.unbounded_send(fake_server.clone()).ok();
-            }
-        })
-        .detach();
-
-        Some(server)
     }
 
     pub fn language_server_binary_statuses(

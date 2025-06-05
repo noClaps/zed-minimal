@@ -9,9 +9,6 @@ license = "GPL-3.0-or-later"
 workspace = true
 
 [features]
-test-support = [
-    "load-grammars"
-]
 load-grammars = [
     "tree-sitter",
     "tree-sitter-bash",
@@ -88,17 +85,3 @@ tree-sitter-yaml = { workspace = true, optional = true }
 util.workspace = true
 which.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-pretty_assertions.workspace = true
-text.workspace = true
-theme = { workspace = true, features = ["test-support"] }
-tree-sitter-bash.workspace = true
-tree-sitter-c.workspace = true
-tree-sitter-css.workspace = true
-tree-sitter-go.workspace = true
-tree-sitter-python.workspace = true
-tree-sitter-typescript.workspace = true
-tree-sitter.workspace = true
-unindent.workspace = true
-workspace = { workspace = true, features = ["test-support"] }

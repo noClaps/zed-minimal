@@ -326,22 +326,6 @@ impl SelectionsCollection {
             .collect()
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn display_ranges(&self, cx: &mut App) -> Vec<Range<DisplayPoint>> {
-        let display_map = self.display_map(cx);
-        self.disjoint_anchors()
-            .iter()
-            .chain(self.pending_anchor().as_ref())
-            .map(|s| {
-                if s.reversed {
-                    s.end.to_display_point(&display_map)..s.start.to_display_point(&display_map)
-                } else {
-                    s.start.to_display_point(&display_map)..s.end.to_display_point(&display_map)
-                }
-            })
-            .collect()
-    }
-
     pub fn build_columnar_selection(
         &mut self,
         display_map: &DisplaySnapshot,

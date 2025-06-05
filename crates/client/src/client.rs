@@ -1,6 +1,3 @@
-#[cfg(any(test, feature = "test-support"))]
-pub mod test;
-
 mod proxy;
 pub mod telemetry;
 pub mod user;
@@ -200,30 +197,6 @@ pub struct Client {
     credentials_provider: ClientCredentialsProvider,
     state: RwLock<ClientState>,
     handler_set: parking_lot::Mutex<ProtoMessageHandlerSet>,
-
-    #[allow(clippy::type_complexity)]
-    #[cfg(any(test, feature = "test-support"))]
-    authenticate:
-        RwLock<Option<Box<dyn 'static + Send + Sync + Fn(&AsyncApp) -> Task<Result<Credentials>>>>>,
-
-    #[allow(clippy::type_complexity)]
-    #[cfg(any(test, feature = "test-support"))]
-    establish_connection: RwLock<
-        Option<
-            Box<
-                dyn 'static
-                    + Send
-                    + Sync
-                    + Fn(
-                        &Credentials,
-                        &AsyncApp,
-                    ) -> Task<Result<Connection, EstablishConnectionError>>,
-            >,
-        >,
-    >,
-
-    #[cfg(any(test, feature = "test-support"))]
-    rpc_url: RwLock<Option<Url>>,
 }
 
 #[derive(Error, Debug)]
@@ -527,13 +500,6 @@ impl Client {
             credentials_provider: ClientCredentialsProvider::new(cx),
             state: Default::default(),
             handler_set: Default::default(),
-
-            #[cfg(any(test, feature = "test-support"))]
-            authenticate: Default::default(),
-            #[cfg(any(test, feature = "test-support"))]
-            establish_connection: Default::default(),
-            #[cfg(any(test, feature = "test-support"))]
-            rpc_url: RwLock::default(),
         })
     }
 
@@ -557,41 +523,6 @@ impl Client {
 
     pub fn set_id(&self, id: u64) -> &Self {
         self.id.store(id, Ordering::SeqCst);
-        self
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn teardown(&self) {
-        let mut state = self.state.write();
-        state._reconnect_task.take();
-        self.handler_set.lock().clear();
-        self.peer.teardown();
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn override_authenticate<F>(&self, authenticate: F) -> &Self
-    where
-        F: 'static + Send + Sync + Fn(&AsyncApp) -> Task<Result<Credentials>>,
-    {
-        *self.authenticate.write() = Some(Box::new(authenticate));
-        self
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn override_establish_connection<F>(&self, connect: F) -> &Self
-    where
-        F: 'static
-            + Send
-            + Sync
-            + Fn(&Credentials, &AsyncApp) -> Task<Result<Connection, EstablishConnectionError>>,
-    {
-        *self.establish_connection.write() = Some(Box::new(connect));
-        self
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn override_rpc_url(&self, url: Url) -> &Self {
-        *self.rpc_url.write() = Some(url);
         self
     }
 
@@ -634,9 +565,6 @@ impl Client {
             Status::ConnectionLost => {
                 let client = self.clone();
                 state._reconnect_task = Some(cx.spawn(async move |cx| {
-                    #[cfg(any(test, feature = "test-support"))]
-                    let mut rng = StdRng::seed_from_u64(0);
-                    #[cfg(not(any(test, feature = "test-support")))]
                     let mut rng = StdRng::from_entropy();
 
                     let mut delay = INITIAL_RECONNECTION_DELAY;
@@ -1015,11 +943,6 @@ impl Client {
     }
 
     fn authenticate(self: &Arc<Self>, cx: &AsyncApp) -> Task<Result<Credentials>> {
-        #[cfg(any(test, feature = "test-support"))]
-        if let Some(callback) = self.authenticate.read().as_ref() {
-            return callback(cx);
-        }
-
         self.authenticate_with_browser(cx)
     }
 
@@ -1028,11 +951,6 @@ impl Client {
         credentials: &Credentials,
         cx: &AsyncApp,
     ) -> Task<Result<Connection, EstablishConnectionError>> {
-        #[cfg(any(test, feature = "test-support"))]
-        if let Some(callback) = self.establish_connection.read().as_ref() {
-            return callback(credentials, cx);
-        }
-
         self.establish_websocket_connection(credentials, cx)
     }
 
@@ -1041,15 +959,7 @@ impl Client {
         http: Arc<HttpClientWithUrl>,
         release_channel: Option<ReleaseChannel>,
     ) -> impl Future<Output = Result<url::Url>> + use<> {
-        #[cfg(any(test, feature = "test-support"))]
-        let url_override = self.rpc_url.read().clone();
-
         async move {
-            #[cfg(any(test, feature = "test-support"))]
-            if let Some(url) = url_override {
-                return Ok(url);
-            }
-
             if let Some(url) = &*ZED_RPC_URL {
                 return Url::parse(url).context("invalid rpc url");
             }
@@ -1637,322 +1547,4 @@ pub fn parse_zed_link<'a>(link: &'a str, cx: &App) -> Option<&'a str> {
     }
 
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test::FakeServer;
-
-    use clock::FakeSystemClock;
-    use gpui::{AppContext as _, BackgroundExecutor, TestAppContext};
-    use http_client::FakeHttpClient;
-    use parking_lot::Mutex;
-    use proto::TypedEnvelope;
-    use settings::SettingsStore;
-    use std::future;
-
-    #[gpui::test(iterations = 10)]
-    async fn test_reconnection(cx: &mut TestAppContext) {
-        init_test(cx);
-        let user_id = 5;
-        let client = cx.update(|cx| {
-            Client::new(
-                Arc::new(FakeSystemClock::new()),
-                FakeHttpClient::with_404_response(),
-                cx,
-            )
-        });
-        let server = FakeServer::for_client(user_id, &client, cx).await;
-        let mut status = client.status();
-        assert!(matches!(
-            status.next().await,
-            Some(Status::Connected { .. })
-        ));
-        assert_eq!(server.auth_count(), 1);
-
-        server.forbid_connections();
-        server.disconnect();
-        while !matches!(status.next().await, Some(Status::ReconnectionError { .. })) {}
-
-        server.allow_connections();
-        cx.executor().advance_clock(Duration::from_secs(10));
-        while !matches!(status.next().await, Some(Status::Connected { .. })) {}
-        assert_eq!(server.auth_count(), 1); // Client reused the cached credentials when reconnecting
-
-        server.forbid_connections();
-        server.disconnect();
-        while !matches!(status.next().await, Some(Status::ReconnectionError { .. })) {}
-
-        // Clear cached credentials after authentication fails
-        server.roll_access_token();
-        server.allow_connections();
-        cx.executor().run_until_parked();
-        cx.executor().advance_clock(Duration::from_secs(10));
-        while !matches!(status.next().await, Some(Status::Connected { .. })) {}
-        assert_eq!(server.auth_count(), 2); // Client re-authenticated due to an invalid token
-    }
-
-    #[gpui::test(iterations = 10)]
-    async fn test_connection_timeout(executor: BackgroundExecutor, cx: &mut TestAppContext) {
-        init_test(cx);
-        let user_id = 5;
-        let client = cx.update(|cx| {
-            Client::new(
-                Arc::new(FakeSystemClock::new()),
-                FakeHttpClient::with_404_response(),
-                cx,
-            )
-        });
-        let mut status = client.status();
-
-        // Time out when client tries to connect.
-        client.override_authenticate(move |cx| {
-            cx.background_spawn(async move {
-                Ok(Credentials {
-                    user_id,
-                    access_token: "token".into(),
-                })
-            })
-        });
-        client.override_establish_connection(|_, cx| {
-            cx.background_spawn(async move {
-                future::pending::<()>().await;
-                unreachable!()
-            })
-        });
-        let auth_and_connect = cx.spawn({
-            let client = client.clone();
-            |cx| async move { client.authenticate_and_connect(false, &cx).await }
-        });
-        executor.run_until_parked();
-        assert!(matches!(status.next().await, Some(Status::Connecting)));
-
-        executor.advance_clock(CONNECTION_TIMEOUT);
-        assert!(matches!(
-            status.next().await,
-            Some(Status::ConnectionError { .. })
-        ));
-        auth_and_connect.await.into_response().unwrap_err();
-
-        // Allow the connection to be established.
-        let server = FakeServer::for_client(user_id, &client, cx).await;
-        assert!(matches!(
-            status.next().await,
-            Some(Status::Connected { .. })
-        ));
-
-        // Disconnect client.
-        server.forbid_connections();
-        server.disconnect();
-        while !matches!(status.next().await, Some(Status::ReconnectionError { .. })) {}
-
-        // Time out when re-establishing the connection.
-        server.allow_connections();
-        client.override_establish_connection(|_, cx| {
-            cx.background_spawn(async move {
-                future::pending::<()>().await;
-                unreachable!()
-            })
-        });
-        executor.advance_clock(2 * INITIAL_RECONNECTION_DELAY);
-        assert!(matches!(
-            status.next().await,
-            Some(Status::Reconnecting { .. })
-        ));
-
-        executor.advance_clock(CONNECTION_TIMEOUT);
-        assert!(matches!(
-            status.next().await,
-            Some(Status::ReconnectionError { .. })
-        ));
-    }
-
-    #[gpui::test(iterations = 10)]
-    async fn test_authenticating_more_than_once(
-        cx: &mut TestAppContext,
-        executor: BackgroundExecutor,
-    ) {
-        init_test(cx);
-        let auth_count = Arc::new(Mutex::new(0));
-        let dropped_auth_count = Arc::new(Mutex::new(0));
-        let client = cx.update(|cx| {
-            Client::new(
-                Arc::new(FakeSystemClock::new()),
-                FakeHttpClient::with_404_response(),
-                cx,
-            )
-        });
-        client.override_authenticate({
-            let auth_count = auth_count.clone();
-            let dropped_auth_count = dropped_auth_count.clone();
-            move |cx| {
-                let auth_count = auth_count.clone();
-                let dropped_auth_count = dropped_auth_count.clone();
-                cx.background_spawn(async move {
-                    *auth_count.lock() += 1;
-                    let _drop = util::defer(move || *dropped_auth_count.lock() += 1);
-                    future::pending::<()>().await;
-                    unreachable!()
-                })
-            }
-        });
-
-        let _authenticate = cx.spawn({
-            let client = client.clone();
-            move |cx| async move { client.authenticate_and_connect(false, &cx).await }
-        });
-        executor.run_until_parked();
-        assert_eq!(*auth_count.lock(), 1);
-        assert_eq!(*dropped_auth_count.lock(), 0);
-
-        let _authenticate = cx.spawn({
-            let client = client.clone();
-            |cx| async move { client.authenticate_and_connect(false, &cx).await }
-        });
-        executor.run_until_parked();
-        assert_eq!(*auth_count.lock(), 2);
-        assert_eq!(*dropped_auth_count.lock(), 1);
-    }
-
-    #[gpui::test]
-    async fn test_subscribing_to_entity(cx: &mut TestAppContext) {
-        init_test(cx);
-        let user_id = 5;
-        let client = cx.update(|cx| {
-            Client::new(
-                Arc::new(FakeSystemClock::new()),
-                FakeHttpClient::with_404_response(),
-                cx,
-            )
-        });
-        let server = FakeServer::for_client(user_id, &client, cx).await;
-
-        let (done_tx1, done_rx1) = smol::channel::unbounded();
-        let (done_tx2, done_rx2) = smol::channel::unbounded();
-        AnyProtoClient::from(client.clone()).add_entity_message_handler(
-            move |entity: Entity<TestEntity>, _: TypedEnvelope<proto::JoinProject>, mut cx| {
-                match entity.read_with(&mut cx, |entity, _| entity.id).unwrap() {
-                    1 => done_tx1.try_send(()).unwrap(),
-                    2 => done_tx2.try_send(()).unwrap(),
-                    _ => unreachable!(),
-                }
-                async { Ok(()) }
-            },
-        );
-        let entity1 = cx.new(|_| TestEntity {
-            id: 1,
-            subscription: None,
-        });
-        let entity2 = cx.new(|_| TestEntity {
-            id: 2,
-            subscription: None,
-        });
-        let entity3 = cx.new(|_| TestEntity {
-            id: 3,
-            subscription: None,
-        });
-
-        let _subscription1 = client
-            .subscribe_to_entity(1)
-            .unwrap()
-            .set_entity(&entity1, &mut cx.to_async());
-        let _subscription2 = client
-            .subscribe_to_entity(2)
-            .unwrap()
-            .set_entity(&entity2, &mut cx.to_async());
-        // Ensure dropping a subscription for the same entity type still allows receiving of
-        // messages for other entity IDs of the same type.
-        let subscription3 = client
-            .subscribe_to_entity(3)
-            .unwrap()
-            .set_entity(&entity3, &mut cx.to_async());
-        drop(subscription3);
-
-        server.send(proto::JoinProject { project_id: 1 });
-        server.send(proto::JoinProject { project_id: 2 });
-        done_rx1.recv().await.unwrap();
-        done_rx2.recv().await.unwrap();
-    }
-
-    #[gpui::test]
-    async fn test_subscribing_after_dropping_subscription(cx: &mut TestAppContext) {
-        init_test(cx);
-        let user_id = 5;
-        let client = cx.update(|cx| {
-            Client::new(
-                Arc::new(FakeSystemClock::new()),
-                FakeHttpClient::with_404_response(),
-                cx,
-            )
-        });
-        let server = FakeServer::for_client(user_id, &client, cx).await;
-
-        let entity = cx.new(|_| TestEntity::default());
-        let (done_tx1, _done_rx1) = smol::channel::unbounded();
-        let (done_tx2, done_rx2) = smol::channel::unbounded();
-        let subscription1 = client.add_message_handler(
-            entity.downgrade(),
-            move |_, _: TypedEnvelope<proto::Ping>, _| {
-                done_tx1.try_send(()).unwrap();
-                async { Ok(()) }
-            },
-        );
-        drop(subscription1);
-        let _subscription2 = client.add_message_handler(
-            entity.downgrade(),
-            move |_, _: TypedEnvelope<proto::Ping>, _| {
-                done_tx2.try_send(()).unwrap();
-                async { Ok(()) }
-            },
-        );
-        server.send(proto::Ping {});
-        done_rx2.recv().await.unwrap();
-    }
-
-    #[gpui::test]
-    async fn test_dropping_subscription_in_handler(cx: &mut TestAppContext) {
-        init_test(cx);
-        let user_id = 5;
-        let client = cx.update(|cx| {
-            Client::new(
-                Arc::new(FakeSystemClock::new()),
-                FakeHttpClient::with_404_response(),
-                cx,
-            )
-        });
-        let server = FakeServer::for_client(user_id, &client, cx).await;
-
-        let entity = cx.new(|_| TestEntity::default());
-        let (done_tx, done_rx) = smol::channel::unbounded();
-        let subscription = client.add_message_handler(
-            entity.clone().downgrade(),
-            move |entity: Entity<TestEntity>, _: TypedEnvelope<proto::Ping>, mut cx| {
-                entity
-                    .update(&mut cx, |entity, _| entity.subscription.take())
-                    .unwrap();
-                done_tx.try_send(()).unwrap();
-                async { Ok(()) }
-            },
-        );
-        entity.update(cx, |entity, _| {
-            entity.subscription = Some(subscription);
-        });
-        server.send(proto::Ping {});
-        done_rx.recv().await.unwrap();
-    }
-
-    #[derive(Default)]
-    struct TestEntity {
-        id: usize,
-        subscription: Option<Subscription>,
-    }
-
-    fn init_test(cx: &mut TestAppContext) {
-        cx.update(|cx| {
-            let settings_store = SettingsStore::test(cx);
-            cx.set_global(settings_store);
-            init_settings(cx);
-        });
-    }
 }

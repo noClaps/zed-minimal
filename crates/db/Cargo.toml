@@ -12,8 +12,6 @@ workspace = true
 path = "src/db.rs"
 doctest = false
 
-[features]
-test-support = []
 
 [dependencies]
 anyhow.workspace = true
@@ -27,7 +25,3 @@ sqlez.workspace = true
 sqlez_macros.workspace = true
 util.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
-tempfile.workspace = true

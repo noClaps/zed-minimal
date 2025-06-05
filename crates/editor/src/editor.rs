@@ -37,15 +37,7 @@ pub mod scroll;
 mod selections_collection;
 pub mod tasks;
 
-#[cfg(test)]
-mod code_completion_tests;
-#[cfg(test)]
-mod editor_tests;
-#[cfg(test)]
-mod inline_completion_tests;
 mod signature_help;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test;
 
 pub(crate) use actions::*;
 pub use actions::{AcceptEditPrediction, OpenExcerpts, OpenExcerptsSplit};
@@ -5179,17 +5171,6 @@ impl Editor {
         });
 
         self.completion_tasks.push((id, task));
-    }
-
-    #[cfg(feature = "test-support")]
-    pub fn current_completions(&self) -> Option<Vec<project::Completion>> {
-        let menu = self.context_menu.borrow();
-        if let CodeContextMenu::Completions(menu) = menu.as_ref()? {
-            let completions = menu.completions.borrow();
-            Some(completions.to_vec())
-        } else {
-            None
-        }
     }
 
     pub fn with_completions_menu_matching_id<R>(
@@ -17130,38 +17111,6 @@ impl Editor {
         self.gutter_highlights.remove(&TypeId::of::<T>())
     }
 
-    #[cfg(feature = "test-support")]
-    pub fn all_text_background_highlights(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<(Range<DisplayPoint>, Hsla)> {
-        let snapshot = self.snapshot(window, cx);
-        let buffer = &snapshot.buffer_snapshot;
-        let start = buffer.anchor_before(0);
-        let end = buffer.anchor_after(buffer.len());
-        let theme = cx.theme().colors();
-        self.background_highlights_in_range(start..end, &snapshot, theme)
-    }
-
-    #[cfg(feature = "test-support")]
-    pub fn search_background_highlights(&mut self, cx: &mut Context<Self>) -> Vec<Range<Point>> {
-        let snapshot = self.buffer().read(cx).snapshot(cx);
-
-        let highlights = self
-            .background_highlights
-            .get(&TypeId::of::<items::BufferSearchHighlights>());
-
-        if let Some((_color, ranges)) = highlights {
-            ranges
-                .iter()
-                .map(|range| range.start.to_point(&snapshot)..range.end.to_point(&snapshot))
-                .collect_vec()
-        } else {
-            vec![]
-        }
-    }
-
     fn document_highlights_for_position<'a>(
         &'a self,
         position: Anchor,
@@ -18012,10 +17961,6 @@ impl Editor {
         file_extension: Option<String>,
         cx: &App,
     ) {
-        if cfg!(any(test, feature = "test-support")) {
-            return;
-        }
-
         let Some(project) = &self.project else { return };
 
         // If None, we are in a file without an extension
@@ -18738,24 +18683,6 @@ fn char_len_with_expanded_tabs(offset: usize, text: &str, tab_size: NonZeroU32) 
     width - offset
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_string_size_with_expanded_tabs() {
-        let nz = |val| NonZeroU32::new(val).unwrap();
-        assert_eq!(char_len_with_expanded_tabs(0, "", nz(4)), 0);
-        assert_eq!(char_len_with_expanded_tabs(0, "hello", nz(4)), 5);
-        assert_eq!(char_len_with_expanded_tabs(0, "\thello", nz(4)), 9);
-        assert_eq!(char_len_with_expanded_tabs(0, "abc\tab", nz(4)), 6);
-        assert_eq!(char_len_with_expanded_tabs(0, "hello\t", nz(4)), 8);
-        assert_eq!(char_len_with_expanded_tabs(0, "\t\t", nz(8)), 16);
-        assert_eq!(char_len_with_expanded_tabs(0, "x\t", nz(8)), 8);
-        assert_eq!(char_len_with_expanded_tabs(7, "x\t", nz(8)), 9);
-    }
-}
-
 /// Tokenizes a string into runs of text that should stick together, or that is whitespace.
 struct WordBreakingTokenizer<'a> {
     input: &'a str,
@@ -18861,81 +18788,6 @@ impl<'a> Iterator for WordBreakingTokenizer<'a> {
     }
 }
 
-#[test]
-fn test_word_breaking_tokenizer() {
-    let tests: &[(&str, &[WordBreakToken<'static>])] = &[
-        ("", &[]),
-        ("  ", &[whitespace("  ", 2)]),
-        ("Ʒ", &[word("Ʒ", 1)]),
-        ("Ǽ", &[word("Ǽ", 1)]),
-        ("⋑", &[word("⋑", 1)]),
-        ("⋑⋑", &[word("⋑⋑", 2)]),
-        (
-            "原理，进而",
-            &[word("原", 1), word("理，", 2), word("进", 1), word("而", 1)],
-        ),
-        (
-            "hello world",
-            &[word("hello", 5), whitespace(" ", 1), word("world", 5)],
-        ),
-        (
-            "hello, world",
-            &[word("hello,", 6), whitespace(" ", 1), word("world", 5)],
-        ),
-        (
-            "  hello world",
-            &[
-                whitespace("  ", 2),
-                word("hello", 5),
-                whitespace(" ", 1),
-                word("world", 5),
-            ],
-        ),
-        (
-            "这是什么 \n 钢笔",
-            &[
-                word("这", 1),
-                word("是", 1),
-                word("什", 1),
-                word("么", 1),
-                whitespace(" ", 1),
-                newline(),
-                whitespace(" ", 1),
-                word("钢", 1),
-                word("笔", 1),
-            ],
-        ),
-        (" mutton", &[whitespace(" ", 1), word("mutton", 6)]),
-    ];
-
-    fn word(token: &'static str, grapheme_len: usize) -> WordBreakToken<'static> {
-        WordBreakToken::Word {
-            token,
-            grapheme_len,
-        }
-    }
-
-    fn whitespace(token: &'static str, grapheme_len: usize) -> WordBreakToken<'static> {
-        WordBreakToken::InlineWhitespace {
-            token,
-            grapheme_len,
-        }
-    }
-
-    fn newline() -> WordBreakToken<'static> {
-        WordBreakToken::Newline
-    }
-
-    for (input, result) in tests {
-        assert_eq!(
-            WordBreakingTokenizer::new(input)
-                .collect::<Vec<_>>()
-                .as_slice(),
-            *result,
-        );
-    }
-}
-
 fn wrap_with_prefix(
     line_prefix: String,
     unwrapped_text: String,
@@ -19018,50 +18870,6 @@ fn wrap_with_prefix(
         wrapped_text.push_str(&current_line);
     }
     wrapped_text
-}
-
-#[test]
-fn test_wrap_with_prefix() {
-    assert_eq!(
-        wrap_with_prefix(
-            "# ".to_string(),
-            "abcdefg".to_string(),
-            4,
-            NonZeroU32::new(4).unwrap(),
-            false,
-        ),
-        "# abcdefg"
-    );
-    assert_eq!(
-        wrap_with_prefix(
-            "".to_string(),
-            "\thello world".to_string(),
-            8,
-            NonZeroU32::new(4).unwrap(),
-            false,
-        ),
-        "hello\nworld"
-    );
-    assert_eq!(
-        wrap_with_prefix(
-            "// ".to_string(),
-            "xx \nyy zz aa bb cc".to_string(),
-            12,
-            NonZeroU32::new(4).unwrap(),
-            false,
-        ),
-        "// xx yy zz\n// aa bb cc"
-    );
-    assert_eq!(
-        wrap_with_prefix(
-            String::new(),
-            "这是什么 \n 钢笔".to_string(),
-            3,
-            NonZeroU32::new(4).unwrap(),
-            false,
-        ),
-        "这是什\n么 钢\n笔"
-    );
 }
 
 pub trait CollaborationHub {

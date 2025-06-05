@@ -347,15 +347,6 @@ fn register_language(
     );
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub fn language(name: &str, grammar: tree_sitter::Language) -> Arc<Language> {
-    Arc::new(
-        Language::new(load_config(name), Some(grammar))
-            .with_queries(load_queries(name))
-            .unwrap(),
-    )
-}
-
 fn load_config(name: &str) -> LanguageConfig {
     let config_toml = String::from_utf8(
         LanguageDir::get(&format!("{}/config.toml", name))
@@ -365,20 +356,9 @@ fn load_config(name: &str) -> LanguageConfig {
     )
     .unwrap();
 
-    #[allow(unused_mut)]
-    let mut config: LanguageConfig = ::toml::from_str(&config_toml)
+    let config: LanguageConfig = ::toml::from_str(&config_toml)
         .with_context(|| format!("failed to load config.toml for language {name:?}"))
         .unwrap();
-
-    #[cfg(not(any(feature = "load-grammars", test)))]
-    {
-        config = LanguageConfig {
-            name: config.name,
-            matcher: config.matcher,
-            jsx_tag_auto_close: config.jsx_tag_auto_close,
-            ..Default::default()
-        }
-    }
 
     config
 }

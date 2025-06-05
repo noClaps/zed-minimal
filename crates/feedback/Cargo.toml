@@ -11,8 +11,6 @@ workspace = true
 [lib]
 path = "src/feedback.rs"
 
-[features]
-test-support = []
 
 [dependencies]
 client.workspace = true
@@ -28,6 +26,3 @@ util.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-editor = { workspace = true, features = ["test-support"] }

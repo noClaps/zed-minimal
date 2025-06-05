@@ -15,7 +15,6 @@ doctest = false
 
 [features]
 gpui = ["dep:gpui"]
-test-support = ["collections/test-support", "gpui/test-support", "proto/test-support"]
 
 [dependencies]
 anyhow.workspace = true
@@ -37,9 +36,3 @@ tracing = { version = "0.1.34", features = ["log"] }
 util.workspace = true
 zstd.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-collections = { workspace = true, features = ["test-support"] }
-gpui = { workspace = true, features = ["test-support"] }
-proto = { workspace = true, features = ["test-support"] }
-zlog.workspace = true

@@ -2,9 +2,6 @@ pub mod extension_settings;
 pub mod headless_host;
 pub mod wasm_host;
 
-#[cfg(test)]
-mod extension_store_test;
-
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_compression::futures::bufread::GzipDecoder;
 use async_tar::Archive;

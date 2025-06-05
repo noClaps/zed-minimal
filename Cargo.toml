@@ -43,7 +43,6 @@ members = [
     "crates/image_viewer",
     "crates/inline_completion",
     "crates/inline_completion_button",
-    "crates/inspector_ui",
     "crates/install_cli",
     "crates/language",
     "crates/language_extension",
@@ -181,7 +180,6 @@ icons = { path = "crates/icons" }
 image_viewer = { path = "crates/image_viewer" }
 inline_completion = { path = "crates/inline_completion" }
 inline_completion_button = { path = "crates/inline_completion_button" }
-inspector_ui = { path = "crates/inspector_ui" }
 install_cli = { path = "crates/install_cli" }
 language = { path = "crates/language" }
 language_extension = { path = "crates/language_extension" }

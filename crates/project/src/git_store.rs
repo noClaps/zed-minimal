@@ -61,7 +61,7 @@ use std::{
 };
 use sum_tree::{Edit, SumTree, TreeSet};
 use text::{Bias, BufferId};
-use util::{ResultExt, debug_panic, post_inc};
+use util::{ResultExt, post_inc};
 use worktree::{
     File, PathKey, PathProgress, PathSummary, PathTarget, UpdatedGitRepositoriesSet,
     UpdatedGitRepository, Worktree,
@@ -520,9 +520,7 @@ impl GitStore {
                     }),
                 });
             }
-            GitStoreState::Remote { .. } => {
-                debug_panic!("shared called on remote store");
-            }
+            GitStoreState::Remote { .. } => {}
         }
     }
 
@@ -540,9 +538,7 @@ impl GitStore {
             } => {
                 downstream_client.take();
             }
-            GitStoreState::Remote { .. } => {
-                debug_panic!("unshared called on remote store");
-            }
+            GitStoreState::Remote { .. } => {}
         }
         self.shared_diffs.clear();
     }
@@ -1958,7 +1954,6 @@ impl GitStore {
 
         let delegates = cx.update(|cx| repository.read(cx).askpass_delegates.clone())?;
         let Some(mut askpass) = delegates.lock().remove(&envelope.payload.askpass_id) else {
-            debug_panic!("no askpass found");
             anyhow::bail!("no askpass found");
         };
 

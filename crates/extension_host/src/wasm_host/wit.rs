@@ -22,8 +22,6 @@ use wasmtime::{
     component::{Component, Linker, Resource},
 };
 
-#[cfg(test)]
-pub use latest::CodeLabelSpanLiteral;
 pub use latest::{
     CodeLabel, CodeLabelSpan, Command, ExtensionProject, Range,
     zed::extension::lsp::{
@@ -75,10 +73,7 @@ pub fn authorize_access_to_unreleased_wasm_api_version(
 ) -> Result<()> {
     let allow_unreleased_version = match release_channel {
         ReleaseChannel::Dev | ReleaseChannel::Nightly => true,
-        ReleaseChannel::Stable | ReleaseChannel::Preview => {
-            // We always allow the latest in tests so that the extension tests pass on release branches.
-            cfg!(any(test, feature = "test-support"))
-        }
+        ReleaseChannel::Stable | ReleaseChannel::Preview => false,
     };
 
     anyhow::ensure!(

@@ -129,10 +129,6 @@ pub fn serialize_undo_map_entry(
 pub fn split_operations(
     mut operations: Vec<proto::Operation>,
 ) -> impl Iterator<Item = Vec<proto::Operation>> {
-    #[cfg(any(test, feature = "test-support"))]
-    const CHUNK_SIZE: usize = 5;
-
-    #[cfg(not(any(test, feature = "test-support")))]
     const CHUNK_SIZE: usize = 100;
 
     let mut done = false;

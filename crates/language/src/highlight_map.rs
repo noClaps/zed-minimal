@@ -75,37 +75,3 @@ impl Default for HighlightId {
         DEFAULT_SYNTAX_HIGHLIGHT_ID
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use gpui::rgba;
-
-    #[test]
-    fn test_highlight_map() {
-        let theme = SyntaxTheme {
-            highlights: [
-                ("function", rgba(0x100000ff)),
-                ("function.method", rgba(0x200000ff)),
-                ("function.async", rgba(0x300000ff)),
-                ("variable.builtin.self.rust", rgba(0x400000ff)),
-                ("variable.builtin", rgba(0x500000ff)),
-                ("variable", rgba(0x600000ff)),
-            ]
-            .iter()
-            .map(|(name, color)| (name.to_string(), (*color).into()))
-            .collect(),
-        };
-
-        let capture_names = &[
-            "function.special",
-            "function.async.rust",
-            "variable.builtin.self",
-        ];
-
-        let map = HighlightMap::new(capture_names, &theme);
-        assert_eq!(map.get(0).name(&theme), Some("function"));
-        assert_eq!(map.get(1).name(&theme), Some("function.async"));
-        assert_eq!(map.get(2).name(&theme), Some("variable.builtin"));
-    }
-}

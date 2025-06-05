@@ -232,18 +232,7 @@ impl UserStore {
                                         );
 
                                         this.update(cx, |this, cx| {
-                                            let accepted_tos_at = {
-                                                #[cfg(debug_assertions)]
-                                                if std::env::var("ZED_IGNORE_ACCEPTED_TOS").is_ok()
-                                                {
-                                                    None
-                                                } else {
-                                                    info.accepted_tos_at
-                                                }
-
-                                                #[cfg(not(debug_assertions))]
-                                                info.accepted_tos_at
-                                            };
+                                            let accepted_tos_at = info.accepted_tos_at;
 
                                             this.set_current_user_accepted_tos_at(accepted_tos_at);
                                             cx.emit(Event::PrivateUserInfoUpdated);
@@ -283,12 +272,6 @@ impl UserStore {
             pending_contact_requests: Default::default(),
             weak_self: cx.weak_entity(),
         }
-    }
-
-    #[cfg(feature = "test-support")]
-    pub fn clear_cache(&mut self) {
-        self.users.clear();
-        self.by_github_login.clear();
     }
 
     async fn handle_update_invite_info(

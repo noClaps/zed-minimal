@@ -8,8 +8,6 @@ pub use http::{self, Method, Request, Response, StatusCode, Uri};
 
 use futures::future::BoxFuture;
 use http::request::Builder;
-#[cfg(feature = "test-support")]
-use std::fmt;
 use std::{
     any::type_name,
     sync::{Arc, Mutex},
@@ -312,82 +310,6 @@ impl HttpClient for BlockedHttpClient {
             )
             .into())
         })
-    }
-
-    fn proxy(&self) -> Option<&Url> {
-        None
-    }
-
-    fn type_name(&self) -> &'static str {
-        type_name::<Self>()
-    }
-}
-
-#[cfg(feature = "test-support")]
-type FakeHttpHandler = Box<
-    dyn Fn(Request<AsyncBody>) -> BoxFuture<'static, anyhow::Result<Response<AsyncBody>>>
-        + Send
-        + Sync
-        + 'static,
->;
-
-#[cfg(feature = "test-support")]
-pub struct FakeHttpClient {
-    handler: FakeHttpHandler,
-}
-
-#[cfg(feature = "test-support")]
-impl FakeHttpClient {
-    pub fn create<Fut, F>(handler: F) -> Arc<HttpClientWithUrl>
-    where
-        Fut: futures::Future<Output = anyhow::Result<Response<AsyncBody>>> + Send + 'static,
-        F: Fn(Request<AsyncBody>) -> Fut + Send + Sync + 'static,
-    {
-        Arc::new(HttpClientWithUrl {
-            base_url: Mutex::new("http://test.example".into()),
-            client: HttpClientWithProxy {
-                client: Arc::new(Self {
-                    handler: Box::new(move |req| Box::pin(handler(req))),
-                }),
-                proxy: None,
-            },
-        })
-    }
-
-    pub fn with_404_response() -> Arc<HttpClientWithUrl> {
-        Self::create(|_| async move {
-            Ok(Response::builder()
-                .status(404)
-                .body(Default::default())
-                .unwrap())
-        })
-    }
-
-    pub fn with_200_response() -> Arc<HttpClientWithUrl> {
-        Self::create(|_| async move {
-            Ok(Response::builder()
-                .status(200)
-                .body(Default::default())
-                .unwrap())
-        })
-    }
-}
-
-#[cfg(feature = "test-support")]
-impl fmt::Debug for FakeHttpClient {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FakeHttpClient").finish()
-    }
-}
-
-#[cfg(feature = "test-support")]
-impl HttpClient for FakeHttpClient {
-    fn send(
-        &self,
-        req: Request<AsyncBody>,
-    ) -> BoxFuture<'static, anyhow::Result<Response<AsyncBody>>> {
-        let future = (self.handler)(req);
-        future
     }
 
     fn proxy(&self) -> Option<&Url> {

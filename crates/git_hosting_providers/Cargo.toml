@@ -26,8 +26,3 @@ settings.workspace = true
 url.workspace = true
 util.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-indoc.workspace = true
-serde_json.workspace = true
-pretty_assertions.workspace = true

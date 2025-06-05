@@ -194,17 +194,6 @@ impl ActionRegistry {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn load_action<A: Action>(&mut self) {
-        self.insert_action(MacroActionData {
-            name: A::debug_name(),
-            aliases: A::deprecated_aliases(),
-            type_id: TypeId::of::<A>(),
-            build: A::build,
-            json_schema: A::action_json_schema,
-        });
-    }
-
     fn insert_action(&mut self, action: MacroActionData) {
         let name: SharedString = action.name.into();
         self.by_name.insert(

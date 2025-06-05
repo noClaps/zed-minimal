@@ -12,11 +12,8 @@ workspace = true
 path = "src/clock.rs"
 doctest = false
 
-[features]
-test-support = ["dep:parking_lot"]
 
 [dependencies]
-parking_lot = { workspace = true, optional = true }
 serde.workspace = true
 smallvec.workspace = true
 workspace-hack.workspace = true

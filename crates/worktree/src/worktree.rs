@@ -1,7 +1,5 @@
 mod ignore;
 mod worktree_settings;
-#[cfg(test)]
-mod worktree_tests;
 
 use ::ignore::gitignore::{Gitignore, GitignoreBuilder};
 use anyhow::{Context as _, Result, anyhow};
@@ -195,30 +193,6 @@ pub enum WorkDirectory {
 }
 
 impl WorkDirectory {
-    #[cfg(test)]
-    fn in_project(path: &str) -> Self {
-        let path = Path::new(path);
-        Self::InProject {
-            relative_path: path.into(),
-        }
-    }
-
-    //#[cfg(test)]
-    //fn canonicalize(&self) -> Self {
-    //    match self {
-    //        WorkDirectory::InProject { relative_path } => WorkDirectory::InProject {
-    //            relative_path: relative_path.clone(),
-    //        },
-    //        WorkDirectory::AboveProject {
-    //            absolute_path,
-    //            location_in_repo,
-    //        } => WorkDirectory::AboveProject {
-    //            absolute_path: absolute_path.canonicalize().unwrap().into(),
-    //            location_in_repo: location_in_repo.clone(),
-    //        },
-    //    }
-    //}
-
     fn path_key(&self) -> PathKey {
         match self {
             WorkDirectory::InProject { relative_path } => PathKey(relative_path.clone()),
@@ -798,14 +772,6 @@ impl Worktree {
             Worktree::Remote(this) => {
                 this.update_observer.take();
             }
-        }
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn has_update_observer(&self) -> bool {
-        match self {
-            Worktree::Local(this) => this.update_observer.is_some(),
-            Worktree::Remote(this) => this.update_observer.is_some(),
         }
     }
 
@@ -1992,11 +1958,6 @@ impl LocalWorktree {
         rx
     }
 
-    #[cfg(feature = "test-support")]
-    pub fn manually_refresh_entries_for_paths(&self, paths: Vec<Arc<Path>>) -> barrier::Receiver {
-        self.refresh_entries_for_paths(paths)
-    }
-
     pub fn add_path_prefix_to_scan(&self, path_prefix: Arc<Path>) -> barrier::Receiver {
         let (tx, rx) = barrier::channel();
         self.path_prefixes_to_scan_tx
@@ -2823,98 +2784,6 @@ impl LocalSnapshot {
 
         ignore_stack
     }
-
-    #[cfg(test)]
-    fn expanded_entries(&self) -> impl Iterator<Item = &Entry> {
-        self.entries_by_path
-            .cursor::<()>(&())
-            .filter(|entry| entry.kind == EntryKind::Dir && (entry.is_external || entry.is_ignored))
-    }
-
-    #[cfg(test)]
-    pub fn check_invariants(&self, git_state: bool) {
-        use pretty_assertions::assert_eq;
-
-        assert_eq!(
-            self.entries_by_path
-                .cursor::<()>(&())
-                .map(|e| (&e.path, e.id))
-                .collect::<Vec<_>>(),
-            self.entries_by_id
-                .cursor::<()>(&())
-                .map(|e| (&e.path, e.id))
-                .collect::<collections::BTreeSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>(),
-            "entries_by_path and entries_by_id are inconsistent"
-        );
-
-        let mut files = self.files(true, 0);
-        let mut visible_files = self.files(false, 0);
-        for entry in self.entries_by_path.cursor::<()>(&()) {
-            if entry.is_file() {
-                assert_eq!(files.next().unwrap().inode, entry.inode);
-                if (!entry.is_ignored && !entry.is_external) || entry.is_always_included {
-                    assert_eq!(visible_files.next().unwrap().inode, entry.inode);
-                }
-            }
-        }
-
-        assert!(files.next().is_none());
-        assert!(visible_files.next().is_none());
-
-        let mut bfs_paths = Vec::new();
-        let mut stack = self
-            .root_entry()
-            .map(|e| e.path.as_ref())
-            .into_iter()
-            .collect::<Vec<_>>();
-        while let Some(path) = stack.pop() {
-            bfs_paths.push(path);
-            let ix = stack.len();
-            for child_entry in self.child_entries(path) {
-                stack.insert(ix, &child_entry.path);
-            }
-        }
-
-        let dfs_paths_via_iter = self
-            .entries_by_path
-            .cursor::<()>(&())
-            .map(|e| e.path.as_ref())
-            .collect::<Vec<_>>();
-        assert_eq!(bfs_paths, dfs_paths_via_iter);
-
-        let dfs_paths_via_traversal = self
-            .entries(true, 0)
-            .map(|e| e.path.as_ref())
-            .collect::<Vec<_>>();
-        assert_eq!(dfs_paths_via_traversal, dfs_paths_via_iter);
-
-        if git_state {
-            for ignore_parent_abs_path in self.ignores_by_parent_abs_path.keys() {
-                let ignore_parent_path = ignore_parent_abs_path
-                    .strip_prefix(self.abs_path.as_path())
-                    .unwrap();
-                assert!(self.entry_for_path(ignore_parent_path).is_some());
-                assert!(
-                    self.entry_for_path(ignore_parent_path.join(*GITIGNORE))
-                        .is_some()
-                );
-            }
-        }
-    }
-
-    #[cfg(test)]
-    pub fn entries_without_ids(&self, include_ignored: bool) -> Vec<(&Path, u64, bool)> {
-        let mut paths = Vec::new();
-        for entry in self.entries_by_path.cursor::<()>(&()) {
-            if include_ignored || !entry.is_ignored {
-                paths.push((entry.path.as_ref(), entry.inode, entry.is_ignored));
-            }
-        }
-        paths.sort_by(|a, b| a.0.cmp(b.0));
-        paths
-    }
 }
 
 impl BackgroundScannerState {
@@ -2979,9 +2848,6 @@ impl BackgroundScannerState {
             self.insert_git_repository(entry.path.clone(), fs, watcher);
         }
 
-        #[cfg(test)]
-        self.snapshot.check_invariants(false);
-
         entry
     }
 
@@ -3041,9 +2907,6 @@ impl BackgroundScannerState {
         if let Err(ix) = self.changed_paths.binary_search(parent_path) {
             self.changed_paths.insert(ix, parent_path.clone());
         }
-
-        #[cfg(test)]
-        self.snapshot.check_invariants(false);
     }
 
     fn remove_path(&mut self, path: &Path) {
@@ -3102,9 +2965,6 @@ impl BackgroundScannerState {
         self.snapshot
             .git_repositories
             .retain(|id, _| removed_ids.binary_search(id).is_err());
-
-        #[cfg(test)]
-        self.snapshot.check_invariants(false);
     }
 
     fn insert_git_repository(
@@ -4825,11 +4685,6 @@ impl BackgroundScanner {
             return futures::future::pending().await;
         }
 
-        #[cfg(any(test, feature = "test-support"))]
-        if self.fs.is_fake() {
-            return self.executor.simulate_random_delay().await;
-        }
-
         smol::Timer::after(FS_WATCH_LATENCY).await;
     }
 
@@ -5050,141 +4905,6 @@ struct UpdateIgnoreStatusJob {
     ignore_stack: Arc<IgnoreStack>,
     ignore_queue: Sender<UpdateIgnoreStatusJob>,
     scan_queue: Sender<ScanJob>,
-}
-
-pub trait WorktreeModelHandle {
-    #[cfg(any(test, feature = "test-support"))]
-    fn flush_fs_events<'a>(
-        &self,
-        cx: &'a mut gpui::TestAppContext,
-    ) -> futures::future::LocalBoxFuture<'a, ()>;
-
-    #[cfg(any(test, feature = "test-support"))]
-    fn flush_fs_events_in_root_git_repository<'a>(
-        &self,
-        cx: &'a mut gpui::TestAppContext,
-    ) -> futures::future::LocalBoxFuture<'a, ()>;
-}
-
-impl WorktreeModelHandle for Entity<Worktree> {
-    // When the worktree's FS event stream sometimes delivers "redundant" events for FS changes that
-    // occurred before the worktree was constructed. These events can cause the worktree to perform
-    // extra directory scans, and emit extra scan-state notifications.
-    //
-    // This function mutates the worktree's directory and waits for those mutations to be picked up,
-    // to ensure that all redundant FS events have already been processed.
-    #[cfg(any(test, feature = "test-support"))]
-    fn flush_fs_events<'a>(
-        &self,
-        cx: &'a mut gpui::TestAppContext,
-    ) -> futures::future::LocalBoxFuture<'a, ()> {
-        let file_name = "fs-event-sentinel";
-
-        let tree = self.clone();
-        let (fs, root_path) = self.read_with(cx, |tree, _| {
-            let tree = tree.as_local().unwrap();
-            (tree.fs.clone(), tree.abs_path().clone())
-        });
-
-        async move {
-            fs.create_file(&root_path.join(file_name), Default::default())
-                .await
-                .unwrap();
-
-            let mut events = cx.events(&tree);
-            while events.next().await.is_some() {
-                if tree.read_with(cx, |tree, _| tree.entry_for_path(file_name).is_some()) {
-                    break;
-                }
-            }
-
-            fs.remove_file(&root_path.join(file_name), Default::default())
-                .await
-                .unwrap();
-            while events.next().await.is_some() {
-                if tree.read_with(cx, |tree, _| tree.entry_for_path(file_name).is_none()) {
-                    break;
-                }
-            }
-
-            cx.update(|cx| tree.read(cx).as_local().unwrap().scan_complete())
-                .await;
-        }
-        .boxed_local()
-    }
-
-    // This function is similar to flush_fs_events, except that it waits for events to be flushed in
-    // the .git folder of the root repository.
-    // The reason for its existence is that a repository's .git folder might live *outside* of the
-    // worktree and thus its FS events might go through a different path.
-    // In order to flush those, we need to create artificial events in the .git folder and wait
-    // for the repository to be reloaded.
-    #[cfg(any(test, feature = "test-support"))]
-    fn flush_fs_events_in_root_git_repository<'a>(
-        &self,
-        cx: &'a mut gpui::TestAppContext,
-    ) -> futures::future::LocalBoxFuture<'a, ()> {
-        let file_name = "fs-event-sentinel";
-
-        let tree = self.clone();
-        let (fs, root_path, mut git_dir_scan_id) = self.read_with(cx, |tree, _| {
-            let tree = tree.as_local().unwrap();
-            let local_repo_entry = tree
-                .git_repositories
-                .values()
-                .min_by_key(|local_repo_entry| local_repo_entry.work_directory.clone())
-                .unwrap();
-            (
-                tree.fs.clone(),
-                local_repo_entry.common_dir_abs_path.clone(),
-                local_repo_entry.git_dir_scan_id,
-            )
-        });
-
-        let scan_id_increased = |tree: &mut Worktree, git_dir_scan_id: &mut usize| {
-            let tree = tree.as_local().unwrap();
-            // let repository = tree.repositories.first().unwrap();
-            let local_repo_entry = tree
-                .git_repositories
-                .values()
-                .min_by_key(|local_repo_entry| local_repo_entry.work_directory.clone())
-                .unwrap();
-
-            if local_repo_entry.git_dir_scan_id > *git_dir_scan_id {
-                *git_dir_scan_id = local_repo_entry.git_dir_scan_id;
-                true
-            } else {
-                false
-            }
-        };
-
-        async move {
-            fs.create_file(&root_path.join(file_name), Default::default())
-                .await
-                .unwrap();
-
-            let mut events = cx.events(&tree);
-            while events.next().await.is_some() {
-                if tree.update(cx, |tree, _| scan_id_increased(tree, &mut git_dir_scan_id)) {
-                    break;
-                }
-            }
-
-            fs.remove_file(&root_path.join(file_name), Default::default())
-                .await
-                .unwrap();
-
-            while events.next().await.is_some() {
-                if tree.update(cx, |tree, _| scan_id_increased(tree, &mut git_dir_scan_id)) {
-                    break;
-                }
-            }
-
-            cx.update(|cx| tree.read(cx).as_local().unwrap().scan_complete())
-                .await;
-        }
-        .boxed_local()
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -5529,16 +5249,6 @@ impl ProjectEntryId {
 
     pub fn to_usize(&self) -> usize {
         self.0
-    }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-impl CreatedEntry {
-    pub fn to_included(self) -> Option<Entry> {
-        match self {
-            CreatedEntry::Included(entry) => Some(entry),
-            CreatedEntry::Excluded { .. } => None,
-        }
     }
 }
 

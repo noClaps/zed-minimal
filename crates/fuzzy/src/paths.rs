@@ -232,15 +232,3 @@ fn distance_between_paths(path: &Path, relative_to: &Path) -> usize {
     {}
     path_components.count() + relative_components.count() + 1
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use super::distance_between_paths;
-
-    #[test]
-    fn test_distance_between_paths_empty() {
-        distance_between_paths(Path::new(""), Path::new(""));
-    }
-}

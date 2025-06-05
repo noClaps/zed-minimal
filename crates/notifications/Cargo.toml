@@ -12,12 +12,6 @@ workspace = true
 path = "src/notifications.rs"
 doctest = false
 
-[features]
-test-support = [
-    "collections/test-support",
-    "gpui/test-support",
-    "rpc/test-support",
-]
 
 [dependencies]
 anyhow.workspace = true
@@ -32,11 +26,3 @@ ui.workspace = true
 util.workspace = true
 workspace.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-client = { workspace = true, features = ["test-support"] }
-collections = { workspace = true, features = ["test-support"] }
-gpui = { workspace = true, features = ["test-support"] }
-rpc = { workspace = true, features = ["test-support"] }
-settings = { workspace = true, features = ["test-support"] }
-util = { workspace = true, features = ["test-support"] }

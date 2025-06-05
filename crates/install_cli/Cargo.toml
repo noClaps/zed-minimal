@@ -11,9 +11,6 @@ workspace = true
 [lib]
 path = "src/install_cli.rs"
 
-[features]
-test-support = []
-
 [dependencies]
 anyhow.workspace = true
 client.workspace = true

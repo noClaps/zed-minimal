@@ -1,6 +1,3 @@
-// Disable command line from opening on release mode
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 mod reliability;
 mod zed;
 
@@ -472,7 +469,6 @@ Error: Running Zed as root or via sudo is unsupported.
         welcome::init(cx);
         settings_ui::init(cx);
         extensions_ui::init(cx);
-        inspector_ui::init(app_state.clone(), cx);
         title_bar::init(cx);
 
         cx.observe_global::<SettingsStore>({
@@ -1043,37 +1039,6 @@ fn watch_themes(fs: Arc<dyn fs::Fs>, cx: &mut App) {
     .detach()
 }
 
-#[cfg(debug_assertions)]
-fn watch_languages(fs: Arc<dyn fs::Fs>, languages: Arc<LanguageRegistry>, cx: &mut App) {
-    use std::time::Duration;
-
-    let path = {
-        let p = Path::new("crates/languages/src");
-        let Ok(full_path) = p.canonicalize() else {
-            return;
-        };
-        full_path
-    };
-
-    cx.spawn(async move |_| {
-        let (mut events, _) = fs.watch(path.as_path(), Duration::from_millis(100)).await;
-        while let Some(event) = events.next().await {
-            let has_language_file = event.iter().any(|event| {
-                event
-                    .path
-                    .extension()
-                    .map(|ext| ext.to_string_lossy().as_ref() == "scm")
-                    .unwrap_or(false)
-            });
-            if has_language_file {
-                languages.reload();
-            }
-        }
-    })
-    .detach()
-}
-
-#[cfg(not(debug_assertions))]
 fn watch_languages(_fs: Arc<dyn fs::Fs>, _languages: Arc<LanguageRegistry>, _cx: &mut App) {}
 
 fn dump_all_gpui_actions() {

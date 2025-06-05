@@ -118,17 +118,6 @@ impl<T: Copy> Selection<T> {
 }
 
 impl Selection<usize> {
-    #[cfg(feature = "test-support")]
-    pub fn from_offset(offset: usize) -> Self {
-        Selection {
-            id: 0,
-            start: offset,
-            end: offset,
-            goal: SelectionGoal::None,
-            reversed: false,
-        }
-    }
-
     pub fn equals(&self, offset_range: &Range<usize>) -> bool {
         self.start == offset_range.start && self.end == offset_range.end
     }

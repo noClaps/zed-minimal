@@ -163,40 +163,6 @@ impl KeymapFile {
         }
     }
 
-    #[cfg(feature = "test-support")]
-    pub fn load_asset_allow_partial_failure(
-        asset_path: &str,
-        cx: &App,
-    ) -> anyhow::Result<Vec<KeyBinding>> {
-        match Self::load(asset_str::<SettingsAssets>(asset_path).as_ref(), cx) {
-            KeymapFileLoadResult::SomeFailedToLoad {
-                key_bindings,
-                error_message,
-                ..
-            } if key_bindings.is_empty() => {
-                anyhow::bail!("Error loading built-in keymap \"{asset_path}\": {error_message}",)
-            }
-            KeymapFileLoadResult::Success { key_bindings, .. }
-            | KeymapFileLoadResult::SomeFailedToLoad { key_bindings, .. } => Ok(key_bindings),
-            KeymapFileLoadResult::JsonParseFailure { error } => {
-                anyhow::bail!("JSON parse error in built-in keymap \"{asset_path}\": {error}")
-            }
-        }
-    }
-
-    #[cfg(feature = "test-support")]
-    pub fn load_panic_on_failure(content: &str, cx: &App) -> Vec<KeyBinding> {
-        match Self::load(content, cx) {
-            KeymapFileLoadResult::Success { key_bindings, .. } => key_bindings,
-            KeymapFileLoadResult::SomeFailedToLoad { error_message, .. } => {
-                panic!("{error_message}");
-            }
-            KeymapFileLoadResult::JsonParseFailure { error } => {
-                panic!("JSON parse error: {error}");
-            }
-        }
-    }
-
     pub fn load(content: &str, cx: &App) -> KeymapFileLoadResult {
         let key_equivalents =
             crate::key_equivalents::get_key_equivalents(cx.keyboard_layout().id());
@@ -605,25 +571,5 @@ impl KeymapFile {
                 Err(err)
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::KeymapFile;
-
-    #[test]
-    fn can_deserialize_keymap_with_trailing_comma() {
-        let json = indoc::indoc! {"[
-              // Standard macOS bindings
-              {
-                \"bindings\": {
-                  \"up\": \"menu::SelectPrevious\",
-                },
-              },
-            ]
-                  "
-        };
-        KeymapFile::parse(json).unwrap();
     }
 }

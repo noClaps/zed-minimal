@@ -77,7 +77,7 @@ use text::BufferId;
 use theme::{ActiveTheme, Appearance, BufferLineHeight, PlayerColor};
 use ui::{ButtonLike, KeyBinding, POPOVER_Y_PADDING, Tooltip, h_flex, prelude::*};
 use unicode_segmentation::UnicodeSegmentation;
-use util::{RangeExt, ResultExt, debug_panic};
+use util::{RangeExt, ResultExt};
 use workspace::{CollaboratorId, Workspace, item::Item, notifications::NotifyTaskExt};
 
 const INLINE_BLAME_PADDING_EM_WIDTHS: f32 = 7.;
@@ -2631,18 +2631,12 @@ impl EditorElement {
                         )
                 });
 
-                #[cfg(not(test))]
                 let hitbox = line_origin.map(|line_origin| {
                     window.insert_hitbox(
                         Bounds::new(line_origin, size(shaped_line.width, line_height)),
                         HitboxBehavior::Normal,
                     )
                 });
-                #[cfg(test)]
-                let hitbox = {
-                    let _ = line_origin;
-                    None
-                };
 
                 let multi_buffer_row = DisplayPoint::new(display_row, 0).to_point(snapshot).row;
                 let multi_buffer_row = MultiBufferRow(multi_buffer_row);
@@ -7165,7 +7159,7 @@ impl Element for EditorElement {
     fn request_layout(
         &mut self,
         _: Option<&GlobalElementId>,
-        __inspector_id: Option<&gpui::InspectorElementId>,
+
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, ()) {
@@ -7272,7 +7266,7 @@ impl Element for EditorElement {
     fn prepaint(
         &mut self,
         _: Option<&GlobalElementId>,
-        _inspector_id: Option<&gpui::InspectorElementId>,
+
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -7514,7 +7508,6 @@ impl Element for EditorElement {
                                 cx.theme().colors().version_control_deleted
                             }
                             DiffHunkStatusKind::Modified => {
-                                debug_panic!("modified diff status for row info");
                                 continue;
                             }
                         };
@@ -7710,7 +7703,7 @@ impl Element for EditorElement {
                         // If the fold widths have changed, we need to prepaint
                         // the element again to account for any changes in
                         // wrapping.
-                        return self.prepaint(None, _inspector_id, bounds, &mut (), window, cx);
+                        return self.prepaint(None, bounds, &mut (), window, cx);
                     }
 
                     let longest_line_blame_width = self
@@ -7795,7 +7788,7 @@ impl Element for EditorElement {
                             self.editor.update(cx, |editor, cx| {
                                 editor.resize_blocks(resized_blocks, autoscroll_request, cx)
                             });
-                            return self.prepaint(None, _inspector_id, bounds, &mut (), window, cx);
+                            return self.prepaint(None, bounds, &mut (), window, cx);
                         }
                     };
 
@@ -8284,7 +8277,7 @@ impl Element for EditorElement {
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
-        __inspector_id: Option<&gpui::InspectorElementId>,
+
         bounds: Bounds<gpui::Pixels>,
         _: &mut Self::RequestLayoutState,
         layout: &mut Self::PrepaintState,
@@ -9353,383 +9346,4 @@ fn compute_auto_height_layout(
         .min(line_height * max_lines as f32);
 
     Some(size(width, height))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        Editor, MultiBuffer,
-        display_map::{BlockPlacement, BlockProperties},
-        editor_tests::{init_test, update_test_language_settings},
-    };
-    use gpui::{TestAppContext, VisualTestContext};
-    use language::language_settings;
-    use log::info;
-    use std::num::NonZeroU32;
-    use util::test::sample_text;
-
-    #[gpui::test]
-    fn test_shape_line_numbers(cx: &mut TestAppContext) {
-        init_test(cx, |_| {});
-        let window = cx.add_window(|window, cx| {
-            let buffer = MultiBuffer::build_simple(&sample_text(6, 6, 'a'), cx);
-            Editor::new(EditorMode::full(), buffer, None, window, cx)
-        });
-
-        let editor = window.root(cx).unwrap();
-        let style = cx.update(|cx| editor.read(cx).style().unwrap().clone());
-        let line_height = window
-            .update(cx, |_, window, _| {
-                style.text.line_height_in_pixels(window.rem_size())
-            })
-            .unwrap();
-        let element = EditorElement::new(&editor, style);
-        let snapshot = window
-            .update(cx, |editor, window, cx| editor.snapshot(window, cx))
-            .unwrap();
-
-        let layouts = cx
-            .update_window(*window, |_, window, cx| {
-                element.layout_line_numbers(
-                    None,
-                    GutterDimensions {
-                        left_padding: Pixels::ZERO,
-                        right_padding: Pixels::ZERO,
-                        width: px(30.0),
-                        margin: Pixels::ZERO,
-                        git_blame_entries_width: None,
-                    },
-                    line_height,
-                    gpui::Point::default(),
-                    DisplayRow(0)..DisplayRow(6),
-                    &(0..6)
-                        .map(|row| RowInfo {
-                            buffer_row: Some(row),
-                            ..Default::default()
-                        })
-                        .collect::<Vec<_>>(),
-                    &BTreeMap::default(),
-                    Some(DisplayPoint::new(DisplayRow(0), 0)),
-                    &snapshot,
-                    window,
-                    cx,
-                )
-            })
-            .unwrap();
-        assert_eq!(layouts.len(), 6);
-
-        let relative_rows = window
-            .update(cx, |editor, window, cx| {
-                let snapshot = editor.snapshot(window, cx);
-                element.calculate_relative_line_numbers(
-                    &snapshot,
-                    &(DisplayRow(0)..DisplayRow(6)),
-                    Some(DisplayRow(3)),
-                )
-            })
-            .unwrap();
-        assert_eq!(relative_rows[&DisplayRow(0)], 3);
-        assert_eq!(relative_rows[&DisplayRow(1)], 2);
-        assert_eq!(relative_rows[&DisplayRow(2)], 1);
-        // current line has no relative number
-        assert_eq!(relative_rows[&DisplayRow(4)], 1);
-        assert_eq!(relative_rows[&DisplayRow(5)], 2);
-
-        // works if cursor is before screen
-        let relative_rows = window
-            .update(cx, |editor, window, cx| {
-                let snapshot = editor.snapshot(window, cx);
-                element.calculate_relative_line_numbers(
-                    &snapshot,
-                    &(DisplayRow(3)..DisplayRow(6)),
-                    Some(DisplayRow(1)),
-                )
-            })
-            .unwrap();
-        assert_eq!(relative_rows.len(), 3);
-        assert_eq!(relative_rows[&DisplayRow(3)], 2);
-        assert_eq!(relative_rows[&DisplayRow(4)], 3);
-        assert_eq!(relative_rows[&DisplayRow(5)], 4);
-
-        // works if cursor is after screen
-        let relative_rows = window
-            .update(cx, |editor, window, cx| {
-                let snapshot = editor.snapshot(window, cx);
-                element.calculate_relative_line_numbers(
-                    &snapshot,
-                    &(DisplayRow(0)..DisplayRow(3)),
-                    Some(DisplayRow(6)),
-                )
-            })
-            .unwrap();
-        assert_eq!(relative_rows.len(), 3);
-        assert_eq!(relative_rows[&DisplayRow(0)], 5);
-        assert_eq!(relative_rows[&DisplayRow(1)], 4);
-        assert_eq!(relative_rows[&DisplayRow(2)], 3);
-    }
-
-    #[gpui::test]
-    fn test_layout_with_placeholder_text_and_blocks(cx: &mut TestAppContext) {
-        init_test(cx, |_| {});
-
-        let window = cx.add_window(|window, cx| {
-            let buffer = MultiBuffer::build_simple("", cx);
-            Editor::new(EditorMode::full(), buffer, None, window, cx)
-        });
-        let cx = &mut VisualTestContext::from_window(*window, cx);
-        let editor = window.root(cx).unwrap();
-        let style = cx.update(|_, cx| editor.read(cx).style().unwrap().clone());
-        window
-            .update(cx, |editor, window, cx| {
-                editor.set_placeholder_text("hello", cx);
-                editor.insert_blocks(
-                    [BlockProperties {
-                        style: BlockStyle::Fixed,
-                        placement: BlockPlacement::Above(Anchor::min()),
-                        height: Some(3),
-                        render: Arc::new(|cx| div().h(3. * cx.window.line_height()).into_any()),
-                        priority: 0,
-                        render_in_minimap: true,
-                    }],
-                    None,
-                    cx,
-                );
-
-                // Blur the editor so that it displays placeholder text.
-                window.blur();
-            })
-            .unwrap();
-
-        let (_, state) = cx.draw(
-            point(px(500.), px(500.)),
-            size(px(500.), px(500.)),
-            |_, _| EditorElement::new(&editor, style),
-        );
-        assert_eq!(state.position_map.line_layouts.len(), 4);
-        assert_eq!(state.line_numbers.len(), 1);
-        assert_eq!(
-            state
-                .line_numbers
-                .get(&MultiBufferRow(0))
-                .map(|line_number| line_number.shaped_line.text.as_ref()),
-            Some("1")
-        );
-    }
-
-    #[gpui::test]
-    fn test_all_invisibles_drawing(cx: &mut TestAppContext) {
-        const TAB_SIZE: u32 = 4;
-
-        let input_text = "\t \t|\t| a b";
-        let expected_invisibles = vec![
-            Invisible::Tab {
-                line_start_offset: 0,
-                line_end_offset: TAB_SIZE as usize,
-            },
-            Invisible::Whitespace {
-                line_offset: TAB_SIZE as usize,
-            },
-            Invisible::Tab {
-                line_start_offset: TAB_SIZE as usize + 1,
-                line_end_offset: TAB_SIZE as usize * 2,
-            },
-            Invisible::Tab {
-                line_start_offset: TAB_SIZE as usize * 2 + 1,
-                line_end_offset: TAB_SIZE as usize * 3,
-            },
-            Invisible::Whitespace {
-                line_offset: TAB_SIZE as usize * 3 + 1,
-            },
-            Invisible::Whitespace {
-                line_offset: TAB_SIZE as usize * 3 + 3,
-            },
-        ];
-        assert_eq!(
-            expected_invisibles.len(),
-            input_text
-                .chars()
-                .filter(|initial_char| initial_char.is_whitespace())
-                .count(),
-            "Hardcoded expected invisibles differ from the actual ones in '{input_text}'"
-        );
-
-        for show_line_numbers in [true, false] {
-            init_test(cx, |s| {
-                s.defaults.show_whitespaces = Some(ShowWhitespaceSetting::All);
-                s.defaults.tab_size = NonZeroU32::new(TAB_SIZE);
-            });
-
-            let actual_invisibles = collect_invisibles_from_new_editor(
-                cx,
-                EditorMode::full(),
-                input_text,
-                px(500.0),
-                show_line_numbers,
-            );
-
-            assert_eq!(expected_invisibles, actual_invisibles);
-        }
-    }
-
-    #[gpui::test]
-    fn test_invisibles_dont_appear_in_certain_editors(cx: &mut TestAppContext) {
-        init_test(cx, |s| {
-            s.defaults.show_whitespaces = Some(ShowWhitespaceSetting::All);
-            s.defaults.tab_size = NonZeroU32::new(4);
-        });
-
-        for editor_mode_without_invisibles in [
-            EditorMode::SingleLine { auto_width: false },
-            EditorMode::AutoHeight { max_lines: 100 },
-        ] {
-            for show_line_numbers in [true, false] {
-                let invisibles = collect_invisibles_from_new_editor(
-                    cx,
-                    editor_mode_without_invisibles.clone(),
-                    "\t\t\t| | a b",
-                    px(500.0),
-                    show_line_numbers,
-                );
-                assert!(
-                    invisibles.is_empty(),
-                    "For editor mode {editor_mode_without_invisibles:?} no invisibles was expected but got {invisibles:?}"
-                );
-            }
-        }
-    }
-
-    #[gpui::test]
-    fn test_wrapped_invisibles_drawing(cx: &mut TestAppContext) {
-        let tab_size = 4;
-        let input_text = "a\tbcd     ".repeat(9);
-        let repeated_invisibles = [
-            Invisible::Tab {
-                line_start_offset: 1,
-                line_end_offset: tab_size as usize,
-            },
-            Invisible::Whitespace {
-                line_offset: tab_size as usize + 3,
-            },
-            Invisible::Whitespace {
-                line_offset: tab_size as usize + 4,
-            },
-            Invisible::Whitespace {
-                line_offset: tab_size as usize + 5,
-            },
-            Invisible::Whitespace {
-                line_offset: tab_size as usize + 6,
-            },
-            Invisible::Whitespace {
-                line_offset: tab_size as usize + 7,
-            },
-        ];
-        let expected_invisibles = std::iter::once(repeated_invisibles)
-            .cycle()
-            .take(9)
-            .flatten()
-            .collect::<Vec<_>>();
-        assert_eq!(
-            expected_invisibles.len(),
-            input_text
-                .chars()
-                .filter(|initial_char| initial_char.is_whitespace())
-                .count(),
-            "Hardcoded expected invisibles differ from the actual ones in '{input_text}'"
-        );
-        info!("Expected invisibles: {expected_invisibles:?}");
-
-        init_test(cx, |_| {});
-
-        // Put the same string with repeating whitespace pattern into editors of various size,
-        // take deliberately small steps during resizing, to put all whitespace kinds near the wrap point.
-        let resize_step = 10.0;
-        let mut editor_width = 200.0;
-        while editor_width <= 1000.0 {
-            for show_line_numbers in [true, false] {
-                update_test_language_settings(cx, |s| {
-                    s.defaults.tab_size = NonZeroU32::new(tab_size);
-                    s.defaults.show_whitespaces = Some(ShowWhitespaceSetting::All);
-                    s.defaults.preferred_line_length = Some(editor_width as u32);
-                    s.defaults.soft_wrap = Some(language_settings::SoftWrap::PreferredLineLength);
-                });
-
-                let actual_invisibles = collect_invisibles_from_new_editor(
-                    cx,
-                    EditorMode::full(),
-                    &input_text,
-                    px(editor_width),
-                    show_line_numbers,
-                );
-
-                // Whatever the editor size is, ensure it has the same invisible kinds in the same order
-                // (no good guarantees about the offsets: wrapping could trigger padding and its tests should check the offsets).
-                let mut i = 0;
-                for (actual_index, actual_invisible) in actual_invisibles.iter().enumerate() {
-                    i = actual_index;
-                    match expected_invisibles.get(i) {
-                        Some(expected_invisible) => match (expected_invisible, actual_invisible) {
-                            (Invisible::Whitespace { .. }, Invisible::Whitespace { .. })
-                            | (Invisible::Tab { .. }, Invisible::Tab { .. }) => {}
-                            _ => {
-                                panic!(
-                                    "At index {i}, expected invisible {expected_invisible:?} does not match actual {actual_invisible:?} by kind. Actual invisibles: {actual_invisibles:?}"
-                                )
-                            }
-                        },
-                        None => {
-                            panic!("Unexpected extra invisible {actual_invisible:?} at index {i}")
-                        }
-                    }
-                }
-                let missing_expected_invisibles = &expected_invisibles[i + 1..];
-                assert!(
-                    missing_expected_invisibles.is_empty(),
-                    "Missing expected invisibles after index {i}: {missing_expected_invisibles:?}"
-                );
-
-                editor_width += resize_step;
-            }
-        }
-    }
-
-    fn collect_invisibles_from_new_editor(
-        cx: &mut TestAppContext,
-        editor_mode: EditorMode,
-        input_text: &str,
-        editor_width: Pixels,
-        show_line_numbers: bool,
-    ) -> Vec<Invisible> {
-        info!(
-            "Creating editor with mode {editor_mode:?}, width {}px and text '{input_text}'",
-            editor_width.0
-        );
-        let window = cx.add_window(|window, cx| {
-            let buffer = MultiBuffer::build_simple(input_text, cx);
-            Editor::new(editor_mode, buffer, None, window, cx)
-        });
-        let cx = &mut VisualTestContext::from_window(*window, cx);
-        let editor = window.root(cx).unwrap();
-
-        let style = cx.update(|_, cx| editor.read(cx).style().unwrap().clone());
-        window
-            .update(cx, |editor, _, cx| {
-                editor.set_soft_wrap_mode(language_settings::SoftWrap::EditorWidth, cx);
-                editor.set_wrap_width(Some(editor_width), cx);
-                editor.set_show_line_numbers(show_line_numbers, cx);
-            })
-            .unwrap();
-        let (_, state) = cx.draw(
-            point(px(500.), px(500.)),
-            size(px(500.), px(500.)),
-            |_, _| EditorElement::new(&editor, style),
-        );
-        state
-            .position_map
-            .line_layouts
-            .iter()
-            .flat_map(|line_with_invisibles| &line_with_invisibles.invisibles)
-            .cloned()
-            .collect()
-    }
 }

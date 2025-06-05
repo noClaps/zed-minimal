@@ -16,15 +16,6 @@ use refineable::Refineable;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Use this struct for interfacing with the 'debug_below' styling from your own elements.
-/// If a parent element has this style set on it, then this struct will be set as a global in
-/// GPUI.
-#[cfg(debug_assertions)]
-pub struct DebugBelow;
-
-#[cfg(debug_assertions)]
-impl crate::Global for DebugBelow {}
-
 /// How to fit the image into the bounds of the element.
 pub enum ObjectFit {
     /// The image will be stretched to fill the bounds of the element.
@@ -259,14 +250,6 @@ pub struct Style {
 
     /// The opacity of this element
     pub opacity: Option<f32>,
-
-    /// Whether to draw a red debugging outline around this element
-    #[cfg(debug_assertions)]
-    pub debug: bool,
-
-    /// Whether to draw a red debugging outline around this element and all of its conforming children
-    #[cfg(debug_assertions)]
-    pub debug_below: bool,
 }
 
 impl Styled for StyleRefinement {
@@ -589,16 +572,6 @@ impl Style {
         cx: &mut App,
         continuation: impl FnOnce(&mut Window, &mut App),
     ) {
-        #[cfg(debug_assertions)]
-        if self.debug_below {
-            cx.set_global(DebugBelow)
-        }
-
-        #[cfg(debug_assertions)]
-        if self.debug || cx.has_global::<DebugBelow>() {
-            window.paint_quad(crate::outline(bounds, crate::red(), BorderStyle::default()));
-        }
-
         let rem_size = window.rem_size();
         let corner_radii = self
             .corner_radii
@@ -695,11 +668,6 @@ impl Style {
                 },
             );
         }
-
-        #[cfg(debug_assertions)]
-        if self.debug_below {
-            cx.remove_global::<DebugBelow>();
-        }
     }
 
     fn is_border_visible(&self) -> bool {
@@ -750,11 +718,6 @@ impl Default for Style {
             text: TextStyleRefinement::default(),
             mouse_cursor: None,
             opacity: None,
-
-            #[cfg(debug_assertions)]
-            debug: false,
-            #[cfg(debug_assertions)]
-            debug_below: false,
         }
     }
 }
@@ -1273,101 +1236,5 @@ impl From<Position> for taffy::style::Position {
             Position::Relative => Self::Relative,
             Position::Absolute => Self::Absolute,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{blue, green, red, yellow};
-
-    use super::*;
-
-    #[test]
-    fn test_combine_highlights() {
-        assert_eq!(
-            combine_highlights(
-                [
-                    (0..5, green().into()),
-                    (4..10, FontWeight::BOLD.into()),
-                    (15..20, yellow().into()),
-                ],
-                [
-                    (2..6, FontStyle::Italic.into()),
-                    (1..3, blue().into()),
-                    (21..23, red().into()),
-                ]
-            )
-            .collect::<Vec<_>>(),
-            [
-                (
-                    0..1,
-                    HighlightStyle {
-                        color: Some(green()),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    1..2,
-                    HighlightStyle {
-                        color: Some(green()),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    2..3,
-                    HighlightStyle {
-                        color: Some(green()),
-                        font_style: Some(FontStyle::Italic),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    3..4,
-                    HighlightStyle {
-                        color: Some(green()),
-                        font_style: Some(FontStyle::Italic),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    4..5,
-                    HighlightStyle {
-                        color: Some(green()),
-                        font_weight: Some(FontWeight::BOLD),
-                        font_style: Some(FontStyle::Italic),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    5..6,
-                    HighlightStyle {
-                        font_weight: Some(FontWeight::BOLD),
-                        font_style: Some(FontStyle::Italic),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    6..10,
-                    HighlightStyle {
-                        font_weight: Some(FontWeight::BOLD),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    15..20,
-                    HighlightStyle {
-                        color: Some(yellow()),
-                        ..Default::default()
-                    }
-                ),
-                (
-                    21..23,
-                    HighlightStyle {
-                        color: Some(red()),
-                        ..Default::default()
-                    }
-                )
-            ]
-        );
     }
 }

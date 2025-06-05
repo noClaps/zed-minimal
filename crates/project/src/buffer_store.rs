@@ -26,7 +26,7 @@ use rpc::{
 use smol::channel::Receiver;
 use std::{io, path::Path, pin::pin, sync::Arc, time::Instant};
 use text::BufferId;
-use util::{ResultExt as _, TryFutureExt, debug_panic, maybe};
+use util::{ResultExt as _, TryFutureExt, maybe};
 use worktree::{File, PathChange, ProjectEntryId, Worktree, WorktreeId};
 
 /// A set of open buffers.
@@ -906,7 +906,6 @@ impl BufferStore {
                     if is_remote {
                         return Ok(());
                     } else {
-                        debug_panic!("buffer {remote_id} was already registered");
                         anyhow::bail!("buffer {remote_id} was already registered");
                     }
                 }
@@ -1174,7 +1173,6 @@ impl BufferStore {
                 return;
             }
         }
-        debug_panic!("tried to register shared lsp handle, but buffer was not shared")
     }
 
     pub fn handle_synchronize_buffers(
@@ -1392,11 +1390,6 @@ impl BufferStore {
                     return;
                 }
             }
-            debug_panic!(
-                "peer_id {} closed buffer_id {} which was either not open or already closed",
-                peer_id,
-                buffer_id
-            )
         })
     }
 
@@ -1625,7 +1618,6 @@ impl BufferStore {
         if let Some(this) = self.as_remote_mut() {
             this.deserialize_project_transaction(message, push_to_history, cx)
         } else {
-            debug_panic!("not a remote buffer store");
             Task::ready(Err(anyhow!("not a remote buffer store")))
         }
     }
@@ -1638,7 +1630,6 @@ impl BufferStore {
         if let Some(this) = self.as_remote_mut() {
             this.wait_for_remote_buffer(id, cx)
         } else {
-            debug_panic!("not a remote buffer store");
             Task::ready(Err(anyhow!("not a remote buffer store")))
         }
     }

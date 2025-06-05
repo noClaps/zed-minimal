@@ -129,18 +129,6 @@ impl JsonLspAdapter {
             },
         ]);
 
-        #[cfg(debug_assertions)]
-        {
-            schemas.as_array_mut().unwrap().push(serde_json::json!(
-                {
-                    "fileMatch": [
-                        "zed-inspector-style.json"
-                    ],
-                    "schema": generate_inspector_style_schema(),
-                }
-            ))
-        }
-
         // This can be viewed via `dev: open language server logs` -> `json-language-server` ->
         // `Server Info`
         serde_json::json!({
@@ -171,16 +159,6 @@ impl JsonLspAdapter {
         writer.replace(config.clone());
         return Ok(config);
     }
-}
-
-#[cfg(debug_assertions)]
-fn generate_inspector_style_schema() -> serde_json_lenient::Value {
-    let schema = schemars::r#gen::SchemaSettings::draft07()
-        .with(|settings| settings.option_add_null_type = false)
-        .into_generator()
-        .into_root_schema_for::<gpui::StyleRefinement>();
-
-    serde_json_lenient::to_value(schema).unwrap()
 }
 
 #[async_trait(?Send)]

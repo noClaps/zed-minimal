@@ -19,15 +19,12 @@ collections.workspace = true
 futures.workspace = true
 git.workspace = true
 gpui.workspace = true
-ignore.workspace = true
 libc.workspace = true
-log.workspace = true
 parking_lot.workspace = true
 paths.workspace = true
 rope.workspace = true
 proto.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 smol.workspace = true
 tempfile.workspace = true
 text.workspace = true
@@ -37,9 +34,3 @@ workspace-hack.workspace = true
 fsevent.workspace = true
 objc.workspace = true
 cocoa = "0.26"
-
-[dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
-
-[features]
-test-support = ["gpui/test-support", "git/test-support"]

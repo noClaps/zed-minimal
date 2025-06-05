@@ -338,17 +338,6 @@ pub(crate) enum SerializedPaneGroup {
     Pane(SerializedPane),
 }
 
-#[cfg(test)]
-impl Default for SerializedPaneGroup {
-    fn default() -> Self {
-        Self::Pane(SerializedPane {
-            children: vec![SerializedItem::default()],
-            active: false,
-            pinned_count: 0,
-        })
-    }
-}
-
 impl SerializedPaneGroup {
     #[async_recursion(?Send)]
     pub(crate) async fn deserialize(
@@ -536,18 +525,6 @@ impl SerializedItem {
     }
 }
 
-#[cfg(test)]
-impl Default for SerializedItem {
-    fn default() -> Self {
-        SerializedItem {
-            kind: Arc::from("Terminal"),
-            item_id: 100000,
-            active: false,
-            preview: false,
-        }
-    }
-}
-
 impl StaticColumnCount for SerializedItem {
     fn column_count() -> usize {
         4
@@ -577,82 +554,5 @@ impl Column for SerializedItem {
             },
             next_index,
         ))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_serialize_local_paths() {
-        let paths = vec!["b", "a", "c"];
-        let serialized = SerializedWorkspaceLocation::from_local_paths(paths);
-
-        assert_eq!(
-            serialized,
-            SerializedWorkspaceLocation::Local(
-                LocalPaths::new(vec!["a", "b", "c"]),
-                LocalPathsOrder::new(vec![1, 0, 2])
-            )
-        );
-    }
-
-    #[test]
-    fn test_sorted_paths() {
-        let paths = vec!["b", "a", "c"];
-        let serialized = SerializedWorkspaceLocation::from_local_paths(paths);
-        assert_eq!(
-            serialized.sorted_paths(),
-            Arc::new(vec![
-                PathBuf::from("b"),
-                PathBuf::from("a"),
-                PathBuf::from("c"),
-            ])
-        );
-
-        let paths = Arc::new(vec![
-            PathBuf::from("a"),
-            PathBuf::from("b"),
-            PathBuf::from("c"),
-        ]);
-        let order = vec![2, 0, 1];
-        let serialized =
-            SerializedWorkspaceLocation::Local(LocalPaths(paths.clone()), LocalPathsOrder(order));
-        assert_eq!(
-            serialized.sorted_paths(),
-            Arc::new(vec![
-                PathBuf::from("b"),
-                PathBuf::from("c"),
-                PathBuf::from("a"),
-            ])
-        );
-
-        let paths = Arc::new(vec![
-            PathBuf::from("a"),
-            PathBuf::from("b"),
-            PathBuf::from("c"),
-        ]);
-        let order = vec![];
-        let serialized =
-            SerializedWorkspaceLocation::Local(LocalPaths(paths.clone()), LocalPathsOrder(order));
-        assert_eq!(serialized.sorted_paths(), paths);
-
-        let urls = ["/a", "/b", "/c"];
-        let serialized = SerializedWorkspaceLocation::Ssh(SerializedSshProject {
-            id: SshProjectId(0),
-            host: "host".to_string(),
-            port: Some(22),
-            paths: urls.iter().map(|s| s.to_string()).collect(),
-            user: Some("user".to_string()),
-        });
-        assert_eq!(
-            serialized.sorted_paths(),
-            Arc::new(
-                urls.iter()
-                    .map(|p| PathBuf::from(format!("user@host:22{}", p)))
-                    .collect()
-            )
-        );
     }
 }

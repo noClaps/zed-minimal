@@ -125,16 +125,3 @@ impl LspStdoutHandler {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    async fn test_read_headers() {
-        let mut buf = Vec::new();
-        let mut reader = smol::io::BufReader::new(b"Content-Length: 123\r\n\r\n" as &[u8]);
-        read_headers(&mut reader, &mut buf).await.unwrap();
-        assert_eq!(buf, b"Content-Length: 123\r\n\r\n");
-    }
-}

@@ -4,9 +4,6 @@ mod keystroke;
 
 mod mac;
 
-#[cfg(any(test, feature = "test-support"))]
-mod test;
-
 use crate::{
     Action, AnyWindowHandle, App, AsyncWindowContext, BackgroundExecutor, Bounds,
     DEFAULT_WINDOW_SIZE, DevicePixels, DispatchEventResult, Font, FontId, FontMetrics, FontRun,
@@ -47,11 +44,6 @@ pub use keystroke::*;
 
 pub(crate) use mac::*;
 pub use semantic_version::SemanticVersion;
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) use test::*;
-
-#[cfg(any(test, feature = "test-support"))]
-pub use test::{TestDispatcher, TestScreenCaptureSource};
 
 /// Returns a background executor for the current platform.
 pub fn background_executor() -> BackgroundExecutor {
@@ -382,11 +374,6 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn gpu_specs(&self) -> Option<GpuSpecs>;
 
     fn update_ime_position(&self, _bounds: Bounds<ScaledPixels>);
-
-    #[cfg(any(test, feature = "test-support"))]
-    fn as_test(&mut self) -> Option<&mut TestWindow> {
-        None
-    }
 }
 
 /// This type is public so that our test macro can generate and use it, but it should not
@@ -401,11 +388,6 @@ pub trait PlatformDispatcher: Send + Sync {
     fn unparker(&self) -> Unparker;
     fn now(&self) -> Instant {
         Instant::now()
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    fn as_test(&self) -> Option<&TestDispatcher> {
-        None
     }
 }
 

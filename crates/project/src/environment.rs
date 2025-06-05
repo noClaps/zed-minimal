@@ -63,10 +63,6 @@ impl ProjectEnvironment {
         worktree_store: &Entity<WorktreeStore>,
         cx: &mut Context<Self>,
     ) -> Shared<Task<Option<HashMap<String, String>>>> {
-        if cfg!(any(test, feature = "test-support")) {
-            return Task::ready(Some(HashMap::default())).shared();
-        }
-
         if let Some(cli_environment) = self.get_cli_environment() {
             log::debug!("using project environment variables from CLI");
             return Task::ready(Some(cli_environment)).shared();
@@ -89,10 +85,6 @@ impl ProjectEnvironment {
         worktree: Entity<Worktree>,
         cx: &mut Context<Self>,
     ) -> Shared<Task<Option<HashMap<String, String>>>> {
-        if cfg!(any(test, feature = "test-support")) {
-            return Task::ready(Some(HashMap::default())).shared();
-        }
-
         if let Some(cli_environment) = self.get_cli_environment() {
             log::debug!("using project environment variables from CLI");
             return Task::ready(Some(cli_environment)).shared();
@@ -123,10 +115,6 @@ impl ProjectEnvironment {
         abs_path: Arc<Path>,
         cx: &mut Context<Self>,
     ) -> Shared<Task<Option<HashMap<String, String>>>> {
-        if cfg!(any(test, feature = "test-support")) {
-            return Task::ready(Some(HashMap::default())).shared();
-        }
-
         if let Some(cli_environment) = self.get_cli_environment() {
             log::debug!("using project environment variables from CLI");
             return Task::ready(Some(cli_environment)).shared();

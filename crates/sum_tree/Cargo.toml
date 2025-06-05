@@ -15,10 +15,4 @@ doctest = false
 [dependencies]
 arrayvec = "0.7.1"
 rayon.workspace = true
-log.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-ctor.workspace = true
-rand.workspace = true
-zlog.workspace = true

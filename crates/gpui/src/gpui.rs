@@ -51,9 +51,6 @@
 //!   Use this for implementing keyboard shortcuts, such as cmd-q (See `action` module for more information).
 //! - Platform services, such as `quit the app` or `open a URL` are available as methods on the [`app::App`].
 //! - An async executor that is integrated with the platform's event loop. See the [`executor`] module for more information.,
-//! - The [`gpui::test`](test) macro provides a convenient way to write tests for your GPUI applications. Tests also have their
-//!   own kind of context, a [`TestAppContext`] which provides ways of simulating common platform input. See [`app::test_context`]
-//!   and [`test`] modules for more details.
 //!
 //! Currently, the best way to learn about these APIs is to read the Zed source code, ask us about it at a fireside hack, or drop
 //! a question in the [Zed Discord](https://zed.dev/community-links). We're working on improving the documentation, creating more examples,
@@ -81,7 +78,6 @@ mod executor;
 mod geometry;
 mod global;
 mod input;
-mod inspector;
 mod interactive;
 mod key_dispatch;
 mod keymap;
@@ -96,8 +92,6 @@ mod styled;
 mod subscription;
 mod svg_renderer;
 mod taffy;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test;
 mod text_system;
 mod util;
 mod view;
@@ -133,10 +127,9 @@ pub use elements::*;
 pub use executor::*;
 pub use geometry::*;
 pub use global::*;
-pub use gpui_macros::{AppContext, IntoElement, Render, VisualContext, register_action, test};
+pub use gpui_macros::{AppContext, IntoElement, Render, VisualContext, register_action};
 pub use http_client;
 pub use input::*;
-pub use inspector::*;
 pub use interactive::*;
 use key_dispatch::*;
 pub use keymap::*;
@@ -152,8 +145,6 @@ pub use styled::*;
 pub use subscription::*;
 use svg_renderer::*;
 pub use taffy::{AvailableSpace, LayoutId};
-#[cfg(any(test, feature = "test-support"))]
-pub use test::*;
 pub use text_system::*;
 pub use util::arc_cow::ArcCow;
 pub use view::*;

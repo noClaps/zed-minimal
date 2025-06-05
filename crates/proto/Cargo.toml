@@ -6,8 +6,6 @@ version = "0.1.0"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 
-[features]
-test-support = ["collections/test-support"]
 
 [lints]
 workspace = true
@@ -24,6 +22,3 @@ workspace-hack.workspace = true
 
 [build-dependencies]
 prost-build.workspace = true
-
-[dev-dependencies]
-collections = { workspace = true, features = ["test-support"] }

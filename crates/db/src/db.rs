@@ -95,20 +95,6 @@ async fn open_fallback_db<M: Migrator>() -> ThreadSafeConnection {
         )
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub async fn open_test_db<M: Migrator>(db_name: &str) -> ThreadSafeConnection {
-    use sqlez::thread_safe_connection::locking_queue;
-
-    ThreadSafeConnection::builder::<M>(db_name, false)
-        .with_db_initialization_query(DB_INITIALIZE_QUERY)
-        .with_connection_initialize_query(CONNECTION_INITIALIZE_QUERY)
-        // Serialize queued writes via a mutex and run them synchronously
-        .with_write_queue_constructor(locking_queue())
-        .build()
-        .await
-        .unwrap()
-}
-
 /// Implements a basic DB wrapper for a given domain
 #[macro_export]
 macro_rules! define_connection {
@@ -133,19 +119,7 @@ macro_rules! define_connection {
             }
         }
 
-        impl $t {
-            #[cfg(any(test, feature = "test-support"))]
-            pub async fn open_test_db(name: &'static str) -> Self {
-                $t($crate::open_test_db::<$t>(name).await)
-            }
-        }
 
-        #[cfg(any(test, feature = "test-support"))]
-        pub static $id: std::sync::LazyLock<$t> = std::sync::LazyLock::new(|| {
-            $t($crate::smol::block_on($crate::open_test_db::<$t>(stringify!($id))))
-        });
-
-        #[cfg(not(any(test, feature = "test-support")))]
         pub static $id: std::sync::LazyLock<$t> = std::sync::LazyLock::new(|| {
             let db_dir = $crate::database_dir();
             let scope = if false $(|| stringify!($global) == "global")? {
@@ -177,12 +151,6 @@ macro_rules! define_connection {
             }
         }
 
-        #[cfg(any(test, feature = "test-support"))]
-        pub static $id: std::sync::LazyLock<$t> = std::sync::LazyLock::new(|| {
-            $t($crate::smol::block_on($crate::open_test_db::<($($d),+, $t)>(stringify!($id))))
-        });
-
-        #[cfg(not(any(test, feature = "test-support")))]
         pub static $id: std::sync::LazyLock<$t> = std::sync::LazyLock::new(|| {
             let db_dir = $crate::database_dir();
             let scope = if false $(|| stringify!($global) == "global")? {
@@ -201,166 +169,4 @@ where
 {
     cx.background_spawn(async move { db_write().await.log_err() })
         .detach()
-}
-
-#[cfg(test)]
-mod tests {
-    use std::thread;
-
-    use sqlez::domain::Domain;
-    use sqlez_macros::sql;
-
-    use crate::open_db;
-
-    // Test bad migration panics
-    #[gpui::test]
-    #[should_panic]
-    async fn test_bad_migration_panics() {
-        enum BadDB {}
-
-        impl Domain for BadDB {
-            fn name() -> &'static str {
-                "db_tests"
-            }
-
-            fn migrations() -> &'static [&'static str] {
-                &[
-                    sql!(CREATE TABLE test(value);),
-                    // failure because test already exists
-                    sql!(CREATE TABLE test(value);),
-                ]
-            }
-        }
-
-        let tempdir = tempfile::Builder::new()
-            .prefix("DbTests")
-            .tempdir()
-            .unwrap();
-        let _bad_db = open_db::<BadDB>(
-            tempdir.path(),
-            &release_channel::ReleaseChannel::Dev.dev_name(),
-        )
-        .await;
-    }
-
-    /// Test that DB exists but corrupted (causing recreate)
-    #[gpui::test]
-    async fn test_db_corruption(cx: &mut gpui::TestAppContext) {
-        cx.executor().allow_parking();
-
-        enum CorruptedDB {}
-
-        impl Domain for CorruptedDB {
-            fn name() -> &'static str {
-                "db_tests"
-            }
-
-            fn migrations() -> &'static [&'static str] {
-                &[sql!(CREATE TABLE test(value);)]
-            }
-        }
-
-        enum GoodDB {}
-
-        impl Domain for GoodDB {
-            fn name() -> &'static str {
-                "db_tests" //Notice same name
-            }
-
-            fn migrations() -> &'static [&'static str] {
-                &[sql!(CREATE TABLE test2(value);)] //But different migration
-            }
-        }
-
-        let tempdir = tempfile::Builder::new()
-            .prefix("DbTests")
-            .tempdir()
-            .unwrap();
-        {
-            let corrupt_db = open_db::<CorruptedDB>(
-                tempdir.path(),
-                &release_channel::ReleaseChannel::Dev.dev_name(),
-            )
-            .await;
-            assert!(corrupt_db.persistent());
-        }
-
-        let good_db = open_db::<GoodDB>(
-            tempdir.path(),
-            &release_channel::ReleaseChannel::Dev.dev_name(),
-        )
-        .await;
-        assert!(
-            good_db.select_row::<usize>("SELECT * FROM test2").unwrap()()
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    /// Test that DB exists but corrupted (causing recreate)
-    #[gpui::test(iterations = 30)]
-    async fn test_simultaneous_db_corruption(cx: &mut gpui::TestAppContext) {
-        cx.executor().allow_parking();
-
-        enum CorruptedDB {}
-
-        impl Domain for CorruptedDB {
-            fn name() -> &'static str {
-                "db_tests"
-            }
-
-            fn migrations() -> &'static [&'static str] {
-                &[sql!(CREATE TABLE test(value);)]
-            }
-        }
-
-        enum GoodDB {}
-
-        impl Domain for GoodDB {
-            fn name() -> &'static str {
-                "db_tests" //Notice same name
-            }
-
-            fn migrations() -> &'static [&'static str] {
-                &[sql!(CREATE TABLE test2(value);)] //But different migration
-            }
-        }
-
-        let tempdir = tempfile::Builder::new()
-            .prefix("DbTests")
-            .tempdir()
-            .unwrap();
-        {
-            // Setup the bad database
-            let corrupt_db = open_db::<CorruptedDB>(
-                tempdir.path(),
-                &release_channel::ReleaseChannel::Dev.dev_name(),
-            )
-            .await;
-            assert!(corrupt_db.persistent());
-        }
-
-        // Try to connect to it a bunch of times at once
-        let mut guards = vec![];
-        for _ in 0..10 {
-            let tmp_path = tempdir.path().to_path_buf();
-            let guard = thread::spawn(move || {
-                let good_db = smol::block_on(open_db::<GoodDB>(
-                    tmp_path.as_path(),
-                    &release_channel::ReleaseChannel::Dev.dev_name(),
-                ));
-                assert!(
-                    good_db.select_row::<usize>("SELECT * FROM test2").unwrap()()
-                        .unwrap()
-                        .is_none()
-                );
-            });
-
-            guards.push(guard);
-        }
-
-        for guard in guards.into_iter() {
-            assert!(guard.join().is_ok());
-        }
-    }
 }

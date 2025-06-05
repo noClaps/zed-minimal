@@ -3,9 +3,6 @@ mod toolbar_controls;
 
 mod diagnostic_renderer;
 
-#[cfg(test)]
-mod diagnostics_tests;
-
 use anyhow::Result;
 use collections::{BTreeSet, HashMap};
 use diagnostic_renderer::DiagnosticBlock;
@@ -619,8 +616,6 @@ impl ProjectDiagnosticsEditor {
                         cx,
                     )
                 });
-                #[cfg(test)]
-                let cloned_blocks = blocks.clone();
 
                 if was_empty {
                     if let Some(anchor_range) = anchor_ranges.first() {
@@ -658,25 +653,6 @@ impl ProjectDiagnosticsEditor {
                         display_map.insert_blocks(editor_blocks, cx)
                     })
                 });
-
-                #[cfg(test)]
-                {
-                    for (block_id, block) in block_ids.iter().zip(cloned_blocks.iter()) {
-                        let markdown = block.markdown.clone();
-                        editor::test::set_block_content_for_tests(
-                            &this.editor,
-                            *block_id,
-                            cx,
-                            move |cx| {
-                                markdown::MarkdownElement::rendered_text(
-                                    markdown.clone(),
-                                    cx,
-                                    editor::hover_popover::diagnostics_markdown_style,
-                                )
-                            },
-                        );
-                    }
-                }
 
                 this.blocks.insert(buffer_id, block_ids);
                 cx.notify()

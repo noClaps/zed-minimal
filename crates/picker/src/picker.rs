@@ -785,16 +785,6 @@ impl<D: PickerDelegate> Picker<D> {
         }
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn logical_scroll_top_index(&self) -> usize {
-        match &self.element_container {
-            ElementContainer::List(state) => state.logical_scroll_top().item_ix,
-            ElementContainer::UniformList(scroll_handle) => {
-                scroll_handle.logical_scroll_top_index()
-            }
-        }
-    }
-
     fn hide_scrollbar(&mut self, cx: &mut Context<Self>) {
         const SCROLLBAR_SHOW_INTERVAL: Duration = Duration::from_secs(1);
         self.hide_scrollbar_task = Some(cx.spawn(async move |panel, cx| {

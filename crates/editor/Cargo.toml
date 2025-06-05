@@ -12,22 +12,6 @@ workspace = true
 path = "src/editor.rs"
 doctest = false
 
-[features]
-test-support = [
-    "text/test-support",
-    "language/test-support",
-    "gpui/test-support",
-    "multi_buffer/test-support",
-    "project/test-support",
-    "theme/test-support",
-    "util/test-support",
-    "workspace/test-support",
-    "tree-sitter-rust",
-    "tree-sitter-typescript",
-    "tree-sitter-html",
-    "unindent",
-]
-
 [dependencies]
 aho-corasick.workspace = true
 anyhow.workspace = true
@@ -44,7 +28,6 @@ fuzzy.workspace = true
 fs.workspace = true
 git.workspace = true
 gpui.workspace = true
-indoc.workspace = true
 inline_completion.workspace = true
 itertools.workspace = true
 language.workspace = true
@@ -55,7 +38,6 @@ markdown.workspace = true
 multi_buffer.workspace = true
 ordered-float.workspace = true
 parking_lot.workspace = true
-pretty_assertions.workspace = true
 project.workspace = true
 rand.workspace = true
 rpc.workspace = true
@@ -72,13 +54,8 @@ telemetry.workspace = true
 text.workspace = true
 time.workspace = true
 theme.workspace = true
-tree-sitter-html = { workspace = true, optional = true }
-tree-sitter-rust = { workspace = true, optional = true }
-tree-sitter-typescript = { workspace = true, optional = true }
-tree-sitter-python = { workspace = true, optional = true }
 unicode-segmentation.workspace = true
 unicode-script.workspace = true
-unindent = { workspace = true, optional = true }
 ui.workspace = true
 url.workspace = true
 util.workspace = true
@@ -86,27 +63,3 @@ uuid.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-ctor.workspace = true
-gpui = { workspace = true, features = ["test-support"] }
-language = { workspace = true, features = ["test-support"] }
-languages = {workspace = true, features = ["test-support"] }
-lsp = { workspace = true, features = ["test-support"] }
-markdown = { workspace = true, features = ["test-support"] }
-multi_buffer = { workspace = true, features = ["test-support"] }
-project = { workspace = true, features = ["test-support"] }
-release_channel.workspace = true
-rand.workspace = true
-settings = { workspace = true, features = ["test-support"] }
-tempfile.workspace = true
-text = { workspace = true, features = ["test-support"] }
-theme = { workspace = true, features = ["test-support"] }
-tree-sitter-html.workspace = true
-tree-sitter-rust.workspace = true
-tree-sitter-typescript.workspace = true
-unindent.workspace = true
-util = { workspace = true, features = ["test-support"] }
-workspace = { workspace = true, features = ["test-support"] }
-http_client = { workspace = true, features = ["test-support"] }
-zlog.workspace = true

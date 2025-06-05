@@ -26,12 +26,8 @@ pub use context::*;
 pub use entity_map::*;
 use http_client::{HttpClient, Url};
 use smallvec::SmallVec;
-#[cfg(any(test, feature = "test-support"))]
-pub use test_context::*;
-use util::{ResultExt, debug_panic};
+use util::ResultExt;
 
-#[cfg(any(feature = "inspector", debug_assertions))]
-use crate::InspectorElementRegistry;
 use crate::{
     Action, ActionBuildError, ActionRegistry, Any, AnyView, AnyWindowHandle, AppContext, Asset,
     AssetSource, BackgroundExecutor, Bounds, ClipboardItem, CursorStyle, DispatchPhase, DisplayId,
@@ -48,8 +44,6 @@ use crate::{
 mod async_context;
 mod context;
 mod entity_map;
-#[cfg(any(test, feature = "test-support"))]
-mod test_context;
 
 /// The duration for which futures returned from [Context::on_app_quit] can run before the application fully quits.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(100);
@@ -129,9 +123,6 @@ impl Application {
     /// Builds an app with the given asset source.
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        #[cfg(any(test, feature = "test-support"))]
-        log::info!("GPUI was compiled in test mode");
-
         Self(App::new_app(
             current_platform(false),
             Arc::new(()),
@@ -283,12 +274,6 @@ pub struct App {
     pub(crate) window_invalidators_by_entity:
         FxHashMap<EntityId, FxHashMap<WindowId, WindowInvalidator>>,
     pub(crate) tracked_entities: FxHashMap<WindowId, FxHashSet<EntityId>>,
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub(crate) inspector_renderer: Option<crate::InspectorRenderer>,
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub(crate) inspector_element_registry: InspectorElementRegistry,
-    #[cfg(any(test, feature = "test-support", debug_assertions))]
-    pub(crate) name: Option<&'static str>,
     quitting: bool,
 }
 
@@ -351,14 +336,7 @@ impl App {
                 layout_id_buffer: Default::default(),
                 propagate_event: true,
                 prompt_builder: Some(PromptBuilder::Default),
-                #[cfg(any(feature = "inspector", debug_assertions))]
-                inspector_renderer: None,
-                #[cfg(any(feature = "inspector", debug_assertions))]
-                inspector_element_registry: InspectorElementRegistry::default(),
                 quitting: false,
-
-                #[cfg(any(test, feature = "test-support", debug_assertions))]
-                name: None,
             }),
         });
 
@@ -885,20 +863,6 @@ impl App {
                     }
                 }
             } else {
-                #[cfg(any(test, feature = "test-support"))]
-                for window in self
-                    .windows
-                    .values()
-                    .filter_map(|window| {
-                        let window = window.as_ref()?;
-                        window.invalidator.is_dirty().then_some(window.handle)
-                    })
-                    .collect::<Vec<_>>()
-                {
-                    self.update_window(window, |_, window, cx| window.draw(cx))
-                        .unwrap();
-                }
-
                 if self.pending_effects.is_empty() {
                     break;
                 }
@@ -1076,10 +1040,6 @@ impl App {
         AsyncFn: AsyncFnOnce(&mut AsyncApp) -> R + 'static,
         R: 'static,
     {
-        if self.quitting {
-            debug_panic!("Can't spawn on main thread after on_app_quit")
-        };
-
         let mut cx = self.to_async();
 
         self.foreground_executor
@@ -1155,12 +1115,6 @@ impl App {
         let global_type = TypeId::of::<G>();
         self.push_effect(Effect::NotifyGlobalObservers { global_type });
         self.globals_by_type.insert(global_type, Box::new(global));
-    }
-
-    /// Clear all stored globals. Does not notify global observers.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn clear_globals(&mut self) {
-        self.globals_by_type.drain();
     }
 
     /// Remove the global of the given type from the app context. Does not notify global observers.
@@ -1658,12 +1612,6 @@ impl App {
             .insert(entity_id, window_invalidators);
     }
 
-    /// Returns the name for this [`App`].
-    #[cfg(any(test, feature = "test-support", debug_assertions))]
-    pub fn get_name(&self) -> Option<&'static str> {
-        self.name
-    }
-
     /// Returns `true` if the platform file picker supports selecting a mix of files and directories.
     pub fn can_select_mixed_files_and_dirs(&self) -> bool {
         self.platform.can_select_mixed_files_and_dirs()
@@ -1683,21 +1631,6 @@ impl App {
         if let Some(window) = current_window {
             _ = window.drop_image(image);
         }
-    }
-
-    /// Sets the renderer for the inspector.
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub fn set_inspector_renderer(&mut self, f: crate::InspectorRenderer) {
-        self.inspector_renderer = Some(f);
-    }
-
-    /// Registers a renderer specific to an inspector state.
-    #[cfg(any(feature = "inspector", debug_assertions))]
-    pub fn register_inspector_element<T: 'static, R: crate::IntoElement>(
-        &mut self,
-        f: impl 'static + Fn(crate::InspectorElementId, &T, &mut Window, &mut App) -> R,
-    ) {
-        self.inspector_element_registry.register(f);
     }
 
     /// Initializes gpui's default colors for the application.

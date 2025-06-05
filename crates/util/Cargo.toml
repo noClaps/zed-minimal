@@ -12,9 +12,6 @@ workspace = true
 path = "src/util.rs"
 doctest = true
 
-[features]
-test-support = ["git2", "rand", "util_macros"]
-
 [dependencies]
 anyhow.workspace = true
 async-fs.workspace = true
@@ -23,11 +20,9 @@ collections.workspace = true
 dirs.workspace = true
 futures-lite.workspace = true
 futures.workspace = true
-git2 = { workspace = true, optional = true }
 globset.workspace = true
 itertools.workspace = true
 log.workspace = true
-rand = { workspace = true, optional = true }
 regex.workspace = true
 rust-embed.workspace = true
 serde.workspace = true
@@ -37,13 +32,5 @@ smol.workspace = true
 take-until.workspace = true
 tempfile.workspace = true
 unicase.workspace = true
-util_macros = { workspace = true, optional = true }
-walkdir.workspace = true
 workspace-hack.workspace = true
 libc.workspace = true
-
-[dev-dependencies]
-git2.workspace = true
-indoc.workspace = true
-rand.workspace = true
-util_macros.workspace = true

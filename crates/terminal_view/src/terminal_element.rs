@@ -601,51 +601,47 @@ impl Element for TerminalElement {
     fn request_layout(
         &mut self,
         global_id: Option<&GlobalElementId>,
-        inspector_id: Option<&gpui::InspectorElementId>,
+
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let layout_id = self.interactivity.request_layout(
-            global_id,
-            inspector_id,
-            window,
-            cx,
-            |mut style, window, cx| {
-                style.size.width = relative(1.).into();
+        let layout_id =
+            self.interactivity
+                .request_layout(global_id, window, cx, |mut style, window, cx| {
+                    style.size.width = relative(1.).into();
 
-                match &self.mode {
-                    TerminalMode::Scrollable => {
-                        style.size.height = relative(1.).into();
-                    }
-                    TerminalMode::Embedded { max_lines } => {
-                        let rem_size = window.rem_size();
-                        let line_height = window.text_style().font_size.to_pixels(rem_size)
-                            * TerminalSettings::get_global(cx)
-                                .line_height
-                                .value()
-                                .to_pixels(rem_size)
-                                .0;
-
-                        let mut line_count = self.terminal.read(cx).total_lines();
-                        if !self.focused {
-                            if let Some(max_lines) = max_lines {
-                                line_count = line_count.min(*max_lines);
-                            }
+                    match &self.mode {
+                        TerminalMode::Scrollable => {
+                            style.size.height = relative(1.).into();
                         }
-                        style.size.height = (line_count * line_height).into();
-                    }
-                }
+                        TerminalMode::Embedded { max_lines } => {
+                            let rem_size = window.rem_size();
+                            let line_height = window.text_style().font_size.to_pixels(rem_size)
+                                * TerminalSettings::get_global(cx)
+                                    .line_height
+                                    .value()
+                                    .to_pixels(rem_size)
+                                    .0;
 
-                window.request_layout(style, None, cx)
-            },
-        );
+                            let mut line_count = self.terminal.read(cx).total_lines();
+                            if !self.focused {
+                                if let Some(max_lines) = max_lines {
+                                    line_count = line_count.min(*max_lines);
+                                }
+                            }
+                            style.size.height = (line_count * line_height).into();
+                        }
+                    }
+
+                    window.request_layout(style, None, cx)
+                });
         (layout_id, ())
     }
 
     fn prepaint(
         &mut self,
         global_id: Option<&GlobalElementId>,
-        inspector_id: Option<&gpui::InspectorElementId>,
+
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         window: &mut Window,
@@ -654,7 +650,6 @@ impl Element for TerminalElement {
         let rem_size = self.rem_size(cx);
         self.interactivity.prepaint(
             global_id,
-            inspector_id,
             bounds,
             bounds.size,
             window,
@@ -940,7 +935,7 @@ impl Element for TerminalElement {
     fn paint(
         &mut self,
         global_id: Option<&GlobalElementId>,
-        inspector_id: Option<&gpui::InspectorElementId>,
+
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         layout: &mut Self::PrepaintState,
@@ -984,7 +979,6 @@ impl Element for TerminalElement {
             let block_below_cursor_element = layout.block_below_cursor_element.take();
             self.interactivity.paint(
                 global_id,
-                inspector_id,
                 bounds,
                 Some(&layout.hitbox),
                 window,

@@ -7,14 +7,8 @@ use std::{env, str::FromStr, sync::LazyLock};
 use gpui::{App, Global, SemanticVersion};
 
 /// stable | dev | nightly | preview
-pub static RELEASE_CHANNEL_NAME: LazyLock<String> = LazyLock::new(|| {
-    if cfg!(debug_assertions) {
-        env::var("ZED_RELEASE_CHANNEL")
-            .unwrap_or_else(|_| include_str!("../../zed/RELEASE_CHANNEL").trim().to_string())
-    } else {
-        include_str!("../../zed/RELEASE_CHANNEL").trim().to_string()
-    }
-});
+pub static RELEASE_CHANNEL_NAME: LazyLock<String> =
+    LazyLock::new(|| include_str!("../../zed/RELEASE_CHANNEL").trim().to_string());
 
 #[doc(hidden)]
 pub static RELEASE_CHANNEL: LazyLock<ReleaseChannel> =

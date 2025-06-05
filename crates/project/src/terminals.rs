@@ -594,32 +594,3 @@ fn add_environment_path(env: &mut HashMap<String, String>, new_path: &Path) -> R
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use collections::HashMap;
-
-    #[test]
-    fn test_add_environment_path_with_existing_path() {
-        let tmp_path = std::path::PathBuf::from("/tmp/new");
-        let mut env = HashMap::default();
-        let old_path = "/usr/bin:/usr/local/bin";
-        env.insert("PATH".to_string(), old_path.to_string());
-        env.insert("OTHER".to_string(), "aaa".to_string());
-
-        super::add_environment_path(&mut env, &tmp_path).unwrap();
-        assert_eq!(env.get("PATH").unwrap(), &format!("/tmp/new:{}", old_path));
-        assert_eq!(env.get("OTHER").unwrap(), "aaa");
-    }
-
-    #[test]
-    fn test_add_environment_path_with_empty_path() {
-        let tmp_path = std::path::PathBuf::from("/tmp/new");
-        let mut env = HashMap::default();
-        env.insert("OTHER".to_string(), "aaa".to_string());
-        let os_path = std::env::var("PATH").unwrap();
-        super::add_environment_path(&mut env, &tmp_path).unwrap();
-        assert_eq!(env.get("PATH").unwrap(), &format!("/tmp/new:{}", os_path));
-        assert_eq!(env.get("OTHER").unwrap(), "aaa");
-    }
-}

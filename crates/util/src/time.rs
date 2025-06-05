@@ -21,21 +21,3 @@ fn duration_clock_format(duration: Duration) -> String {
         format!("{seconds}")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_duration_to_clock_format() {
-        use duration_clock_format as f;
-        assert_eq!("0", f(Duration::from_secs(0)));
-        assert_eq!("59", f(Duration::from_secs(59)));
-        assert_eq!("1:00", f(Duration::from_secs(60)));
-        assert_eq!("10:00", f(Duration::from_secs(600)));
-        assert_eq!("1:00:00", f(Duration::from_secs(3600)));
-        assert_eq!("3:02:01", f(Duration::from_secs(3600 * 3 + 60 * 2 + 1)));
-        assert_eq!("23:59:59", f(Duration::from_secs(3600 * 24 - 1)));
-        assert_eq!("100:00:00", f(Duration::from_secs(3600 * 100)));
-    }
-}

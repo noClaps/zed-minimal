@@ -7,30 +7,6 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 pub const EMPTY_THEME_NAME: &str = "empty-theme";
 
-#[cfg(any(test, feature = "test-support"))]
-pub fn test_settings() -> String {
-    let mut value = crate::settings_store::parse_json_with_comments::<serde_json::Value>(
-        crate::default_settings().as_ref(),
-    )
-    .unwrap();
-    util::merge_non_null_json_value_into(
-        serde_json::json!({
-            "ui_font_family": "Courier",
-            "ui_font_features": {},
-            "ui_font_size": 14,
-            "ui_font_fallback": [],
-            "buffer_font_family": "Courier",
-            "buffer_font_features": {},
-            "buffer_font_size": 14,
-            "buffer_font_fallback": [],
-            "theme": EMPTY_THEME_NAME,
-        }),
-        &mut value,
-    );
-    value.as_object_mut().unwrap().remove("languages");
-    serde_json::to_string(&value).unwrap()
-}
-
 pub fn watch_config_file(
     executor: &BackgroundExecutor,
     fs: Arc<dyn Fs>,
