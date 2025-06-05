@@ -60,6 +60,7 @@ pub fn app_menus() -> Vec<Menu> {
                 MenuItem::action(
                     "Open Remote...",
                     zed_actions::OpenRemote {
+                        create_new_window: false,
                         from_existing_connection: false,
                     },
                 ),
