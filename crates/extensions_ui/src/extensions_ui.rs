@@ -161,6 +161,7 @@ fn extension_provides_label(provides: ExtensionProvides) -> &'static str {
         ExtensionProvides::LanguageServers => "Language Servers",
         ExtensionProvides::IndexedDocsProviders => "Indexed Docs Providers",
         ExtensionProvides::Snippets => "Snippets",
+        ExtensionProvides::ContextServers => "",
     }
 }
 
@@ -1314,23 +1315,28 @@ impl Render for ExtensionsPage {
                                 this.change_provides_filter(None, cx);
                             })),
                     )
-                    .children(ExtensionProvides::iter().map(|provides| {
+                    .children(ExtensionProvides::iter().filter_map(|provides| {
                         let label = extension_provides_label(provides);
-                        Button::new(
-                            SharedString::from(format!("filter-category-{}", label)),
-                            label,
-                        )
-                        .style(if self.provides_filter == Some(provides) {
-                            ButtonStyle::Filled
-                        } else {
-                            ButtonStyle::Subtle
-                        })
-                        .toggle_state(self.provides_filter == Some(provides))
-                        .on_click({
-                            cx.listener(move |this, _event, _, cx| {
-                                this.change_provides_filter(Some(provides), cx);
+                        if label == "" {
+                            return None;
+                        }
+                        Some(
+                            Button::new(
+                                SharedString::from(format!("filter-category-{}", label)),
+                                label,
+                            )
+                            .style(if self.provides_filter == Some(provides) {
+                                ButtonStyle::Filled
+                            } else {
+                                ButtonStyle::Subtle
                             })
-                        })
+                            .toggle_state(self.provides_filter == Some(provides))
+                            .on_click({
+                                cx.listener(move |this, _event, _, cx| {
+                                    this.change_provides_filter(Some(provides), cx);
+                                })
+                            }),
+                        )
                     })),
             )
             .child(self.render_feature_upsells(cx))

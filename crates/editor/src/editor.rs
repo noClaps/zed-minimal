@@ -112,7 +112,9 @@ use linked_editing_ranges::refresh_linked_ranges;
 use markdown::Markdown;
 use mouse_context_menu::MouseContextMenu;
 use persistence::DB;
-use project::{CompletionResponse, ProjectPath, project_settings::DiagnosticSeverity};
+use project::{
+    CompletionResponse, LspPullDiagnostics, ProjectPath, project_settings::DiagnosticSeverity,
+};
 
 pub use git::blame::BlameRenderer;
 pub use proposed_changes_editor::{
@@ -1017,6 +1019,7 @@ pub struct Editor {
     expect_bounds_change: Option<Bounds<Pixels>>,
     tasks: BTreeMap<(BufferId, BufferRow), RunnableTasks>,
     tasks_update_task: Option<Task<()>>,
+    pull_diagnostics_task: Task<()>,
     in_project_search: bool,
     previous_search_ranges: Option<Arc<[Range<Anchor>]>>,
     breadcrumb_header: Option<String>,
@@ -1897,7 +1900,7 @@ impl Editor {
             change_list: ChangeList::new(),
             mode,
         };
-        editor.tasks_update_task = Some(this.refresh_runnables(window, cx));
+        editor.tasks_update_task = Some(editor.refresh_runnables(window, cx));
         editor._subscriptions.extend(project_subscriptions);
 
         editor._subscriptions.push(cx.subscribe_in(

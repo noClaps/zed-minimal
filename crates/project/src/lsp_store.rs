@@ -5697,10 +5697,7 @@ impl LspStore {
                             proto::lsp_response::Response::GetDocumentDiagnosticsResponse(
                                 response,
                             ) => Some(response),
-                            unexpected => {
-                                debug_panic!("Unexpected response: {unexpected:?}");
-                                None
-                            }
+                            _ => None,
                         })
                         .map(|diagnostics_response| {
                             GetDocumentDiagnostics {}.response_from_proto(

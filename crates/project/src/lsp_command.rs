@@ -35,7 +35,7 @@ use std::{
     cmp::Reverse, collections::hash_map, mem, ops::Range, path::Path, str::FromStr, sync::Arc,
 };
 use text::{BufferId, LineEnding};
-use util::{ResultExt as _, debug_panic};
+use util::ResultExt as _;
 
 pub use signature_help::SignatureHelp;
 
@@ -4071,22 +4071,14 @@ fn process_unchanged_diagnostics_report(
                 });
             }
             LspPullDiagnostics::Response {
-                server_id: existing_server_id,
-                uri: existing_uri,
                 diagnostics: existing_diagnostics,
-            } => {
-                if server_id != *existing_server_id || &uri != existing_uri {
-                    debug_panic!(
-                        "Unexpected state: file {uri} has two different sets of diagnostics reported"
-                    );
+                ..
+            } => match existing_diagnostics {
+                PulledDiagnostics::Unchanged { .. } => {
+                    *existing_diagnostics = PulledDiagnostics::Unchanged { result_id };
                 }
-                match existing_diagnostics {
-                    PulledDiagnostics::Unchanged { .. } => {
-                        *existing_diagnostics = PulledDiagnostics::Unchanged { result_id };
-                    }
-                    PulledDiagnostics::Changed { .. } => {}
-                }
-            }
+                PulledDiagnostics::Changed { .. } => {}
+            },
         },
         hash_map::Entry::Vacant(v) => {
             v.insert(LspPullDiagnostics::Response {
@@ -4118,33 +4110,25 @@ fn process_full_diagnostics_report(
                 });
             }
             LspPullDiagnostics::Response {
-                server_id: existing_server_id,
-                uri: existing_uri,
                 diagnostics: existing_diagnostics,
-            } => {
-                if server_id != *existing_server_id || &uri != existing_uri {
-                    debug_panic!(
-                        "Unexpected state: file {uri} has two different sets of diagnostics reported"
-                    );
+                ..
+            } => match existing_diagnostics {
+                PulledDiagnostics::Unchanged { .. } => {
+                    *existing_diagnostics = PulledDiagnostics::Changed {
+                        result_id,
+                        diagnostics: report.items,
+                    };
                 }
-                match existing_diagnostics {
-                    PulledDiagnostics::Unchanged { .. } => {
-                        *existing_diagnostics = PulledDiagnostics::Changed {
-                            result_id,
-                            diagnostics: report.items,
-                        };
+                PulledDiagnostics::Changed {
+                    result_id: existing_result_id,
+                    diagnostics: existing_diagnostics,
+                } => {
+                    if result_id.is_some() {
+                        *existing_result_id = result_id;
                     }
-                    PulledDiagnostics::Changed {
-                        result_id: existing_result_id,
-                        diagnostics: existing_diagnostics,
-                    } => {
-                        if result_id.is_some() {
-                            *existing_result_id = result_id;
-                        }
-                        existing_diagnostics.extend(report.items);
-                    }
+                    existing_diagnostics.extend(report.items);
                 }
-            }
+            },
         },
         hash_map::Entry::Vacant(v) => {
             v.insert(LspPullDiagnostics::Response {

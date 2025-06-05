@@ -43,6 +43,7 @@ pub enum ExtensionProvides {
     LanguageServers,
     IndexedDocsProviders,
     Snippets,
+    ContextServers, // this is only here so that the extensions ui doesnt freak out
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
