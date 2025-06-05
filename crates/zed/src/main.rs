@@ -44,7 +44,7 @@ use theme::{
 };
 use util::{ResultExt, maybe};
 use uuid::Uuid;
-use welcome::{BaseKeymap, FIRST_OPEN, show_welcome_view};
+use welcome::{FIRST_OPEN, show_welcome_view};
 use workspace::{AppState, SerializedWorkspaceLocation, WorkspaceSettings, WorkspaceStore};
 use zed::{
     OpenListener, OpenRequest, app_menus, build_window_options, derive_paths_with_position,
@@ -507,11 +507,6 @@ Error: Running Zed as root or via sudo is unsupported.
             "Settings Changed",
             setting = "theme",
             value = cx.theme().name.to_string()
-        );
-        telemetry::event!(
-            "Settings Changed",
-            setting = "keymap",
-            value = BaseKeymap::get_global(cx).to_string()
         );
         telemetry.flush_events().detach();
 

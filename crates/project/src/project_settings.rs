@@ -4,10 +4,7 @@ use fs::Fs;
 use futures::StreamExt as _;
 use gpui::{App, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Task};
 use lsp::LanguageServerName;
-use paths::{
-    EDITORCONFIG_NAME, local_settings_file_relative_path, local_tasks_file_relative_path,
-    local_vscode_tasks_file_relative_path, task_file_name,
-};
+use paths::{local_settings_file_relative_path, task_file_name};
 use rpc::{
     AnyProtoClient, TypedEnvelope,
     proto::{self, FromProto, ToProto},
@@ -16,20 +13,19 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{
     InvalidSettingsError, LocalSettingsKind, Settings, SettingsLocation, SettingsSources,
-    SettingsStore, parse_json_with_comments, watch_config_file,
+    SettingsStore, watch_config_file,
 };
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
-use task::{TaskTemplates, VsCodeTaskFile};
 use util::{ResultExt, serde::default_true};
-use worktree::{PathChange, UpdatedEntriesSet, Worktree, WorktreeId};
+use worktree::{Worktree, WorktreeId};
 
 use crate::{
     task_store::{TaskSettingsLocation, TaskStore},
-    worktree_store::{WorktreeStore, WorktreeStoreEvent},
+    worktree_store::WorktreeStore,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -359,32 +355,6 @@ impl Settings for ProjectSettings {
     fn load(sources: SettingsSources<Self::FileContent>, _: &mut App) -> anyhow::Result<Self> {
         sources.json_merge()
     }
-
-    fn import_from_vscode(vscode: &settings::VsCodeSettings, current: &mut Self::FileContent) {
-        // this just sets the binary name instead of a full path so it relies on path lookup
-        // resolving to the one you want
-        vscode.enum_setting(
-            "npm.packageManager",
-            &mut current.node.npm_path,
-            |s| match s {
-                v @ ("npm" | "yarn" | "bun" | "pnpm") => Some(v.to_owned()),
-                _ => None,
-            },
-        );
-
-        if let Some(b) = vscode.read_bool("git.blame.editorDecoration.enabled") {
-            if let Some(blame) = current.git.inline_blame.as_mut() {
-                blame.enabled = b
-            } else {
-                current.git.inline_blame = Some(InlineBlameSettings {
-                    enabled: b,
-                    ..Default::default()
-                })
-            }
-        }
-
-        // TODO: translate lsp settings for rust-analyzer and other popular ones to old.lsp
-    }
 }
 
 pub enum SettingsObserverMode {
@@ -401,7 +371,6 @@ pub enum SettingsObserverEvent {
 impl EventEmitter<SettingsObserverEvent> for SettingsObserver {}
 
 pub struct SettingsObserver {
-    mode: SettingsObserverMode,
     downstream_client: Option<AnyProtoClient>,
     worktree_store: Entity<WorktreeStore>,
     project_id: u64,
@@ -425,13 +394,9 @@ impl SettingsObserver {
         task_store: Entity<TaskStore>,
         cx: &mut Context<Self>,
     ) -> Self {
-        cx.subscribe(&worktree_store, Self::on_worktree_store_event)
-            .detach();
-
         Self {
             worktree_store,
             task_store,
-            mode: SettingsObserverMode::Local(fs.clone()),
             downstream_client: None,
             project_id: 0,
             _global_task_config_watcher: Self::subscribe_to_global_task_file_changes(
@@ -451,7 +416,6 @@ impl SettingsObserver {
         Self {
             worktree_store,
             task_store,
-            mode: SettingsObserverMode::Remote,
             downstream_client: None,
             project_id: 0,
             _global_task_config_watcher: Self::subscribe_to_global_task_file_changes(
@@ -538,144 +502,6 @@ impl SettingsObserver {
             );
         })?;
         Ok(())
-    }
-
-    fn on_worktree_store_event(
-        &mut self,
-        _: Entity<WorktreeStore>,
-        event: &WorktreeStoreEvent,
-        cx: &mut Context<Self>,
-    ) {
-        if let WorktreeStoreEvent::WorktreeAdded(worktree) = event {
-            cx.subscribe(worktree, |this, worktree, event, cx| {
-                if let worktree::Event::UpdatedEntries(changes) = event {
-                    this.update_local_worktree_settings(&worktree, changes, cx)
-                }
-            })
-            .detach()
-        }
-    }
-
-    fn update_local_worktree_settings(
-        &mut self,
-        worktree: &Entity<Worktree>,
-        changes: &UpdatedEntriesSet,
-        cx: &mut Context<Self>,
-    ) {
-        let SettingsObserverMode::Local(fs) = &self.mode else {
-            return;
-        };
-
-        let mut settings_contents = Vec::new();
-        for (path, _, change) in changes.iter() {
-            let (settings_dir, kind) = if path.ends_with(local_settings_file_relative_path()) {
-                let settings_dir = Arc::<Path>::from(
-                    path.ancestors()
-                        .nth(local_settings_file_relative_path().components().count())
-                        .unwrap(),
-                );
-                (settings_dir, LocalSettingsKind::Settings)
-            } else if path.ends_with(local_tasks_file_relative_path()) {
-                let settings_dir = Arc::<Path>::from(
-                    path.ancestors()
-                        .nth(
-                            local_tasks_file_relative_path()
-                                .components()
-                                .count()
-                                .saturating_sub(1),
-                        )
-                        .unwrap(),
-                );
-                (settings_dir, LocalSettingsKind::Tasks)
-            } else if path.ends_with(local_vscode_tasks_file_relative_path()) {
-                let settings_dir = Arc::<Path>::from(
-                    path.ancestors()
-                        .nth(
-                            local_vscode_tasks_file_relative_path()
-                                .components()
-                                .count()
-                                .saturating_sub(1),
-                        )
-                        .unwrap(),
-                );
-                (settings_dir, LocalSettingsKind::Tasks)
-            } else if path.ends_with(EDITORCONFIG_NAME) {
-                let Some(settings_dir) = path.parent().map(Arc::from) else {
-                    continue;
-                };
-                (settings_dir, LocalSettingsKind::Editorconfig)
-            } else {
-                continue;
-            };
-
-            let removed = change == &PathChange::Removed;
-            let fs = fs.clone();
-            let abs_path = match worktree.read(cx).absolutize(path) {
-                Ok(abs_path) => abs_path,
-                Err(e) => {
-                    log::warn!("Cannot absolutize {path:?} received as {change:?} FS change: {e}");
-                    continue;
-                }
-            };
-            settings_contents.push(async move {
-                (
-                    settings_dir,
-                    kind,
-                    if removed {
-                        None
-                    } else {
-                        Some(
-                            async move {
-                                let content = fs.load(&abs_path).await?;
-                                if abs_path.ends_with(local_vscode_tasks_file_relative_path()) {
-                                    let vscode_tasks =
-                                        parse_json_with_comments::<VsCodeTaskFile>(&content)
-                                            .with_context(|| {
-                                                format!("parsing VSCode tasks, file {abs_path:?}")
-                                            })?;
-                                    let zed_tasks = TaskTemplates::try_from(vscode_tasks)
-                                        .with_context(|| {
-                                            format!(
-                                        "converting VSCode tasks into Zed ones, file {abs_path:?}"
-                                    )
-                                        })?;
-                                    serde_json::to_string(&zed_tasks).with_context(|| {
-                                        format!(
-                                            "serializing Zed tasks into JSON, file {abs_path:?}"
-                                        )
-                                    })
-                                } else {
-                                    Ok(content)
-                                }
-                            }
-                            .await,
-                        )
-                    },
-                )
-            });
-        }
-
-        if settings_contents.is_empty() {
-            return;
-        }
-
-        let worktree = worktree.clone();
-        cx.spawn(async move |this, cx| {
-            let settings_contents: Vec<(Arc<Path>, _, _)> =
-                futures::future::join_all(settings_contents).await;
-            cx.update(|cx| {
-                this.update(cx, |this, cx| {
-                    this.update_settings(
-                        worktree,
-                        settings_contents.into_iter().map(|(path, kind, content)| {
-                            (path, kind, content.and_then(|c| c.log_err()))
-                        }),
-                        cx,
-                    )
-                })
-            })
-        })
-        .detach();
     }
 
     fn update_settings(

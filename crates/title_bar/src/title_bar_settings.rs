@@ -47,6 +47,4 @@ impl Settings for TitleBarSettings {
     {
         sources.json_merge()
     }
-
-    fn import_from_vscode(_: &settings::VsCodeSettings, _: &mut Self::FileContent) {}
 }

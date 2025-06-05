@@ -6822,7 +6822,7 @@ outline: struct OutlineEntryExcerpt
                                 "config.rs": r#"
                 config_data! {
                     /// Configs that only make sense when they are set by a client. As such they can only be defined
-                    /// by setting them using client's settings (e.g `settings.json` on VS Code).
+                    /// by setting them using client's settings.
                     client: struct ClientDefaultConfigData <- ClientConfigInput -> {
                         // ... snip
                         /// Maximum length for inlay hints. Set to null to have an unlimited length.

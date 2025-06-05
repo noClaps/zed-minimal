@@ -330,7 +330,6 @@
       "cmd-k shift-enter": "pane::TogglePinTab"
     }
   },
-  // Bindings from VS Code
   {
     "context": "Editor",
     "use_key_equivalents": true,
@@ -502,7 +501,6 @@
       // "foo-bar": ["task::Spawn", { "task_tag": "MyTag" }],
     }
   },
-  // Bindings from Sublime Text
   {
     "context": "Editor",
     "use_key_equivalents": true,
@@ -522,7 +520,6 @@
       "ctrl-alt-shift-f": "editor::SelectToNextSubwordEnd"
     }
   },
-  // Bindings from Atom
   {
     "context": "Pane",
     "use_key_equivalents": true,

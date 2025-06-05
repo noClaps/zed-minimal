@@ -26,7 +26,7 @@ use util::{ResultExt as _, merge_non_null_json_value_into};
 
 pub type EditorconfigProperties = ec4rs::Properties;
 
-use crate::{SettingsJsonSchemaParams, VsCodeSettings, WorktreeId};
+use crate::{SettingsJsonSchemaParams, WorktreeId};
 
 /// A value that can be defined as a user setting.
 ///
@@ -68,10 +68,6 @@ pub trait Settings: 'static + Send + Sync {
     fn missing_default() -> anyhow::Error {
         anyhow::anyhow!("missing default")
     }
-
-    /// Use [the helpers in the vscode_import module](crate::vscode_import) to apply known
-    /// equivalent settings from a vscode config to our config
-    fn import_from_vscode(vscode: &VsCodeSettings, current: &mut Self::FileContent);
 
     #[track_caller]
     fn register(cx: &mut App)
@@ -258,14 +254,6 @@ trait AnySettingValue: 'static + Send + Sync {
         _: &SettingsJsonSchemaParams,
         cx: &App,
     ) -> RootSchema;
-    fn edits_for_update(
-        &self,
-        raw_settings: &serde_json::Value,
-        tab_size: usize,
-        vscode_settings: &VsCodeSettings,
-        text: &mut String,
-        edits: &mut Vec<(Range<usize>, String)>,
-    );
 }
 
 struct DeserializedSetting(Box<dyn Any>);
@@ -508,41 +496,6 @@ impl SettingsStore {
             .ok();
     }
 
-    pub fn import_vscode_settings(&self, fs: Arc<dyn Fs>, vscode_settings: VsCodeSettings) {
-        self.setting_file_updates_tx
-            .unbounded_send(Box::new(move |cx: AsyncApp| {
-                async move {
-                    let old_text = Self::load_settings(&fs).await?;
-                    let new_text = cx.read_global(|store: &SettingsStore, _cx| {
-                        store.get_vscode_edits(old_text, &vscode_settings)
-                    })?;
-                    let settings_path = paths::settings_file().as_path();
-                    if fs.is_file(settings_path).await {
-                        let resolved_path =
-                            fs.canonicalize(settings_path).await.with_context(|| {
-                                format!("Failed to canonicalize settings path {:?}", settings_path)
-                            })?;
-
-                        fs.atomic_write(resolved_path.clone(), new_text)
-                            .await
-                            .with_context(|| {
-                                format!("Failed to write settings to file {:?}", resolved_path)
-                            })?;
-                    } else {
-                        fs.atomic_write(settings_path.to_path_buf(), new_text)
-                            .await
-                            .with_context(|| {
-                                format!("Failed to write settings to file {:?}", settings_path)
-                            })?;
-                    }
-
-                    anyhow::Ok(())
-                }
-                .boxed_local()
-            }))
-            .ok();
-    }
-
     /// Updates the value of a setting in a JSON file, returning the new text
     /// for that JSON file.
     pub fn new_text_for_update<T: Settings>(
@@ -552,20 +505,6 @@ impl SettingsStore {
     ) -> String {
         let edits = self.edits_for_update::<T>(&old_text, update);
         let mut new_text = old_text;
-        for (range, replacement) in edits.into_iter() {
-            new_text.replace_range(range, &replacement);
-        }
-        new_text
-    }
-
-    pub fn get_vscode_edits(&self, mut old_text: String, vscode: &VsCodeSettings) -> String {
-        let mut new_text = old_text.clone();
-        let mut edits: Vec<(Range<usize>, String)> = Vec::new();
-        let raw_settings = parse_json_with_comments::<Value>(&old_text).unwrap_or_default();
-        let tab_size = self.json_tab_size();
-        for v in self.setting_values.values() {
-            v.edits_for_update(&raw_settings, tab_size, vscode, &mut old_text, &mut edits);
-        }
         for (range, replacement) in edits.into_iter() {
             new_text.replace_range(range, &replacement);
         }
@@ -1289,41 +1228,6 @@ impl<T: Settings> AnySettingValue for SettingValue<T> {
     ) -> RootSchema {
         T::json_schema(generator, params, cx)
     }
-
-    fn edits_for_update(
-        &self,
-        raw_settings: &serde_json::Value,
-        tab_size: usize,
-        vscode_settings: &VsCodeSettings,
-        text: &mut String,
-        edits: &mut Vec<(Range<usize>, String)>,
-    ) {
-        let (key, deserialized_setting) = self.deserialize_setting_with_key(raw_settings);
-        let old_content = match deserialized_setting {
-            Ok(content) => content.0.downcast::<T::FileContent>().unwrap(),
-            Err(_) => Box::<<T as Settings>::FileContent>::default(),
-        };
-        let mut new_content = old_content.clone();
-        T::import_from_vscode(vscode_settings, &mut new_content);
-
-        let old_value = serde_json::to_value(&old_content).unwrap();
-        let new_value = serde_json::to_value(new_content).unwrap();
-
-        let mut key_path = Vec::new();
-        if let Some(key) = key {
-            key_path.push(key);
-        }
-
-        update_value_in_json_text(
-            text,
-            &mut key_path,
-            tab_size,
-            &old_value,
-            &new_value,
-            T::PRESERVED_KEYS.unwrap_or_default(),
-            edits,
-        );
-    }
 }
 
 fn update_value_in_json_text<'a>(
@@ -1540,8 +1444,6 @@ pub fn parse_json_with_comments<T: DeserializeOwned>(content: &str) -> Result<T>
 
 #[cfg(test)]
 mod tests {
-    use crate::VsCodeSettingsSource;
-
     use super::*;
     use serde_derive::Deserialize;
     use unindent::Unindent;
@@ -1841,143 +1743,6 @@ mod tests {
         );
     }
 
-    #[gpui::test]
-    fn test_vscode_import(cx: &mut App) {
-        let mut store = SettingsStore::new(cx);
-        store.register_setting::<UserSettings>(cx);
-        store.register_setting::<LanguageSettings>(cx);
-        store.register_setting::<MultiKeySettings>(cx);
-
-        // create settings that werent present
-        check_vscode_import(
-            &mut store,
-            r#"{
-            }
-            "#
-            .unindent(),
-            r#" { "user.age": 37 } "#.to_owned(),
-            r#"{
-                "user": {
-                    "age": 37
-                }
-            }
-            "#
-            .unindent(),
-            cx,
-        );
-
-        // persist settings that were present
-        check_vscode_import(
-            &mut store,
-            r#"{
-                "user": {
-                    "staff": true,
-                    "age": 37
-                }
-            }
-            "#
-            .unindent(),
-            r#"{ "user.age": 42 }"#.to_owned(),
-            r#"{
-                "user": {
-                    "staff": true,
-                    "age": 42
-                }
-            }
-            "#
-            .unindent(),
-            cx,
-        );
-
-        // don't clobber settings that aren't present in vscode
-        check_vscode_import(
-            &mut store,
-            r#"{
-                "user": {
-                    "staff": true,
-                    "age": 37
-                }
-            }
-            "#
-            .unindent(),
-            r#"{}"#.to_owned(),
-            r#"{
-                "user": {
-                    "staff": true,
-                    "age": 37
-                }
-            }
-            "#
-            .unindent(),
-            cx,
-        );
-
-        // Multiple keys for one setting
-        check_vscode_import(
-            &mut store,
-            r#"{
-                "key1": "value"
-            }
-            "#
-            .unindent(),
-            r#"{
-                "key_1_first": "hello",
-                "key_1_second": "world"
-            }"#
-            .to_owned(),
-            r#"{
-                "key1": "hello world"
-            }
-            "#
-            .unindent(),
-            cx,
-        );
-
-        // Merging lists together entries added and updated
-        check_vscode_import(
-            &mut store,
-            r#"{
-                "languages": {
-                    "JSON": {
-                        "language_setting_1": true
-                    },
-                    "Rust": {
-                        "language_setting_2": true
-                    }
-                }
-            }"#
-            .unindent(),
-            r#"{
-                "vscode_languages": [
-                    {
-                        "name": "JavaScript",
-                        "language_setting_1": true
-                    },
-                    {
-                        "name": "Rust",
-                        "language_setting_2": false
-                    }
-                ]
-            }"#
-            .to_owned(),
-            r#"{
-                "languages": {
-                    "JavaScript": {
-                        "language_setting_1": true
-                    },
-                    "JSON": {
-                        "language_setting_1": true
-                    },
-                    "Rust": {
-                        "language_setting_2": false
-                    }
-                }
-            }"#
-            .unindent(),
-            cx,
-        );
-    }
-
     fn check_settings_update<T: Settings>(
         store: &mut SettingsStore,
         old_json: String,
@@ -1992,21 +1757,6 @@ mod tests {
             new_json.replace_range(range, &replacement);
         }
         pretty_assertions::assert_eq!(new_json, expected_new_json);
-    }
-
-    fn check_vscode_import(
-        store: &mut SettingsStore,
-        old: String,
-        vscode: String,
-        expected: String,
-        cx: &mut App,
-    ) {
-        store.set_user_settings(&old, cx).ok();
-        let new = store.get_vscode_edits(
-            old,
-            &VsCodeSettings::from_str(&vscode, VsCodeSettingsSource::VsCode).unwrap(),
-        );
-        pretty_assertions::assert_eq!(new, expected);
     }
 
     #[derive(Debug, PartialEq, Deserialize)]
@@ -2031,10 +1781,6 @@ mod tests {
         fn load(sources: SettingsSources<Self::FileContent>, _: &mut App) -> Result<Self> {
             sources.json_merge()
         }
-
-        fn import_from_vscode(vscode: &VsCodeSettings, current: &mut Self::FileContent) {
-            vscode.u32_setting("user.age", &mut current.age);
-        }
     }
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -2047,8 +1793,6 @@ mod tests {
         fn load(sources: SettingsSources<Self::FileContent>, _: &mut App) -> Result<Self> {
             sources.json_merge()
         }
-
-        fn import_from_vscode(_vscode: &VsCodeSettings, _current: &mut Self::FileContent) {}
     }
 
     #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -2073,15 +1817,6 @@ mod tests {
 
         fn load(sources: SettingsSources<Self::FileContent>, _: &mut App) -> Result<Self> {
             sources.json_merge()
-        }
-
-        fn import_from_vscode(vscode: &VsCodeSettings, current: &mut Self::FileContent) {
-            let first_value = vscode.read_string("key_1_first");
-            let second_value = vscode.read_string("key_1_second");
-
-            if let Some((first, second)) = first_value.zip(second_value) {
-                current.key1 = Some(format!("{} {}", first, second));
-            }
         }
     }
 
@@ -2176,31 +1911,6 @@ mod tests {
 
         fn load(sources: SettingsSources<Self::FileContent>, _: &mut App) -> Result<Self> {
             sources.json_merge()
-        }
-
-        fn import_from_vscode(vscode: &VsCodeSettings, current: &mut Self::FileContent) {
-            current.languages.extend(
-                vscode
-                    .read_value("vscode_languages")
-                    .and_then(|value| value.as_array())
-                    .map(|languages| {
-                        languages
-                            .iter()
-                            .filter_map(|value| value.as_object())
-                            .filter_map(|item| {
-                                let mut rest = item.clone();
-                                let name = rest.remove("name")?.as_str()?.to_string();
-                                let entry = serde_json::from_value::<LanguageSettingEntry>(
-                                    serde_json::Value::Object(rest),
-                                )
-                                .ok()?;
-
-                                Some((name, entry))
-                            })
-                    })
-                    .into_iter()
-                    .flatten(),
-            );
         }
     }
 }

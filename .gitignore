@@ -17,7 +17,6 @@
 .swiftpm/config/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .venv
-.vscode
 .wrangler
 /assets/*licenses.*
 /crates/theme/schemas/theme.json

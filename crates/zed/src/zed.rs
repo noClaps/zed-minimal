@@ -38,8 +38,8 @@ use release_channel::{AppCommitSha, ReleaseChannel};
 use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
-    DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings,
-    SettingsStore, initial_project_settings_content, initial_tasks_content, update_settings_file,
+    InvalidSettingsError, KeymapFile, KeymapFileLoadResult, Settings, SettingsStore,
+    initial_project_settings_content, initial_tasks_content, update_settings_file,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{self, AtomicBool};
@@ -50,7 +50,7 @@ use ui::{PopoverMenuHandle, prelude::*};
 use util::markdown::MarkdownString;
 use util::{ResultExt, asset_str};
 use uuid::Uuid;
-use welcome::{BaseKeymap, DOCS_URL, MultibufferHint};
+use welcome::{DOCS_URL, MultibufferHint};
 use workspace::CloseIntent;
 use workspace::notifications::{NotificationId, dismiss_app_notification, show_app_notification};
 use workspace::{
@@ -1010,20 +1010,7 @@ pub fn handle_keymap_file_changes(
     mut user_keymap_file_rx: mpsc::UnboundedReceiver<String>,
     cx: &mut App,
 ) {
-    BaseKeymap::register(cx);
-
-    let (base_keymap_tx, mut base_keymap_rx) = mpsc::unbounded();
     let (keyboard_layout_tx, mut keyboard_layout_rx) = mpsc::unbounded();
-    let mut old_base_keymap = *BaseKeymap::get_global(cx);
-    cx.observe_global::<SettingsStore>(move |cx| {
-        let new_base_keymap = *BaseKeymap::get_global(cx);
-
-        if new_base_keymap != old_base_keymap {
-            old_base_keymap = new_base_keymap;
-            base_keymap_tx.unbounded_send(()).unwrap();
-        }
-    })
-    .detach();
 
     let mut current_mapping = settings::get_key_equivalents(cx.keyboard_layout().id());
     cx.on_keyboard_layout_change(move |cx| {
@@ -1035,8 +1022,6 @@ pub fn handle_keymap_file_changes(
     })
     .detach();
 
-    load_default_keymap(cx);
-
     struct KeymapParseErrorNotification;
     let notification_id = NotificationId::unique::<KeymapParseErrorNotification>();
 
@@ -1045,7 +1030,6 @@ pub fn handle_keymap_file_changes(
         let mut migrating_in_memory = false;
         loop {
             select_biased! {
-                _ = base_keymap_rx.next() => {},
                 _ = keyboard_layout_rx.next() => {},
                 content = user_keymap_file_rx.next() => {
                     if let Some(content) = content {
@@ -1184,26 +1168,12 @@ fn show_markdown_app_notification<F>(
 
 fn reload_keymaps(cx: &mut App, user_key_bindings: Vec<KeyBinding>) {
     cx.clear_key_bindings();
-    load_default_keymap(cx);
     cx.bind_keys(user_key_bindings);
     cx.set_menus(app_menus());
     cx.set_dock_menu(vec![gpui::MenuItem::action(
         "New Window",
         workspace::NewWindow,
     )]);
-}
-
-pub fn load_default_keymap(cx: &mut App) {
-    let base_keymap = *BaseKeymap::get_global(cx);
-    if base_keymap == BaseKeymap::None {
-        return;
-    }
-
-    cx.bind_keys(KeymapFile::load_asset(DEFAULT_KEYMAP_PATH, cx).unwrap());
-
-    if let Some(asset_path) = base_keymap.asset_path() {
-        cx.bind_keys(KeymapFile::load_asset(asset_path, cx).unwrap());
-    }
 }
 
 pub fn handle_settings_changed(error: Option<anyhow::Error>, cx: &mut App) {
@@ -3674,118 +3644,6 @@ mod tests {
     }
 
     #[gpui::test]
-    async fn test_base_keymap(cx: &mut gpui::TestAppContext) {
-        let executor = cx.executor();
-        let app_state = init_keymap_test(cx);
-        let project = Project::test(app_state.fs.clone(), [], cx).await;
-        let workspace =
-            cx.add_window(|window, cx| Workspace::test_new(project.clone(), window, cx));
-
-        actions!(test1, [A, B]);
-        // From the Atom keymap
-        use workspace::ActivatePreviousPane;
-        // From the JetBrains keymap
-        use workspace::ActivatePreviousItem;
-
-        app_state
-            .fs
-            .save(
-                "/settings.json".as_ref(),
-                &r#"{"base_keymap": "Atom"}"#.into(),
-                Default::default(),
-            )
-            .await
-            .unwrap();
-
-        app_state
-            .fs
-            .save(
-                "/keymap.json".as_ref(),
-                &r#"[{"bindings": {"backspace": "test1::A"}}]"#.into(),
-                Default::default(),
-            )
-            .await
-            .unwrap();
-        executor.run_until_parked();
-        cx.update(|cx| {
-            let settings_rx = watch_config_file(
-                &executor,
-                app_state.fs.clone(),
-                PathBuf::from("/settings.json"),
-            );
-            let keymap_rx = watch_config_file(
-                &executor,
-                app_state.fs.clone(),
-                PathBuf::from("/keymap.json"),
-            );
-            let global_settings_rx = watch_config_file(
-                &executor,
-                app_state.fs.clone(),
-                PathBuf::from("/global_settings.json"),
-            );
-            handle_settings_file_changes(settings_rx, global_settings_rx, cx, |_, _| {});
-            handle_keymap_file_changes(keymap_rx, cx);
-        });
-        workspace
-            .update(cx, |workspace, _, cx| {
-                workspace.register_action(|_, _: &A, _window, _cx| {});
-                workspace.register_action(|_, _: &B, _window, _cx| {});
-                workspace.register_action(|_, _: &ActivatePreviousPane, _window, _cx| {});
-                workspace.register_action(|_, _: &ActivatePreviousItem, _window, _cx| {});
-                cx.notify();
-            })
-            .unwrap();
-        executor.run_until_parked();
-        // Test loading the keymap base at all
-        assert_key_bindings_for(
-            workspace.into(),
-            cx,
-            vec![("backspace", &A), ("k", &ActivatePreviousPane)],
-            line!(),
-        );
-
-        // Test modifying the users keymap, while retaining the base keymap
-        app_state
-            .fs
-            .save(
-                "/keymap.json".as_ref(),
-                &r#"[{"bindings": {"backspace": "test1::B"}}]"#.into(),
-                Default::default(),
-            )
-            .await
-            .unwrap();
-
-        executor.run_until_parked();
-
-        assert_key_bindings_for(
-            workspace.into(),
-            cx,
-            vec![("backspace", &B), ("k", &ActivatePreviousPane)],
-            line!(),
-        );
-
-        // Test modifying the base, while retaining the users keymap
-        app_state
-            .fs
-            .save(
-                "/settings.json".as_ref(),
-                &r#"{"base_keymap": "JetBrains"}"#.into(),
-                Default::default(),
-            )
-            .await
-            .unwrap();
-
-        executor.run_until_parked();
-
-        assert_key_bindings_for(
-            workspace.into(),
-            cx,
-            vec![("backspace", &B), ("{", &ActivatePreviousItem)],
-            line!(),
-        );
-    }
-
-    #[gpui::test]
     async fn test_disabled_keymap_binding(cx: &mut gpui::TestAppContext) {
         let executor = cx.executor();
         let app_state = init_keymap_test(cx);
@@ -3794,10 +3652,8 @@ mod tests {
             cx.add_window(|window, cx| Workspace::test_new(project.clone(), window, cx));
 
         actions!(test2, [A, B]);
-        // From the Atom keymap
-        use workspace::ActivatePreviousPane;
-        // From the JetBrains keymap
         use diagnostics::Deploy;
+        use workspace::ActivatePreviousPane;
 
         workspace
             .update(cx, |workspace, _, _| {
@@ -3805,15 +3661,6 @@ mod tests {
                 workspace.register_action(|_, _: &B, _window, _cx| {});
                 workspace.register_action(|_, _: &Deploy, _window, _cx| {});
             })
-            .unwrap();
-        app_state
-            .fs
-            .save(
-                "/settings.json".as_ref(),
-                &r#"{"base_keymap": "Atom"}"#.into(),
-                Default::default(),
-            )
-            .await
             .unwrap();
         app_state
             .fs
@@ -3876,21 +3723,6 @@ mod tests {
             vec![("k", &ActivatePreviousPane)],
             line!(),
         );
-
-        // Test modifying the base, while retaining the users keymap
-        app_state
-            .fs
-            .save(
-                "/settings.json".as_ref(),
-                &r#"{"base_keymap": "JetBrains"}"#.into(),
-                Default::default(),
-            )
-            .await
-            .unwrap();
-
-        cx.background_executor.run_until_parked();
-
-        assert_key_bindings_for(workspace.into(), cx, vec![("6", &Deploy)], line!());
     }
 
     #[gpui::test]

@@ -1,19 +1,11 @@
 mod appearance_settings_controls;
 
 use std::any::TypeId;
-use std::sync::Arc;
 
 use command_palette_hooks::CommandPaletteFilter;
 use editor::EditorSettingsControls;
 use feature_flags::{FeatureFlag, FeatureFlagViewExt};
-use fs::Fs;
-use gpui::{
-    App, AsyncWindowContext, Entity, EventEmitter, FocusHandle, Focusable, Task, actions,
-    impl_actions,
-};
-use schemars::JsonSchema;
-use serde::Deserialize;
-use settings::{SettingsStore, VsCodeSettingsSource};
+use gpui::{App, Entity, EventEmitter, FocusHandle, Focusable, actions};
 use ui::prelude::*;
 use workspace::item::{Item, ItemEvent};
 use workspace::{Workspace, with_active_or_new_workspace};
@@ -26,19 +18,6 @@ impl FeatureFlag for SettingsUiFeatureFlag {
     const NAME: &'static str = "settings-ui";
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
-pub struct ImportVsCodeSettings {
-    #[serde(default)]
-    pub skip_prompt: bool,
-}
-
-#[derive(Copy, Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
-pub struct ImportCursorSettings {
-    #[serde(default)]
-    pub skip_prompt: bool,
-}
-
-impl_actions!(zed, [ImportVsCodeSettings, ImportCursorSettings]);
 actions!(zed, [OpenSettingsEditor]);
 
 pub fn init(cx: &mut App) {
@@ -59,44 +38,10 @@ pub fn init(cx: &mut App) {
         });
     });
 
-    cx.observe_new(|workspace: &mut Workspace, window, cx| {
+    cx.observe_new(|_: &mut Workspace, window, cx| {
         let Some(window) = window else {
             return;
         };
-
-        workspace.register_action(|_workspace, action: &ImportVsCodeSettings, window, cx| {
-            let fs = <dyn Fs>::global(cx);
-            let action = *action;
-
-            window
-                .spawn(cx, async move |cx: &mut AsyncWindowContext| {
-                    handle_import_vscode_settings(
-                        VsCodeSettingsSource::VsCode,
-                        action.skip_prompt,
-                        fs,
-                        cx,
-                    )
-                    .await
-                })
-                .detach();
-        });
-
-        workspace.register_action(|_workspace, action: &ImportCursorSettings, window, cx| {
-            let fs = <dyn Fs>::global(cx);
-            let action = *action;
-
-            window
-                .spawn(cx, async move |cx: &mut AsyncWindowContext| {
-                    handle_import_vscode_settings(
-                        VsCodeSettingsSource::Cursor,
-                        action.skip_prompt,
-                        fs,
-                        cx,
-                    )
-                    .await
-                })
-                .detach();
-        });
 
         let settings_ui_actions = [TypeId::of::<OpenSettingsEditor>()];
 
@@ -121,56 +66,6 @@ pub fn init(cx: &mut App) {
         .detach();
     })
     .detach();
-}
-
-async fn handle_import_vscode_settings(
-    source: VsCodeSettingsSource,
-    skip_prompt: bool,
-    fs: Arc<dyn Fs>,
-    cx: &mut AsyncWindowContext,
-) {
-    let vscode = match settings::VsCodeSettings::load_user_settings(source, fs.clone()).await {
-        Ok(vscode) => vscode,
-        Err(err) => {
-            println!(
-                "Failed to load {source} settings: {}",
-                err.context(format!(
-                    "Loading {source} settings from path: {:?}",
-                    paths::vscode_settings_file()
-                ))
-            );
-
-            let _ = cx.prompt(
-                gpui::PromptLevel::Info,
-                &format!("Could not find or load a {source} settings file"),
-                None,
-                &["Ok"],
-            );
-            return;
-        }
-    };
-
-    let prompt = if skip_prompt {
-        Task::ready(Some(0))
-    } else {
-        let prompt = cx.prompt(
-            gpui::PromptLevel::Warning,
-            "Importing settings may overwrite your existing settings",
-            None,
-            &["Ok", "Cancel"],
-        );
-        cx.spawn(async move |_| prompt.await.ok())
-    };
-    if prompt.await != Some(0) {
-        return;
-    }
-
-    cx.update(|_, cx| {
-        cx.global::<SettingsStore>()
-            .import_vscode_settings(fs, vscode);
-        log::info!("Imported settings from {source}");
-    })
-    .ok();
 }
 
 pub struct SettingsPage {

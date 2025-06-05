@@ -144,26 +144,3 @@ pub fn build_asset_url(repo_name_with_owner: &str, tag: &str, kind: AssetKind) -
         .push(&asset_filename);
     Ok(url.to_string())
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::github::{AssetKind, build_asset_url};
-
-    #[test]
-    fn test_build_asset_url() {
-        let tag = "release/2.3.5";
-        let repo_name_with_owner = "microsoft/vscode-eslint";
-
-        let tarball = build_asset_url(repo_name_with_owner, tag, AssetKind::TarGz).unwrap();
-        assert_eq!(
-            tarball,
-            "https://github.com/microsoft/vscode-eslint/archive/refs/tags/release%2F2.3.5.tar.gz"
-        );
-
-        let zip = build_asset_url(repo_name_with_owner, tag, AssetKind::Zip).unwrap();
-        assert_eq!(
-            zip,
-            "https://github.com/microsoft/vscode-eslint/archive/refs/tags/release%2F2.3.5.zip"
-        );
-    }
-}

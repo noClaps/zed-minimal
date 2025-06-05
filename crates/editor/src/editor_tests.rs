@@ -4334,7 +4334,6 @@ async fn test_toggle_case(cx: &mut TestAppContext) {
     "});
 
     // If any upper case characters are identified -> lower case
-    // This matches JetBrains IDEs
     cx.set_state(indoc! {"
         «hEllo worldˇ»
     "});

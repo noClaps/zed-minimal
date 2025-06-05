@@ -266,7 +266,7 @@ pub fn previous_word_start(map: &DisplaySnapshot, point: DisplayPoint) -> Displa
 
     let mut is_first_iteration = true;
     find_preceding_boundary_display_point(map, point, FindRange::MultiLine, |left, right| {
-        // Make alt-left skip punctuation on Mac OS to respect Mac VSCode behaviour. For example: hello.| goes to |hello.
+        // Make alt-left skip punctuation on Mac OS. For example: hello.| goes to |hello.
         if is_first_iteration
             && classifier.is_punctuation(right)
             && !classifier.is_punctuation(left)

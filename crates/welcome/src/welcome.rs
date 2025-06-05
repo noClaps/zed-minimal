@@ -15,11 +15,8 @@ use workspace::{
     open_new,
 };
 
-pub use base_keymap_setting::BaseKeymap;
 pub use multibuffer_hint::*;
 
-mod base_keymap_picker;
-mod base_keymap_setting;
 mod multibuffer_hint;
 mod welcome_ui;
 
@@ -29,8 +26,6 @@ pub const FIRST_OPEN: &str = "first_open";
 pub const DOCS_URL: &str = "https://zed.dev/docs/";
 
 pub fn init(cx: &mut App) {
-    BaseKeymap::register(cx);
-
     cx.observe_new(|workspace: &mut Workspace, _, _cx| {
         workspace.register_action(|workspace, _: &Welcome, window, cx| {
             let welcome_page = WelcomePage::new(workspace, cx);
@@ -40,8 +35,6 @@ pub fn init(cx: &mut App) {
             .register_action(|_workspace, _: &ResetHints, _, cx| MultibufferHint::set_count(0, cx));
     })
     .detach();
-
-    base_keymap_picker::init(cx);
 }
 
 pub fn show_welcome_view(app_state: Arc<AppState>, cx: &mut App) -> Task<anyhow::Result<()>> {
@@ -137,25 +130,6 @@ impl Render for WelcomePage {
                                                 this.workspace
                                                     .update(cx, |_workspace, cx| {
                                                         window.dispatch_action(zed_actions::theme_selector::Toggle::default().boxed_clone(), cx);
-                                                    })
-                                                    .ok();
-                                            })),
-                                    )
-                                    .child(
-                                        Button::new("choose-keymap", "Choose a Keymap")
-                                            .icon(IconName::Keyboard)
-                                            .icon_size(IconSize::XSmall)
-                                            .icon_color(Color::Muted)
-                                            .icon_position(IconPosition::Start)
-                                            .on_click(cx.listener(|this, _, window, cx| {
-                                                telemetry::event!("Welcome Keymap Changed");
-                                                this.workspace
-                                                    .update(cx, |workspace, cx| {
-                                                        base_keymap_picker::toggle(
-                                                            workspace,
-                                                            &Default::default(),
-                                                            window, cx,
-                                                        )
                                                     })
                                                     .ok();
                                             })),

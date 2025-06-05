@@ -1,4 +1,3 @@
-mod extension_snippet;
 pub mod format;
 mod registry;
 
@@ -10,16 +9,13 @@ use std::{
 
 use anyhow::Result;
 use collections::{BTreeMap, BTreeSet, HashMap};
-use format::VsSnippetsFile;
 use fs::Fs;
 use futures::stream::StreamExt;
 use gpui::{App, AppContext as _, AsyncApp, Context, Entity, Task, WeakEntity};
 pub use registry::*;
-use util::ResultExt;
 
 pub fn init(cx: &mut App) {
     SnippetRegistry::init_global(cx);
-    extension_snippet::init(cx);
 }
 
 // Is `None` if the snippet file is global.
@@ -32,29 +28,6 @@ fn file_stem_to_key(stem: &str) -> SnippetKind {
     }
 }
 
-fn file_to_snippets(file_contents: VsSnippetsFile) -> Vec<Arc<Snippet>> {
-    let mut snippets = vec![];
-    for (name, snippet) in file_contents.snippets {
-        let snippet_name = name.clone();
-        let prefixes = snippet
-            .prefix
-            .map_or_else(move || vec![snippet_name], |prefixes| prefixes.into());
-        let description = snippet
-            .description
-            .map(|description| description.to_string());
-        let body = snippet.body.to_string();
-        if snippet::Snippet::parse(&body).log_err().is_none() {
-            continue;
-        };
-        snippets.push(Arc::new(Snippet {
-            body,
-            prefix: prefixes,
-            description,
-            name,
-        }));
-    }
-    snippets
-}
 // Snippet with all of the metadata
 #[derive(Debug)]
 pub struct Snippet {
@@ -78,8 +51,6 @@ async fn process_updates(
             continue;
         }
         let entry_metadata = fs.metadata(&entry_path).await;
-        // Entry could have been removed, in which case we should no longer show completions for it.
-        let entry_exists = entry_metadata.is_ok();
         if entry_metadata.map_or(false, |entry| entry.map_or(false, |e| e.is_dir)) {
             // Don't process dirs.
             continue;
@@ -89,27 +60,9 @@ async fn process_updates(
         };
         let key = file_stem_to_key(stem);
 
-        let contents = if entry_exists {
-            fs.load(&entry_path).await.ok()
-        } else {
-            None
-        };
-
         this.update(&mut cx, move |this, _| {
             let snippets_of_kind = this.snippets.entry(key).or_default();
-            if entry_exists {
-                let Some(file_contents) = contents else {
-                    return;
-                };
-                let Ok(as_json) = serde_json_lenient::from_str::<VsSnippetsFile>(&file_contents)
-                else {
-                    return;
-                };
-                let snippets = file_to_snippets(as_json);
-                *snippets_of_kind.entry(entry_path).or_default() = snippets;
-            } else {
-                snippets_of_kind.remove(&entry_path);
-            }
+            snippets_of_kind.remove(&entry_path);
         })?;
     }
     Ok(())
@@ -243,40 +196,5 @@ impl SnippetProvider {
             requested_snippets.extend(self.lookup_snippets::<true>(&None, cx));
         }
         requested_snippets
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use fs::FakeFs;
-    use gpui;
-    use gpui::TestAppContext;
-    use indoc::indoc;
-
-    #[gpui::test]
-    fn test_lookup_snippets_dup_registry_snippets(cx: &mut TestAppContext) {
-        let fs = FakeFs::new(cx.background_executor.clone());
-        cx.update(|cx| {
-            SnippetRegistry::init_global(cx);
-            SnippetRegistry::global(cx)
-                .register_snippets(
-                    "ruby".as_ref(),
-                    indoc! {r#"
-                    {
-                      "Log to console": {
-                        "prefix": "log",
-                        "body": ["console.info(\"Hello, ${1:World}!\")", "$0"],
-                        "description": "Logs to console"
-                      }
-                    }
-            "#},
-                )
-                .unwrap();
-            let provider = SnippetProvider::new(fs.clone(), Default::default(), cx);
-            cx.update_entity(&provider, |provider, cx| {
-                assert_eq!(1, provider.snippets_for(Some("ruby".to_owned()), cx).len());
-            });
-        });
     }
 }

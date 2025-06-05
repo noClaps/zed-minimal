@@ -241,11 +241,6 @@ pub fn local_settings_folder_relative_path() -> &'static Path {
     Path::new(".zed")
 }
 
-/// Returns the relative path to a `.vscode` folder within a project.
-pub fn local_vscode_folder_relative_path() -> &'static Path {
-    Path::new(".vscode")
-}
-
 /// Returns the relative path to a `settings.json` file within a project.
 pub fn local_settings_file_relative_path() -> &'static Path {
     Path::new(".zed/settings.json")
@@ -254,11 +249,6 @@ pub fn local_settings_file_relative_path() -> &'static Path {
 /// Returns the relative path to a `tasks.json` file within a project.
 pub fn local_tasks_file_relative_path() -> &'static Path {
     Path::new(".zed/tasks.json")
-}
-
-/// Returns the relative path to a `.vscode/tasks.json` file within a project.
-pub fn local_vscode_tasks_file_relative_path() -> &'static Path {
-    Path::new(".vscode/tasks.json")
 }
 
 pub fn debug_task_file_name() -> &'static str {
@@ -275,37 +265,10 @@ pub fn local_debug_file_relative_path() -> &'static Path {
     Path::new(".zed/debug.json")
 }
 
-/// Returns the relative path to a `.vscode/launch.json` file within a project.
-pub fn local_vscode_launch_file_relative_path() -> &'static Path {
-    Path::new(".vscode/launch.json")
-}
-
 pub fn user_ssh_config_file() -> PathBuf {
     home_dir().join(".ssh/config")
 }
 
 pub fn global_ssh_config_file() -> &'static Path {
     Path::new("/etc/ssh/ssh_config")
-}
-
-/// Returns the path to the vscode user settings file
-pub fn vscode_settings_file() -> &'static PathBuf {
-    static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    let rel_path = "Code/User/settings.json";
-    LOGS_DIR.get_or_init(|| {
-        home_dir()
-            .join("Library/Application Support")
-            .join(rel_path)
-    })
-}
-
-/// Returns the path to the cursor user settings file
-pub fn cursor_settings_file() -> &'static PathBuf {
-    static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    let rel_path = "Cursor/User/settings.json";
-    LOGS_DIR.get_or_init(|| {
-        home_dir()
-            .join("Library/Application Support")
-            .join(rel_path)
-    })
 }

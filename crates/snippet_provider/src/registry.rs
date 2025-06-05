@@ -1,11 +1,10 @@
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
-use anyhow::Result;
 use collections::HashMap;
 use gpui::{App, Global, ReadGlobal, UpdateGlobal};
 use parking_lot::RwLock;
 
-use crate::{Snippet, SnippetKind, file_stem_to_key};
+use crate::{Snippet, SnippetKind};
 
 struct GlobalSnippetRegistry(Arc<SnippetRegistry>);
 
@@ -34,18 +33,6 @@ impl SnippetRegistry {
         Self {
             snippets: RwLock::new(HashMap::default()),
         }
-    }
-
-    pub fn register_snippets(&self, file_path: &Path, contents: &str) -> Result<()> {
-        let snippets_in_file: crate::format::VsSnippetsFile =
-            serde_json_lenient::from_str(contents)?;
-        let kind = file_path
-            .file_stem()
-            .and_then(|stem| stem.to_str().and_then(file_stem_to_key));
-        let snippets = crate::file_to_snippets(snippets_in_file);
-        self.snippets.write().insert(kind, snippets);
-
-        Ok(())
     }
 
     pub fn get_snippets(&self, kind: &SnippetKind) -> Vec<Arc<Snippet>> {

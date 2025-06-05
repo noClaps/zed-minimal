@@ -11,16 +11,12 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 collections.workspace = true
-extension.workspace = true
 fs.workspace = true
 futures.workspace = true
 gpui.workspace = true
 parking_lot.workspace = true
 paths.workspace = true
 serde.workspace = true
-serde_json_lenient.workspace = true
-snippet.workspace = true
-util.workspace = true
 schemars.workspace = true
 workspace-hack.workspace = true
 
