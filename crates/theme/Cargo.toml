@@ -38,4 +38,3 @@ strum.workspace = true
 thiserror.workspace = true
 util.workspace = true
 uuid.workspace = true
-workspace-hack.workspace = true

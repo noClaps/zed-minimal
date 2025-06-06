@@ -32,4 +32,3 @@ text.workspace = true
 ui.workspace = true
 util.workspace = true
 workspace.workspace = true
-workspace-hack.workspace = true

@@ -32,5 +32,4 @@ smol.workspace = true
 take-until.workspace = true
 tempfile.workspace = true
 unicase.workspace = true
-workspace-hack.workspace = true
 libc.workspace = true

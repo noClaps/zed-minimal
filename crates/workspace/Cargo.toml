@@ -49,4 +49,3 @@ ui.workspace = true
 util.workspace = true
 uuid.workspace = true
 zed_actions.workspace = true
-workspace-hack.workspace = true

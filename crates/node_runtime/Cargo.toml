@@ -29,4 +29,3 @@ serde_json.workspace = true
 smol.workspace = true
 util.workspace = true
 which.workspace = true
-workspace-hack.workspace = true

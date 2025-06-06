@@ -23,4 +23,3 @@ regex.workspace = true
 rope.workspace = true
 smallvec.workspace = true
 sum_tree.workspace = true
-workspace-hack.workspace = true

@@ -15,6 +15,5 @@ doctest = false
 [dependencies]
 bitflags.workspace = true
 parking_lot.workspace = true
-workspace-hack.workspace = true
 core-foundation.workspace = true
 fsevent-sys = "3.0.2"

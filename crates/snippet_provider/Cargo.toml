@@ -18,4 +18,3 @@ parking_lot.workspace = true
 paths.workspace = true
 serde.workspace = true
 schemars.workspace = true
-workspace-hack.workspace = true

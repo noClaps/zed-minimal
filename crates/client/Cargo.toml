@@ -55,4 +55,3 @@ worktree.workspace = true
 telemetry.workspace = true
 tokio.workspace = true
 tokio-native-tls = "0.3"
-workspace-hack.workspace = true

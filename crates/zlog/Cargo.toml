@@ -17,5 +17,4 @@ default = []
 [dependencies]
 chrono.workspace = true
 log.workspace = true
-workspace-hack.workspace = true
 anyhow.workspace = true

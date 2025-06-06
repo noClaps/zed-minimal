@@ -39,7 +39,6 @@ util.workspace = true
 workspace.workspace = true
 worktree.workspace = true
 zed_actions.workspace = true
-workspace-hack.workspace = true
 
-[package.metadata.cargo-machete]
+[package.metadata.cargo-shear]
 ignored = ["log"]

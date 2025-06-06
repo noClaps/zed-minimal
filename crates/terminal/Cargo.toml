@@ -32,4 +32,3 @@ theme.workspace = true
 thiserror.workspace = true
 util.workspace = true
 regex.workspace = true
-workspace-hack.workspace = true

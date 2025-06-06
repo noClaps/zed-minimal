@@ -24,5 +24,4 @@ serde_json_lenient.workspace = true
 sha2.workspace = true
 shellexpand.workspace = true
 util.workspace = true
-workspace-hack.workspace = true
 zed_actions.workspace = true

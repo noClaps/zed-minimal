@@ -98,7 +98,6 @@ snippet_provider.workspace = true
 snippets_ui.workspace = true
 sysinfo.workspace = true
 tab_switcher.workspace = true
-task.workspace = true
 tasks_ui.workspace = true
 telemetry.workspace = true
 telemetry_events.workspace = true
@@ -106,7 +105,6 @@ terminal_view.workspace = true
 theme.workspace = true
 theme_extension.workspace = true
 theme_selector.workspace = true
-time.workspace = true
 title_bar.workspace = true
 toolchain_selector.workspace = true
 ui.workspace = true
@@ -117,7 +115,6 @@ urlencoding.workspace = true
 util.workspace = true
 uuid.workspace = true
 welcome.workspace = true
-workspace-hack.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
 zlog.workspace = true
@@ -155,5 +152,5 @@ osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
 osx_url_schemes = ["zed"]
 
-[package.metadata.cargo-machete]
+[package.metadata.cargo-shear]
 ignored = ["profiling", "zstd"]

@@ -25,4 +25,3 @@ serde_json.workspace = true
 settings.workspace = true
 url.workspace = true
 util.workspace = true
-workspace-hack.workspace = true

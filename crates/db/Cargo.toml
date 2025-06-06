@@ -24,4 +24,3 @@ smol.workspace = true
 sqlez.workspace = true
 sqlez_macros.workspace = true
 util.workspace = true
-workspace-hack.workspace = true

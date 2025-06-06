@@ -36,4 +36,3 @@ url.workspace = true
 util.workspace = true
 uuid.workspace = true
 futures.workspace = true
-workspace-hack.workspace = true

@@ -63,7 +63,6 @@ util.workspace = true
 uuid.workspace = true
 waker-fn = "1.2.0"
 lyon = "1.0"
-workspace-hack.workspace = true
 block = "0.1"
 cocoa.workspace = true
 core-foundation.workspace = true
@@ -82,4 +81,3 @@ pathfinder_geometry = "0.5"
 [build-dependencies]
 bindgen = "0.71"
 cbindgen = { version = "0.28.0", default-features = false }
-naga.workspace = true

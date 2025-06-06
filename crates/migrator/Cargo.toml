@@ -20,4 +20,3 @@ log.workspace = true
 streaming-iterator.workspace = true
 tree-sitter-json.workspace = true
 tree-sitter.workspace = true
-workspace-hack.workspace = true

@@ -49,5 +49,4 @@ theme.workspace = true
 tree-sitter.workspace = true
 unicase = "2.6"
 util.workspace = true
-workspace-hack.workspace = true
 diffy = "0.4.2"

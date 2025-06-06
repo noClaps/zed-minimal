@@ -31,7 +31,6 @@ release_channel.workspace = true
 serde.workspace = true
 util.workspace = true
 tempfile.workspace = true
-workspace-hack.workspace = true
 core-foundation.workspace = true
 core-services = "0.2"
 plist = "1.3"

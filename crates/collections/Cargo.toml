@@ -16,4 +16,3 @@ doctest = false
 [dependencies]
 indexmap.workspace = true
 rustc-hash.workspace = true
-workspace-hack.workspace = true

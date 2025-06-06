@@ -16,4 +16,3 @@ doctest = true
 [dependencies]
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
-workspace-hack.workspace = true

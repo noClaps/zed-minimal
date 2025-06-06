@@ -19,4 +19,3 @@ gpui.workspace = true
 uuid.workspace = true
 util.workspace = true
 serde_json.workspace = true
-workspace-hack.workspace = true
