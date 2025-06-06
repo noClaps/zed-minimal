@@ -1256,6 +1256,11 @@ struct RowHighlight {
 
 #[derive(Clone, Debug)]
 struct AddSelectionsState {
+    groups: Vec<AddSelectionsGroup>,
+}
+
+#[derive(Clone, Debug)]
+struct AddSelectionsGroup {
     above: bool,
     stack: Vec<usize>,
 }
@@ -2114,31 +2119,28 @@ impl Editor {
 
     pub fn accept_edit_prediction_keybind(
         &self,
+        accept_partial: bool,
         window: &Window,
         cx: &App,
     ) -> AcceptEditPredictionBinding {
         let key_context = self.key_context_internal(true, window, cx);
         let in_conflict = self.edit_prediction_in_conflict();
 
-        AcceptEditPredictionBinding(
-            window
-                .bindings_for_action_in_context(&AcceptEditPrediction, key_context)
-                .into_iter()
-                .filter(|binding| {
-                    !in_conflict
-                        || binding
-                            .keystrokes()
-                            .first()
-                            .map_or(false, |keystroke| keystroke.modifiers.modified())
-                })
-                .rev()
-                .min_by_key(|binding| {
-                    binding
-                        .keystrokes()
-                        .first()
-                        .map_or(u8::MAX, |k| k.modifiers.number_of_modifiers())
-                }),
-        )
+        let bindings = if accept_partial {
+            window.bindings_for_action_in_context(&AcceptPartialEditPrediction, key_context)
+        } else {
+            window.bindings_for_action_in_context(&AcceptEditPrediction, key_context)
+        };
+
+        // TODO: if the binding contains multiple keystrokes, display all of them, not
+        // just the first one.
+        AcceptEditPredictionBinding(bindings.into_iter().rev().find(|binding| {
+            !in_conflict
+                || binding
+                    .keystrokes()
+                    .first()
+                    .map_or(false, |keystroke| keystroke.modifiers.modified())
+        }))
     }
 
     pub fn new_file(
@@ -2548,7 +2550,9 @@ impl Editor {
             .display_map
             .update(cx, |display_map, cx| display_map.snapshot(cx));
         let buffer = &display_map.buffer_snapshot;
-        self.add_selections_state = None;
+        if self.selections.count() == 1 {
+            self.add_selections_state = None;
+        }
         self.select_next_state = None;
         self.select_prev_state = None;
         self.select_syntax_node_history.try_clear();
@@ -6833,12 +6837,25 @@ impl Editor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let accept_keybind = self.accept_edit_prediction_keybind(window, cx);
-        let Some(accept_keystroke) = accept_keybind.keystroke() else {
-            return;
+        let mut modifiers_held = false;
+        if let Some(accept_keystroke) = self
+            .accept_edit_prediction_keybind(false, window, cx)
+            .keystroke()
+        {
+            modifiers_held = modifiers_held
+                || (&accept_keystroke.modifiers == modifiers
+                    && accept_keystroke.modifiers.modified());
         };
+        if let Some(accept_partial_keystroke) = self
+            .accept_edit_prediction_keybind(true, window, cx)
+            .keystroke()
+        {
+            modifiers_held = modifiers_held
+                || (&accept_partial_keystroke.modifiers == modifiers
+                    && accept_partial_keystroke.modifiers.modified());
+        }
 
-        if &accept_keystroke.modifiers == modifiers && accept_keystroke.modifiers.modified() {
+        if modifiers_held {
             if matches!(
                 self.edit_prediction_preview,
                 EditPredictionPreview::Inactive { .. }
@@ -7808,7 +7825,7 @@ impl Editor {
         window: &mut Window,
         cx: &App,
     ) -> Option<AnyElement> {
-        let accept_binding = self.accept_edit_prediction_keybind(window, cx);
+        let accept_binding = self.accept_edit_prediction_keybind(false, window, cx);
         let accept_keystroke = accept_binding.keystroke()?;
 
         let is_platform_style_mac = PlatformStyle::platform() == PlatformStyle::Mac;
@@ -11722,49 +11739,74 @@ impl Editor {
         self.hide_mouse_cursor(&HideMouseCursorOrigin::MovementAction);
 
         let display_map = self.display_map.update(cx, |map, cx| map.snapshot(cx));
-        let mut selections = self.selections.all::<Point>(cx);
+        let all_selections = self.selections.all::<Point>(cx);
         let text_layout_details = self.text_layout_details(window);
-        let mut state = self.add_selections_state.take().unwrap_or_else(|| {
-            let oldest_selection = selections.iter().min_by_key(|s| s.id).unwrap().clone();
-            let range = oldest_selection.display_range(&display_map).sorted();
 
+        let (mut columnar_selections, new_selections_to_columnarize) = {
+            if let Some(state) = self.add_selections_state.as_ref() {
+                let columnar_selection_ids: HashSet<_> = state
+                    .groups
+                    .iter()
+                    .flat_map(|group| group.stack.iter())
+                    .copied()
+                    .collect();
+
+                all_selections
+                    .into_iter()
+                    .partition(|s| columnar_selection_ids.contains(&s.id))
+            } else {
+                (Vec::new(), all_selections)
+            }
+        };
+
+        let mut state = self
+            .add_selections_state
+            .take()
+            .unwrap_or_else(|| AddSelectionsState { groups: Vec::new() });
+
+        for selection in new_selections_to_columnarize {
+            let range = selection.display_range(&display_map).sorted();
             let start_x = display_map.x_for_display_point(range.start, &text_layout_details);
             let end_x = display_map.x_for_display_point(range.end, &text_layout_details);
             let positions = start_x.min(end_x)..start_x.max(end_x);
-
-            selections.clear();
             let mut stack = Vec::new();
             for row in range.start.row().0..=range.end.row().0 {
                 if let Some(selection) = self.selections.build_columnar_selection(
                     &display_map,
                     DisplayRow(row),
                     &positions,
-                    oldest_selection.reversed,
+                    selection.reversed,
                     &text_layout_details,
                 ) {
                     stack.push(selection.id);
-                    selections.push(selection);
+                    columnar_selections.push(selection);
                 }
             }
-
-            if above {
-                stack.reverse();
+            if !stack.is_empty() {
+                if above {
+                    stack.reverse();
+                }
+                state.groups.push(AddSelectionsGroup { above, stack });
             }
+        }
 
-            AddSelectionsState { above, stack }
-        });
+        let mut final_selections = Vec::new();
+        let end_row = if above {
+            DisplayRow(0)
+        } else {
+            display_map.max_point().row()
+        };
 
-        let last_added_selection = *state.stack.last().unwrap();
-        let mut new_selections = Vec::new();
-        if above == state.above {
-            let end_row = if above {
-                DisplayRow(0)
-            } else {
-                display_map.max_point().row()
-            };
+        let mut last_added_item_per_group = HashMap::default();
+        for group in state.groups.iter_mut() {
+            if let Some(last_id) = group.stack.last() {
+                last_added_item_per_group.insert(*last_id, group);
+            }
+        }
 
-            'outer: for selection in selections {
-                if selection.id == last_added_selection {
+        for selection in columnar_selections {
+            if let Some(group) = last_added_item_per_group.get_mut(&selection.id) {
+                if above == group.above {
                     let range = selection.display_range(&display_map).sorted();
                     debug_assert_eq!(range.start.row(), range.end.row());
                     let mut row = range.start.row();
@@ -11779,13 +11821,13 @@ impl Editor {
                             start_x.min(end_x)..start_x.max(end_x)
                         };
 
+                    let mut maybe_new_selection = None;
                     while row != end_row {
                         if above {
                             row.0 -= 1;
                         } else {
                             row.0 += 1;
                         }
-
                         if let Some(new_selection) = self.selections.build_columnar_selection(
                             &display_map,
                             row,
@@ -11793,32 +11835,50 @@ impl Editor {
                             selection.reversed,
                             &text_layout_details,
                         ) {
-                            state.stack.push(new_selection.id);
-                            if above {
-                                new_selections.push(new_selection);
-                                new_selections.push(selection);
-                            } else {
-                                new_selections.push(selection);
-                                new_selections.push(new_selection);
-                            }
-
-                            continue 'outer;
+                            maybe_new_selection = Some(new_selection);
+                            break;
                         }
                     }
-                }
 
-                new_selections.push(selection);
+                    if let Some(new_selection) = maybe_new_selection {
+                        group.stack.push(new_selection.id);
+                        if above {
+                            final_selections.push(new_selection);
+                            final_selections.push(selection);
+                        } else {
+                            final_selections.push(selection);
+                            final_selections.push(new_selection);
+                        }
+                    } else {
+                        final_selections.push(selection);
+                    }
+                } else {
+                    group.stack.pop();
+                }
+            } else {
+                final_selections.push(selection);
             }
-        } else {
-            new_selections = selections;
-            new_selections.retain(|s| s.id != last_added_selection);
-            state.stack.pop();
         }
 
         self.change_selections(Some(Autoscroll::fit()), window, cx, |s| {
-            s.select(new_selections);
+            s.select(final_selections);
         });
-        if state.stack.len() > 1 {
+
+        let final_selection_ids: HashSet<_> = self
+            .selections
+            .all::<Point>(cx)
+            .iter()
+            .map(|s| s.id)
+            .collect();
+        state.groups.retain_mut(|group| {
+            // selections might get merged above so we remove invalid items from stacks
+            group.stack.retain(|id| final_selection_ids.contains(id));
+
+            // single selection in stack can be treated as initial state
+            group.stack.len() > 1
+        });
+
+        if !state.groups.is_empty() {
             self.add_selections_state = Some(state);
         }
     }

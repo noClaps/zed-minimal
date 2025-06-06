@@ -2168,10 +2168,6 @@ impl Pane {
         self.pinned_tab_count > ix
     }
 
-    fn has_pinned_tabs(&self) -> bool {
-        self.pinned_tab_count != 0
-    }
-
     fn has_unpinned_tabs(&self) -> bool {
         self.pinned_tab_count < self.items.len()
     }
@@ -2886,6 +2882,7 @@ impl Pane {
         let is_clone = window.modifiers().alt;
 
         let from_pane = dragged_tab.pane.clone();
+        let from_ix = dragged_tab.ix;
         self.workspace
             .update(cx, |_, cx| {
                 cx.defer_in(window, move |workspace, window, cx| {
@@ -2893,8 +2890,11 @@ impl Pane {
                         to_pane = workspace.split_pane(to_pane, split_direction, window, cx);
                     }
                     let database_id = workspace.database_id();
-                    let old_ix = from_pane.read(cx).index_for_item_id(item_id);
-                    let old_len = to_pane.read(cx).items.len();
+                    let was_pinned_in_from_pane = from_pane.read_with(cx, |pane, _| {
+                        pane.index_for_item_id(item_id)
+                            .is_some_and(|ix| pane.is_tab_pinned(ix))
+                    });
+                    let to_pane_old_length = to_pane.read(cx).items.len();
                     if is_clone {
                         let Some(item) = from_pane
                             .read(cx)
@@ -2912,38 +2912,38 @@ impl Pane {
                     } else {
                         move_item(&from_pane, &to_pane, item_id, ix, true, window, cx);
                     }
-                    if to_pane == from_pane {
-                        if let Some(old_index) = old_ix {
-                            to_pane.update(cx, |this, _| {
-                                if old_index < this.pinned_tab_count
-                                    && (ix == this.items.len() || ix > this.pinned_tab_count)
-                                {
-                                    this.pinned_tab_count -= 1;
-                                } else if this.has_pinned_tabs()
-                                    && old_index >= this.pinned_tab_count
-                                    && ix < this.pinned_tab_count
-                                {
-                                    this.pinned_tab_count += 1;
-                                }
-                            });
-                        }
-                    } else {
-                        to_pane.update(cx, |this, _| {
-                            if this.items.len() > old_len // Did we not deduplicate on drag?
-                                && this.has_pinned_tabs()
-                                && ix < this.pinned_tab_count
+                    to_pane.update(cx, |this, _| {
+                        if to_pane == from_pane {
+                            let moved_right = ix > from_ix;
+                            let ix = if moved_right { ix - 1 } else { ix };
+                            let is_pinned_in_to_pane = this.is_tab_pinned(ix);
+                            let is_at_same_position = ix == from_ix;
+
+                            if is_at_same_position
+                                || (moved_right && is_pinned_in_to_pane)
+                                || (!moved_right && !is_pinned_in_to_pane)
                             {
+                                return;
+                            }
+
+                            if is_pinned_in_to_pane {
+                                this.pinned_tab_count += 1;
+                            } else {
+                                this.pinned_tab_count -= 1;
+                            }
+                        } else if this.items.len() >= to_pane_old_length {
+                            let is_pinned_in_to_pane = this.is_tab_pinned(ix);
+                            let item_created_pane = to_pane_old_length == 0;
+                            let is_first_position = ix == 0;
+                            let was_dropped_at_beginning = item_created_pane || is_first_position;
+                            let should_remain_pinned = is_pinned_in_to_pane
+                                || (was_pinned_in_from_pane && was_dropped_at_beginning);
+
+                            if should_remain_pinned {
                                 this.pinned_tab_count += 1;
                             }
-                        });
-                        from_pane.update(cx, |this, _| {
-                            if let Some(index) = old_ix {
-                                if this.pinned_tab_count > index {
-                                    this.pinned_tab_count -= 1;
-                                }
-                            }
-                        })
-                    }
+                        }
+                    });
                 });
             })
             .log_err();
