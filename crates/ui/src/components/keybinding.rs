@@ -108,15 +108,11 @@ impl RenderOnce for KeyBinding {
                     .rounded_xs()
                     .text_color(cx.theme().colors().text_muted)
                     .when(use_text, |el| {
-                        el.child(
-                            Key::new(keystroke_text(&keystroke, self.platform_style), color)
-                                .size(self.size),
-                        )
+                        el.child(Key::new(keystroke_text(&keystroke), color).size(self.size))
                     })
                     .when(!use_text, |el| {
                         el.children(render_modifiers(
                             &keystroke.modifiers,
-                            self.platform_style,
                             color,
                             self.size,
                             true,
@@ -153,7 +149,6 @@ fn icon_for_key(keystroke: &Keystroke, platform_style: PlatformStyle) -> Option<
 
 pub fn render_modifiers(
     modifiers: &Modifiers,
-    platform_style: PlatformStyle,
     color: Option<Color>,
     size: Option<AbsoluteLength>,
     trailing_separator: bool,
@@ -200,15 +195,9 @@ pub fn render_modifiers(
         .filter(|modifier| modifier.enabled)
         .collect::<Vec<_>>();
 
-    let platform_keys = filtered
-        .into_iter()
-        .map(move |modifier| match platform_style {
-            PlatformStyle::Mac => Some(modifier.mac),
-        });
+    let platform_keys = filtered.into_iter().map(move |modifier| Some(modifier.mac));
 
-    let separator = match platform_style {
-        PlatformStyle::Mac => None,
-    };
+    let separator = None;
 
     let platform_keys = itertools::intersperse(platform_keys, separator.clone());
 
@@ -309,20 +298,18 @@ pub fn text_for_action(action: &dyn Action, window: &Window, cx: &App) -> Option
 }
 
 pub fn text_for_keystrokes(keystrokes: &[Keystroke], _: &App) -> String {
-    let platform_style = PlatformStyle::platform();
     keystrokes
         .iter()
-        .map(|keystroke| keystroke_text(keystroke, platform_style))
+        .map(|keystroke| keystroke_text(keystroke))
         .join(" ")
 }
 
 pub fn text_for_keystroke(keystroke: &Keystroke, _: &App) -> String {
-    let platform_style = PlatformStyle::platform();
-    keystroke_text(keystroke, platform_style)
+    keystroke_text(keystroke)
 }
 
 /// Returns a textual representation of the given [`Keystroke`].
-fn keystroke_text(keystroke: &Keystroke, platform_style: PlatformStyle) -> String {
+fn keystroke_text(keystroke: &Keystroke) -> String {
     let mut text = String::new();
     let delimiter = '-';
 
@@ -331,26 +318,17 @@ fn keystroke_text(keystroke: &Keystroke, platform_style: PlatformStyle) -> Strin
     }
 
     if keystroke.modifiers.control {
-        match platform_style {
-            PlatformStyle::Mac => text.push_str("Control"),
-        }
-
+        text.push_str("Control");
         text.push(delimiter);
     }
 
     if keystroke.modifiers.platform {
-        match platform_style {
-            PlatformStyle::Mac => text.push_str("Command"),
-        }
-
+        text.push_str("Command");
         text.push(delimiter);
     }
 
     if keystroke.modifiers.alt {
-        match platform_style {
-            PlatformStyle::Mac => text.push_str("Option"),
-        }
-
+        text.push_str("Option");
         text.push(delimiter);
     }
 

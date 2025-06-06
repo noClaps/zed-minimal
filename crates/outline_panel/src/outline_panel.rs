@@ -4888,9 +4888,6 @@ impl EventEmitter<PanelEvent> for OutlinePanel {}
 
 impl Render for OutlinePanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (is_local, is_via_ssh) = self
-            .project
-            .read_with(cx, |project, _| (project.is_local(), project.is_via_ssh()));
         let query = self.query(cx);
         let pinned = self.pinned;
         let settings = OutlinePanelSettings::get_global(cx);
@@ -4935,12 +4932,8 @@ impl Render for OutlinePanel {
             .on_action(cx.listener(Self::fold_directory))
             .on_action(cx.listener(Self::open_excerpts))
             .on_action(cx.listener(Self::open_excerpts_split))
-            .when(is_local, |el| {
-                el.on_action(cx.listener(Self::reveal_in_finder))
-            })
-            .when(is_local || is_via_ssh, |el| {
-                el.on_action(cx.listener(Self::open_in_terminal))
-            })
+            .on_action(cx.listener(Self::reveal_in_finder))
+            .on_action(cx.listener(Self::open_in_terminal))
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(move |outline_panel, event: &MouseDownEvent, window, cx| {

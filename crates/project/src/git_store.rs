@@ -43,7 +43,7 @@ use parking_lot::Mutex;
 use postage::stream::Stream as _;
 use rpc::{
     AnyProtoClient, TypedEnvelope,
-    proto::{self, FromProto, SSH_PROJECT_ID, ToProto, git_reset, split_repository_update},
+    proto::{self, FromProto, ToProto, git_reset, split_repository_update},
 };
 use serde::Deserialize;
 use std::{
@@ -141,8 +141,6 @@ enum GitStoreState {
         fs: Arc<dyn Fs>,
     },
     Ssh {
-        upstream_client: AnyProtoClient,
-        upstream_project_id: ProjectId,
         downstream: Option<(AnyProtoClient, ProjectId)>,
     },
     Remote {
@@ -369,17 +367,12 @@ impl GitStore {
     pub fn ssh(
         worktree_store: &Entity<WorktreeStore>,
         buffer_store: Entity<BufferStore>,
-        upstream_client: AnyProtoClient,
         cx: &mut Context<Self>,
     ) -> Self {
         Self::new(
             worktree_store.clone(),
             buffer_store,
-            GitStoreState::Ssh {
-                upstream_client,
-                upstream_project_id: ProjectId(SSH_PROJECT_ID),
-                downstream: None,
-            },
+            GitStoreState::Ssh { downstream: None },
             cx,
         )
     }
@@ -1052,12 +1045,10 @@ impl GitStore {
     fn upstream_client(&self) -> Option<AnyProtoClient> {
         match &self.state {
             GitStoreState::Local { .. } => None,
-            GitStoreState::Ssh {
-                upstream_client, ..
-            }
-            | GitStoreState::Remote {
+            GitStoreState::Remote {
                 upstream_client, ..
             } => Some(upstream_client.clone()),
+            _ => unreachable!(),
         }
     }
 
@@ -1430,12 +1421,7 @@ impl GitStore {
                 cx.background_executor()
                     .spawn(async move { fs.git_init(&path, fallback_branch_name) })
             }
-            GitStoreState::Ssh {
-                upstream_client,
-                upstream_project_id: project_id,
-                ..
-            }
-            | GitStoreState::Remote {
+            GitStoreState::Remote {
                 upstream_client,
                 upstream_project_id: project_id,
                 ..
@@ -1453,6 +1439,7 @@ impl GitStore {
                     Ok(())
                 })
             }
+            _ => unreachable!(),
         }
     }
 

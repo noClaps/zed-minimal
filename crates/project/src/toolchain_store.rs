@@ -14,10 +14,9 @@ use gpui::{
 use language::{LanguageName, LanguageRegistry, LanguageToolchainStore, Toolchain, ToolchainList};
 use rpc::{
     AnyProtoClient, TypedEnvelope,
-    proto::{self, FromProto, ToProto},
+    proto::{self, ToProto},
 };
 use settings::WorktreeId;
-use util::ResultExt as _;
 
 use crate::{
     ProjectEnvironment, ProjectPath,
@@ -31,7 +30,6 @@ enum ToolchainStoreInner {
         Entity<LocalToolchainStore>,
         #[allow(dead_code)] Subscription,
     ),
-    Remote(Entity<RemoteToolchainStore>),
 }
 
 impl EventEmitter<ToolchainStoreEvent> for ToolchainStore {}
@@ -62,11 +60,6 @@ impl ToolchainStore {
         Self(ToolchainStoreInner::Local(entity, subscription))
     }
 
-    pub(super) fn remote(project_id: u64, client: AnyProtoClient, cx: &mut App) -> Self {
-        Self(ToolchainStoreInner::Remote(
-            cx.new(|_| RemoteToolchainStore { client, project_id }),
-        ))
-    }
     pub(crate) fn activate_toolchain(
         &self,
         path: ProjectPath,
@@ -76,9 +69,6 @@ impl ToolchainStore {
         match &self.0 {
             ToolchainStoreInner::Local(local, _) => {
                 local.update(cx, |this, cx| this.activate_toolchain(path, toolchain, cx))
-            }
-            ToolchainStoreInner::Remote(remote) => {
-                remote.read(cx).activate_toolchain(path, toolchain, cx)
             }
         }
     }
@@ -92,9 +82,6 @@ impl ToolchainStore {
             ToolchainStoreInner::Local(local, _) => {
                 local.update(cx, |this, cx| this.list_toolchains(path, language_name, cx))
             }
-            ToolchainStoreInner::Remote(remote) => {
-                remote.read(cx).list_toolchains(path, language_name, cx)
-            }
         }
     }
     pub(crate) fn active_toolchain(
@@ -106,9 +93,6 @@ impl ToolchainStore {
         match &self.0 {
             ToolchainStoreInner::Local(local, _) => {
                 local.read(cx).active_toolchain(path, language_name, cx)
-            }
-            ToolchainStoreInner::Remote(remote) => {
-                remote.read(cx).active_toolchain(path, language_name, cx)
             }
         }
     }
@@ -229,7 +213,6 @@ impl ToolchainStore {
     pub fn as_language_toolchain_store(&self) -> Arc<dyn LanguageToolchainStore> {
         match &self.0 {
             ToolchainStoreInner::Local(local, _) => Arc::new(LocalStore(local.downgrade())),
-            ToolchainStoreInner::Remote(remote) => Arc::new(RemoteStore(remote.downgrade())),
         }
     }
 }
@@ -260,24 +243,6 @@ impl language::LanguageToolchainStore for LocalStore {
     }
 }
 
-#[async_trait(?Send)]
-impl language::LanguageToolchainStore for RemoteStore {
-    async fn active_toolchain(
-        self: Arc<Self>,
-        worktree_id: WorktreeId,
-        path: Arc<Path>,
-        language_name: LanguageName,
-        cx: &mut AsyncApp,
-    ) -> Option<Toolchain> {
-        self.0
-            .update(cx, |this, cx| {
-                this.active_toolchain(ProjectPath { worktree_id, path }, language_name, cx)
-            })
-            .ok()?
-            .await
-    }
-}
-
 pub(crate) struct EmptyToolchainStore;
 #[async_trait(?Send)]
 impl language::LanguageToolchainStore for EmptyToolchainStore {
@@ -292,7 +257,6 @@ impl language::LanguageToolchainStore for EmptyToolchainStore {
     }
 }
 struct LocalStore(WeakEntity<LocalToolchainStore>);
-struct RemoteStore(WeakEntity<RemoteToolchainStore>);
 
 #[derive(Clone)]
 pub enum ToolchainStoreEvent {
@@ -409,135 +373,5 @@ impl LocalToolchainStore {
                 })
                 .cloned(),
         )
-    }
-}
-struct RemoteToolchainStore {
-    client: AnyProtoClient,
-    project_id: u64,
-}
-
-impl RemoteToolchainStore {
-    pub(crate) fn activate_toolchain(
-        &self,
-        project_path: ProjectPath,
-        toolchain: Toolchain,
-        cx: &App,
-    ) -> Task<Option<()>> {
-        let project_id = self.project_id;
-        let client = self.client.clone();
-        cx.background_spawn(async move {
-            let path = PathBuf::from(toolchain.path.to_string());
-            let _ = client
-                .request(proto::ActivateToolchain {
-                    project_id,
-                    worktree_id: project_path.worktree_id.to_proto(),
-                    language_name: toolchain.language_name.into(),
-                    toolchain: Some(proto::Toolchain {
-                        name: toolchain.name.into(),
-                        path: path.to_proto(),
-                        raw_json: toolchain.as_json.to_string(),
-                    }),
-                    path: Some(project_path.path.to_string_lossy().into_owned()),
-                })
-                .await
-                .log_err()?;
-            Some(())
-        })
-    }
-
-    pub(crate) fn list_toolchains(
-        &self,
-        path: ProjectPath,
-        language_name: LanguageName,
-        cx: &App,
-    ) -> Task<Option<(ToolchainList, Arc<Path>)>> {
-        let project_id = self.project_id;
-        let client = self.client.clone();
-        cx.background_spawn(async move {
-            let response = client
-                .request(proto::ListToolchains {
-                    project_id,
-                    worktree_id: path.worktree_id.to_proto(),
-                    language_name: language_name.clone().into(),
-                    path: Some(path.path.to_string_lossy().into_owned()),
-                })
-                .await
-                .log_err()?;
-            if !response.has_values {
-                return None;
-            }
-            let toolchains = response
-                .toolchains
-                .into_iter()
-                .filter_map(|toolchain| {
-                    Some(Toolchain {
-                        language_name: language_name.clone(),
-                        name: toolchain.name.into(),
-                        // todo(windows)
-                        // Do we need to convert path to native string?
-                        path: PathBuf::from_proto(toolchain.path)
-                            .to_string_lossy()
-                            .to_string()
-                            .into(),
-                        as_json: serde_json::Value::from_str(&toolchain.raw_json).ok()?,
-                    })
-                })
-                .collect();
-            let groups = response
-                .groups
-                .into_iter()
-                .filter_map(|group| {
-                    Some((usize::try_from(group.start_index).ok()?, group.name.into()))
-                })
-                .collect();
-            let relative_path = Arc::from(Path::new(
-                response
-                    .relative_worktree_path
-                    .as_deref()
-                    .unwrap_or_default(),
-            ));
-            Some((
-                ToolchainList {
-                    toolchains,
-                    default: None,
-                    groups,
-                },
-                relative_path,
-            ))
-        })
-    }
-    pub(crate) fn active_toolchain(
-        &self,
-        path: ProjectPath,
-        language_name: LanguageName,
-        cx: &App,
-    ) -> Task<Option<Toolchain>> {
-        let project_id = self.project_id;
-        let client = self.client.clone();
-        cx.background_spawn(async move {
-            let response = client
-                .request(proto::ActiveToolchain {
-                    project_id,
-                    worktree_id: path.worktree_id.to_proto(),
-                    language_name: language_name.clone().into(),
-                    path: Some(path.path.to_string_lossy().into_owned()),
-                })
-                .await
-                .log_err()?;
-
-            response.toolchain.and_then(|toolchain| {
-                Some(Toolchain {
-                    language_name: language_name.clone(),
-                    name: toolchain.name.into(),
-                    // todo(windows)
-                    // Do we need to convert path to native string?
-                    path: PathBuf::from_proto(toolchain.path)
-                        .to_string_lossy()
-                        .to_string()
-                        .into(),
-                    as_json: serde_json::Value::from_str(&toolchain.raw_json).ok()?,
-                })
-            })
-        })
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use futures::{
     AsyncBufReadExt as _, SinkExt as _,
-    channel::mpsc::{self},
+    channel::mpsc,
     io::BufReader,
     stream::{SelectAll, StreamExt},
 };

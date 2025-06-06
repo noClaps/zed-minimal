@@ -12,11 +12,7 @@ use node_runtime::NodeRuntime;
 use project::{ContextProviderWithTasks, Fs, lsp_store::language_server_settings};
 use serde_json::{Value, json};
 use settings::{KeymapFile, SettingsJsonSchemaParams, SettingsStore};
-use smol::{
-    fs::{self},
-    io::BufReader,
-    lock::RwLock,
-};
+use smol::{fs, io::BufReader, lock::RwLock};
 use std::{
     any::Any,
     env::consts,

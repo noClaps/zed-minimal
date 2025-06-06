@@ -50,7 +50,7 @@ use std::{
     ffi::OsStr,
     fmt,
     future::Future,
-    mem::{self},
+    mem,
     ops::{Deref, DerefMut},
     path::{Component, Path, PathBuf},
     pin::Pin,

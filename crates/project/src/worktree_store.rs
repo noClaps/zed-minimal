@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, atomic::AtomicUsize},
 };
 
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use collections::{HashMap, HashSet};
 use fs::Fs;
 use futures::{
@@ -18,7 +18,7 @@ use gpui::{
 use postage::oneshot;
 use rpc::{
     AnyProtoClient, ErrorExt, TypedEnvelope,
-    proto::{self, FromProto, SSH_PROJECT_ID, ToProto},
+    proto::{self, ToProto},
 };
 use smol::{
     channel::{Receiver, Sender},
@@ -40,13 +40,7 @@ struct MatchingEntry {
 }
 
 enum WorktreeStoreState {
-    Local {
-        fs: Arc<dyn Fs>,
-    },
-    Remote {
-        upstream_client: AnyProtoClient,
-        upstream_project_id: u64,
-    },
+    Local { fs: Arc<dyn Fs> },
 }
 
 pub struct WorktreeStore {
@@ -93,25 +87,6 @@ impl WorktreeStore {
             worktrees_reordered: false,
             retain_worktrees,
             state: WorktreeStoreState::Local { fs },
-        }
-    }
-
-    pub fn remote(
-        retain_worktrees: bool,
-        upstream_client: AnyProtoClient,
-        upstream_project_id: u64,
-    ) -> Self {
-        Self {
-            next_entry_id: Default::default(),
-            loading_worktrees: Default::default(),
-            downstream_client: None,
-            worktrees: Vec::new(),
-            worktrees_reordered: false,
-            retain_worktrees,
-            state: WorktreeStoreState::Remote {
-                upstream_client,
-                upstream_project_id,
-            },
         }
     }
 
@@ -213,20 +188,6 @@ impl WorktreeStore {
         let abs_path: SanitizedPath = abs_path.into();
         if !self.loading_worktrees.contains_key(&abs_path) {
             let task = match &self.state {
-                WorktreeStoreState::Remote {
-                    upstream_client, ..
-                } => {
-                    if upstream_client.is_via_collab() {
-                        Task::ready(Err(Arc::new(anyhow!("cannot create worktrees via collab"))))
-                    } else {
-                        self.create_ssh_worktree(
-                            upstream_client.clone(),
-                            abs_path.clone(),
-                            visible,
-                            cx,
-                        )
-                    }
-                }
                 WorktreeStoreState::Local { fs } => {
                     self.create_local_worktree(fs.clone(), abs_path.clone(), visible, cx)
                 }
@@ -244,70 +205,6 @@ impl WorktreeStore {
                 Ok(worktree) => Ok(worktree),
                 Err(err) => Err((*err).cloned()),
             }
-        })
-    }
-
-    fn create_ssh_worktree(
-        &mut self,
-        client: AnyProtoClient,
-        abs_path: impl Into<SanitizedPath>,
-        visible: bool,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<Entity<Worktree>, Arc<anyhow::Error>>> {
-        let mut abs_path = Into::<SanitizedPath>::into(abs_path).to_string();
-        // If we start with `/~` that means the ssh path was something like `ssh://user@host/~/home-dir-folder/`
-        // in which case want to strip the leading the `/`.
-        // On the host-side, the `~` will get expanded.
-        // That's what git does too: https://github.com/libgit2/libgit2/issues/3345#issuecomment-127050850
-        if abs_path.starts_with("/~") {
-            abs_path = abs_path[1..].to_string();
-        }
-        if abs_path.is_empty() {
-            abs_path = "~/".to_string();
-        }
-        cx.spawn(async move |this, cx| {
-            let this = this.upgrade().context("Dropped worktree store")?;
-
-            let path = Path::new(abs_path.as_str());
-            let response = client
-                .request(proto::AddWorktree {
-                    project_id: SSH_PROJECT_ID,
-                    path: path.to_proto(),
-                    visible,
-                })
-                .await?;
-
-            if let Some(existing_worktree) = this.read_with(cx, |this, cx| {
-                this.worktree_for_id(WorktreeId::from_proto(response.worktree_id), cx)
-            })? {
-                return Ok(existing_worktree);
-            }
-
-            let root_path_buf = PathBuf::from_proto(response.canonicalized_path.clone());
-            let root_name = root_path_buf
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or(root_path_buf.to_string_lossy().to_string());
-
-            let worktree = cx.update(|cx| {
-                Worktree::remote(
-                    SSH_PROJECT_ID,
-                    0,
-                    proto::WorktreeMetadata {
-                        id: response.worktree_id,
-                        root_name,
-                        visible,
-                        abs_path: response.canonicalized_path,
-                    },
-                    client,
-                    cx,
-                )
-            })?;
-
-            this.update(cx, |this, cx| {
-                this.add(&worktree, cx);
-            })?;
-            Ok(worktree)
         })
     }
 
@@ -425,14 +322,7 @@ impl WorktreeStore {
     }
 
     fn upstream_client(&self) -> Option<(AnyProtoClient, u64)> {
-        match &self.state {
-            WorktreeStoreState::Remote {
-                upstream_client,
-                upstream_project_id,
-                ..
-            } => Some((upstream_client.clone(), *upstream_project_id)),
-            WorktreeStoreState::Local { .. } => None,
-        }
+        None
     }
 
     pub fn set_worktrees_from_proto(
@@ -971,7 +861,6 @@ impl WorktreeStore {
     pub fn fs(&self) -> Option<Arc<dyn Fs>> {
         match &self.state {
             WorktreeStoreState::Local { fs } => Some(fs.clone()),
-            WorktreeStoreState::Remote { .. } => None,
         }
     }
 }

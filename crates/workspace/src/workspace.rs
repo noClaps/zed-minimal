@@ -18,7 +18,7 @@ pub use toast_layer::{ToastAction, ToastLayer, ToastView};
 
 use anyhow::{Context as _, Result, anyhow};
 use client::{
-    Client, ErrorExt, TypedEnvelope, UserStore,
+    Client, TypedEnvelope, UserStore,
     proto::{self, PanelId, PeerId},
 };
 use collections::{HashMap, HashSet, hash_map};
@@ -67,7 +67,6 @@ use postage::stream::Stream;
 use project::{
     DirectoryLister, Project, ProjectEntryId, ProjectPath, ResolvedPath, Worktree, WorktreeId,
 };
-use remote::{SshClientDelegate, SshConnectionOptions, ssh_session::ConnectionIdentifier};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use session::AppSession;
@@ -921,7 +920,7 @@ impl Workspace {
                 }
 
                 project::Event::DisconnectedFromHost => {
-                    this.update_window_edited(window, cx);
+                    this.update_window_edited(window);
                     let leaders_to_unfollow =
                         this.follower_states.keys().copied().collect::<Vec<_>>();
                     for leader_id in leaders_to_unfollow {
@@ -930,7 +929,7 @@ impl Workspace {
                 }
 
                 project::Event::DisconnectedFromSshRemote => {
-                    this.update_window_edited(window, cx);
+                    this.update_window_edited(window);
                 }
 
                 project::Event::Closed => {
@@ -1733,7 +1732,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> oneshot::Receiver<Option<Vec<PathBuf>>> {
-        if !lister.is_local(cx) || !WorkspaceSettings::get_global(cx).use_system_path_prompts {
+        if !WorkspaceSettings::get_global(cx).use_system_path_prompts {
             let prompt = self.on_prompt_for_open_path.take().unwrap();
             let rx = prompt(self, lister, window, cx);
             self.on_prompt_for_open_path = Some(prompt);
@@ -1777,16 +1776,6 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> oneshot::Receiver<Option<Vec<PathBuf>>> {
-        if self.project.read(cx).is_via_collab()
-            || self.project.read(cx).is_via_ssh()
-            || !WorkspaceSettings::get_global(cx).use_system_path_prompts
-        {
-            let prompt = self.on_prompt_for_new_path.take().unwrap();
-            let rx = prompt(self, lister, window, cx);
-            self.on_prompt_for_new_path = Some(prompt);
-            return rx;
-        }
-
         let (tx, rx) = oneshot::channel();
         cx.spawn_in(window, async move |workspace, cx| {
             let abs_path = workspace.update(cx, |workspace, cx| {
@@ -1845,16 +1834,7 @@ impl Workspace {
         T: 'static,
         F: 'static + FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>) -> T,
     {
-        if self.project.read(cx).is_local() {
-            Task::ready(Ok(callback(self, window, cx)))
-        } else {
-            let env = self.project.read(cx).cli_environment(cx);
-            let task = Self::new_local(Vec::new(), self.app_state.clone(), None, env, cx);
-            cx.spawn_in(window, async move |_vh, cx| {
-                let (workspace, _) = task.await?;
-                workspace.update(cx, callback)
-            })
-        }
+        Task::ready(Ok(callback(self, window, cx)))
     }
 
     pub fn worktrees<'a>(&self, cx: &'a App) -> impl 'a + Iterator<Item = Entity<Worktree>> {
@@ -2016,9 +1996,6 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Task<Result<bool>> {
-        if self.project.read(cx).is_disconnected(cx) {
-            return Task::ready(Ok(true));
-        }
         let dirty_items = self
             .panes
             .iter()
@@ -2104,7 +2081,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Task<Result<()>> {
         let window_handle = window.window_handle().downcast::<Self>();
-        let is_remote = self.project.read(cx).is_via_collab();
+        let is_remote = false;
         let has_worktree = self.project.read(cx).worktrees(cx).next().is_some();
         let has_dirty_items = self.items(cx).any(|item| item.is_dirty(cx));
 
@@ -2277,14 +2254,6 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let project = self.project.read(cx);
-        if project.is_via_collab() {
-            self.show_error(
-                &anyhow!("You cannot add folders to someone else's project"),
-                cx,
-            );
-            return;
-        }
         let paths = self.prompt_for_open_path(
             PathPromptOptions {
                 files: false,
@@ -3508,7 +3477,7 @@ impl Workspace {
             pane::Event::RemoveItem { .. } => {}
             pane::Event::RemovedItem { item } => {
                 cx.emit(Event::ActiveItemChanged);
-                self.update_window_edited(window, cx);
+                self.update_window_edited(window);
                 if let hash_map::Entry::Occupied(entry) = self.panes_by_item.entry(item.item_id()) {
                     if entry.get().entity_id() == pane.entity_id() {
                         entry.remove();
@@ -3891,17 +3860,15 @@ impl Workspace {
             }
         }
 
-        if project.is_via_collab() {
-            title.push_str(" ↙");
-        } else if project.is_shared() {
+        if project.is_shared() {
             title.push_str(" ↗");
         }
 
         window.set_window_title(&title);
     }
 
-    fn update_window_edited(&mut self, window: &mut Window, cx: &mut App) {
-        let is_edited = !self.project.read(cx).is_disconnected(cx) && !self.dirty_items.is_empty();
+    fn update_window_edited(&mut self, window: &mut Window) {
+        let is_edited = !self.dirty_items.is_empty();
         if is_edited != self.window_edited {
             self.window_edited = is_edited;
             window.set_window_edited(self.window_edited)
@@ -3922,7 +3889,7 @@ impl Workspace {
         }
         if was_dirty {
             self.dirty_items.remove(&item_id);
-            self.update_window_edited(window, cx);
+            self.update_window_edited(window);
             return;
         }
         if let Some(window_handle) = window.window_handle().downcast::<Self>() {
@@ -3930,15 +3897,15 @@ impl Workspace {
                 cx,
                 Box::new(move |cx| {
                     window_handle
-                        .update(cx, |this, window, cx| {
+                        .update(cx, |this, window, _| {
                             this.dirty_items.remove(&item_id);
-                            this.update_window_edited(window, cx)
+                            this.update_window_edited(window)
                         })
                         .ok();
                 }),
             );
             self.dirty_items.insert(item_id, s);
-            self.update_window_edited(window, cx);
+            self.update_window_edited(window);
         }
     }
 
@@ -4347,17 +4314,12 @@ impl Workspace {
 
     fn local_paths(&self, cx: &App) -> Option<Vec<Arc<Path>>> {
         let project = self.project().read(cx);
-
-        if project.is_local() {
-            Some(
-                project
-                    .visible_worktrees(cx)
-                    .map(|worktree| worktree.read(cx).abs_path())
-                    .collect::<Vec<_>>(),
-            )
-        } else {
-            None
-        }
+        Some(
+            project
+                .visible_worktrees(cx)
+                .map(|worktree| worktree.read(cx).abs_path())
+                .collect::<Vec<_>>(),
+        )
     }
 
     fn remove_panes(&mut self, member: Member, window: &mut Window, cx: &mut Context<Workspace>) {
@@ -4738,7 +4700,7 @@ impl Workspace {
                     workspace.serialize_workspace_internal(window, cx).detach();
 
                     // Ensure that we mark the window as edited if we did load dirty items
-                    workspace.update_window_edited(window, cx);
+                    workspace.update_window_edited(window);
                 })
                 .ok();
 
@@ -5829,11 +5791,7 @@ pub fn local_workspace_windows(cx: &App) -> Vec<WindowHandle<Workspace>> {
     cx.windows()
         .into_iter()
         .filter_map(|window| window.downcast::<Workspace>())
-        .filter(|workspace| {
-            workspace
-                .read(cx)
-                .is_ok_and(|workspace| workspace.project.read(cx).is_local())
-        })
+        .filter(|workspace| workspace.read(cx).is_ok())
         .collect()
 }
 
@@ -5896,25 +5854,8 @@ pub fn open_paths(
             if open_options.open_new_workspace.is_none() && existing.is_none() {
                 if all_metadatas.iter().all(|file| !file.is_dir) {
                     cx.update(|cx| {
-                        if let Some(window) = cx
-                            .active_window()
-                            .and_then(|window| window.downcast::<Workspace>())
-                        {
-                            if let Ok(workspace) = window.read(cx) {
-                                let project = workspace.project().read(cx);
-                                if project.is_local() && !project.is_via_collab() {
-                                    existing = Some(window);
-                                    open_visible = OpenVisible::None;
-                                    return;
-                                }
-                            }
-                        }
                         for window in local_workspace_windows(cx) {
-                            if let Ok(workspace) = window.read(cx) {
-                                let project = workspace.project().read(cx);
-                                if project.is_via_collab() {
-                                    continue;
-                                }
+                            if window.read(cx).is_ok() {
                                 existing = Some(window);
                                 open_visible = OpenVisible::None;
                                 break;
@@ -6018,199 +5959,6 @@ pub fn create_and_open_local_file(
 
         let item = items.pop().flatten();
         item.with_context(|| format!("path {path:?} is not a file"))?
-    })
-}
-
-pub fn open_ssh_project_with_new_connection(
-    window: WindowHandle<Workspace>,
-    connection_options: SshConnectionOptions,
-    cancel_rx: oneshot::Receiver<()>,
-    delegate: Arc<dyn SshClientDelegate>,
-    app_state: Arc<AppState>,
-    paths: Vec<PathBuf>,
-    cx: &mut App,
-) -> Task<Result<()>> {
-    cx.spawn(async move |cx| {
-        let (serialized_ssh_project, workspace_id, serialized_workspace) =
-            serialize_ssh_project(connection_options.clone(), paths.clone(), &cx).await?;
-
-        let session = match cx
-            .update(|cx| {
-                remote::SshRemoteClient::new(
-                    ConnectionIdentifier::Workspace(workspace_id.0),
-                    connection_options,
-                    cancel_rx,
-                    delegate,
-                    cx,
-                )
-            })?
-            .await?
-        {
-            Some(result) => result,
-            None => return Ok(()),
-        };
-
-        let project = cx.update(|cx| {
-            project::Project::ssh(
-                session,
-                app_state.client.clone(),
-                app_state.node_runtime.clone(),
-                app_state.user_store.clone(),
-                app_state.languages.clone(),
-                app_state.fs.clone(),
-                cx,
-            )
-        })?;
-
-        open_ssh_project_inner(
-            project,
-            paths,
-            serialized_ssh_project,
-            workspace_id,
-            serialized_workspace,
-            app_state,
-            window,
-            cx,
-        )
-        .await
-    })
-}
-
-pub fn open_ssh_project_with_existing_connection(
-    connection_options: SshConnectionOptions,
-    project: Entity<Project>,
-    paths: Vec<PathBuf>,
-    app_state: Arc<AppState>,
-    window: WindowHandle<Workspace>,
-    cx: &mut AsyncApp,
-) -> Task<Result<()>> {
-    cx.spawn(async move |cx| {
-        let (serialized_ssh_project, workspace_id, serialized_workspace) =
-            serialize_ssh_project(connection_options.clone(), paths.clone(), &cx).await?;
-
-        open_ssh_project_inner(
-            project,
-            paths,
-            serialized_ssh_project,
-            workspace_id,
-            serialized_workspace,
-            app_state,
-            window,
-            cx,
-        )
-        .await
-    })
-}
-
-async fn open_ssh_project_inner(
-    project: Entity<Project>,
-    paths: Vec<PathBuf>,
-    serialized_ssh_project: SerializedSshProject,
-    workspace_id: WorkspaceId,
-    serialized_workspace: Option<SerializedWorkspace>,
-    app_state: Arc<AppState>,
-    window: WindowHandle<Workspace>,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    let toolchains = DB.toolchains(workspace_id).await?;
-    for (toolchain, worktree_id, path) in toolchains {
-        project
-            .update(cx, |this, cx| {
-                this.activate_toolchain(ProjectPath { worktree_id, path }, toolchain, cx)
-            })?
-            .await;
-    }
-    let mut project_paths_to_open = vec![];
-    let mut project_path_errors = vec![];
-
-    for path in paths {
-        let result = cx
-            .update(|cx| Workspace::project_path_for_path(project.clone(), &path, true, cx))?
-            .await;
-        match result {
-            Ok((_, project_path)) => {
-                project_paths_to_open.push((path.clone(), Some(project_path)));
-            }
-            Err(error) => {
-                project_path_errors.push(error);
-            }
-        };
-    }
-
-    if project_paths_to_open.is_empty() {
-        return Err(project_path_errors.pop().context("no paths given")?);
-    }
-
-    cx.update_window(window.into(), |_, window, cx| {
-        window.replace_root(cx, |window, cx| {
-            telemetry::event!("SSH Project Opened");
-
-            let mut workspace =
-                Workspace::new(Some(workspace_id), project, app_state.clone(), window, cx);
-            workspace.set_serialized_ssh_project(serialized_ssh_project);
-            workspace.update_history(cx);
-            workspace
-        });
-    })?;
-
-    window
-        .update(cx, |_, window, cx| {
-            window.activate_window();
-            open_items(serialized_workspace, project_paths_to_open, window, cx)
-        })?
-        .await?;
-
-    window.update(cx, |workspace, _, cx| {
-        for error in project_path_errors {
-            if error.error_code() == proto::ErrorCode::DevServerProjectPathDoesNotExist {
-                if let Some(path) = error.error_tag("path") {
-                    workspace.show_error(&anyhow!("'{path}' does not exist"), cx)
-                }
-            } else {
-                workspace.show_error(&error, cx)
-            }
-        }
-    })?;
-
-    Ok(())
-}
-
-fn serialize_ssh_project(
-    connection_options: SshConnectionOptions,
-    paths: Vec<PathBuf>,
-    cx: &AsyncApp,
-) -> Task<
-    Result<(
-        SerializedSshProject,
-        WorkspaceId,
-        Option<SerializedWorkspace>,
-    )>,
-> {
-    cx.background_spawn(async move {
-        let serialized_ssh_project = persistence::DB
-            .get_or_create_ssh_project(
-                connection_options.host.clone(),
-                connection_options.port,
-                paths
-                    .iter()
-                    .map(|path| path.to_string_lossy().to_string())
-                    .collect::<Vec<_>>(),
-                connection_options.username.clone(),
-            )
-            .await?;
-
-        let serialized_workspace =
-            persistence::DB.workspace_for_ssh_project(&serialized_ssh_project);
-
-        let workspace_id = if let Some(workspace_id) =
-            serialized_workspace.as_ref().map(|workspace| workspace.id)
-        {
-            workspace_id
-        } else {
-            persistence::DB.next_id().await?
-        };
-
-        Ok((serialized_ssh_project, workspace_id, serialized_workspace))
     })
 }
 
@@ -6635,57 +6383,6 @@ pub struct WorkspacePosition {
     pub window_bounds: Option<WindowBounds>,
     pub display: Option<Uuid>,
     pub centered_layout: bool,
-}
-
-pub fn ssh_workspace_position_from_db(
-    host: String,
-    port: Option<u16>,
-    user: Option<String>,
-    paths_to_open: &[PathBuf],
-    cx: &App,
-) -> Task<Result<WorkspacePosition>> {
-    let paths = paths_to_open
-        .iter()
-        .map(|path| path.to_string_lossy().to_string())
-        .collect::<Vec<_>>();
-
-    cx.background_spawn(async move {
-        let serialized_ssh_project = persistence::DB
-            .get_or_create_ssh_project(host, port, paths, user)
-            .await
-            .context("fetching serialized ssh project")?;
-        let serialized_workspace =
-            persistence::DB.workspace_for_ssh_project(&serialized_ssh_project);
-
-        let (window_bounds, display) = if let Some(bounds) = window_bounds_env_override() {
-            (Some(WindowBounds::Windowed(bounds)), None)
-        } else {
-            let restorable_bounds = serialized_workspace
-                .as_ref()
-                .and_then(|workspace| Some((workspace.display?, workspace.window_bounds?)))
-                .or_else(|| {
-                    let (display, window_bounds) = DB.last_window().log_err()?;
-                    Some((display?, window_bounds?))
-                });
-
-            if let Some((serialized_display, serialized_status)) = restorable_bounds {
-                (Some(serialized_status.0), Some(serialized_display))
-            } else {
-                (None, None)
-            }
-        };
-
-        let centered_layout = serialized_workspace
-            .as_ref()
-            .map(|w| w.centered_layout)
-            .unwrap_or(false);
-
-        Ok(WorkspacePosition {
-            window_bounds,
-            display,
-            centered_layout,
-        })
-    })
 }
 
 pub fn with_active_or_new_workspace(

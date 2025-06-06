@@ -14,9 +14,6 @@ use futures::future::join_all;
 use futures::{FutureExt, SinkExt, StreamExt};
 use gpui::{App, AsyncApp, Global, WindowHandle};
 use language::Point;
-use recent_projects::{SshSettings, open_ssh_project};
-use remote::SshConnectionOptions;
-use settings::Settings;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
@@ -33,7 +30,6 @@ pub struct OpenRequest {
     pub open_paths: Vec<String>,
     pub open_channel_notes: Vec<(u64, Option<String>)>,
     pub join_channel: Option<u64>,
-    pub ssh_connection: Option<SshConnectionOptions>,
     pub dock_menu_action: Option<usize>,
 }
 
@@ -51,9 +47,9 @@ impl OpenRequest {
                 this.parse_file_path(file)
             } else if let Some(file) = url.strip_prefix("zed://ssh") {
                 let ssh_url = "ssh:/".to_string() + file;
-                this.parse_ssh_file_path(&ssh_url, cx)?
+                this.parse_ssh_file_path(&ssh_url)?
             } else if url.starts_with("ssh://") {
-                this.parse_ssh_file_path(&url, cx)?
+                this.parse_ssh_file_path(&url)?
             } else if let Some(request_path) = parse_zed_link(&url, cx) {
                 this.parse_request_path(request_path).log_err();
             } else {
@@ -70,33 +66,12 @@ impl OpenRequest {
         }
     }
 
-    fn parse_ssh_file_path(&mut self, file: &str, cx: &App) -> Result<()> {
+    fn parse_ssh_file_path(&mut self, file: &str) -> Result<()> {
         let url = url::Url::parse(file)?;
-        let host = url
-            .host()
-            .with_context(|| format!("missing host in ssh url: {file}"))?
-            .to_string();
-        let username = Some(url.username().to_string()).filter(|s| !s.is_empty());
-        let port = url.port();
         anyhow::ensure!(
             self.open_paths.is_empty(),
             "cannot open both local and ssh paths"
         );
-        let mut connection_options = SshSettings::get_global(cx).connection_options_for(
-            host.clone(),
-            port,
-            username.clone(),
-        );
-        if let Some(password) = url.password() {
-            connection_options.password = Some(password.to_string());
-        }
-        if let Some(ssh_connection) = &self.ssh_connection {
-            anyhow::ensure!(
-                *ssh_connection == connection_options,
-                "cannot open multiple ssh connections"
-            );
-        }
-        self.ssh_connection = Some(connection_options);
         self.parse_file_path(url.path());
         Ok(())
     }
@@ -353,30 +328,8 @@ async fn open_workspaces(
                         errored = true
                     }
                 }
-                SerializedWorkspaceLocation::Ssh(ssh) => {
-                    let app_state = app_state.clone();
-                    let connection_options = cx.update(|cx| {
-                        SshSettings::get_global(cx)
-                            .connection_options_for(ssh.host, ssh.port, ssh.user)
-                    });
-                    if let Ok(connection_options) = connection_options {
-                        cx.spawn(async move |mut cx| {
-                            open_ssh_project(
-                                connection_options,
-                                ssh.paths.into_iter().map(PathBuf::from).collect(),
-                                app_state,
-                                OpenOptions::default(),
-                                &mut cx,
-                            )
-                            .await
-                            .log_err();
-                        })
-                        .detach();
-                        // We don't set `errored` here if `open_ssh_project` fails, because for ssh projects, the
-                        // error is displayed in the window.
-                    } else {
-                        errored = false;
-                    }
+                SerializedWorkspaceLocation::Ssh(_) => {
+                    errored = false;
                 }
             }
         }

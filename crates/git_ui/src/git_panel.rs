@@ -1762,10 +1762,6 @@ impl GitPanel {
     }
 
     pub(crate) fn fetch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.can_push_and_pull(cx) {
-            return;
-        }
-
         let Some(repo) = self.active_repository.clone() else {
             return;
         };
@@ -1878,9 +1874,6 @@ impl GitPanel {
     }
 
     pub(crate) fn pull(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.can_push_and_pull(cx) {
-            return;
-        }
         let Some(repo) = self.active_repository.clone() else {
             return;
         };
@@ -1935,9 +1928,6 @@ impl GitPanel {
     }
 
     pub(crate) fn push(&mut self, force_push: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.can_push_and_pull(cx) {
-            return;
-        }
         let Some(repo) = self.active_repository.clone() else {
             return;
         };
@@ -2027,10 +2017,6 @@ impl GitPanel {
                 })
                 .ok();
         })
-    }
-
-    fn can_push_and_pull(&self, cx: &App) -> bool {
-        !self.project.read(cx).is_via_collab()
     }
 
     fn get_current_remote(
@@ -2635,8 +2621,6 @@ impl GitPanel {
             (false, "Commit in progress")
         } else if !self.has_commit_message(cx) {
             (false, "No commit message")
-        } else if !self.has_write_access(cx) {
-            (false, "You do not have write access to this project")
         } else {
             (true, self.commit_button_title())
         }
@@ -2740,9 +2724,6 @@ impl GitPanel {
 
     pub(crate) fn render_remote_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let branch = self.active_repository.as_ref()?.read(cx).branch.clone();
-        if !self.can_push_and_pull(cx) {
-            return None;
-        }
         Some(
             h_flex()
                 .gap_1()
@@ -3299,7 +3280,6 @@ impl GitPanel {
         let entry_staging = self.entry_staging(entry.status_entry()?);
 
         let checkbox = Checkbox::new("stage-file", entry_staging.as_bool().into())
-            .disabled(!self.has_write_access(cx))
             .fill()
             .elevation(ElevationIndex::Surface)
             .on_click({
@@ -3831,10 +3811,6 @@ impl GitPanel {
             .into_any_element()
     }
 
-    fn has_write_access(&self, cx: &App) -> bool {
-        !self.project.read(cx).is_read_only(cx)
-    }
-
     pub fn amend_pending(&self) -> bool {
         self.amend_pending
     }
@@ -3847,30 +3823,25 @@ impl GitPanel {
 
 impl Render for GitPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let project = self.project.read(cx);
         let has_entries = self.entries.len() > 0;
-
-        let has_write_access = self.has_write_access(cx);
 
         v_flex()
             .id("git_panel")
             .key_context(self.dispatch_context(window, cx))
             .track_focus(&self.focus_handle)
             .on_modifiers_changed(cx.listener(Self::handle_modifiers_changed))
-            .when(has_write_access && !project.is_read_only(cx), |this| {
-                this.on_action(cx.listener(Self::toggle_staged_for_selected))
-                    .on_action(cx.listener(GitPanel::commit))
-                    .on_action(cx.listener(GitPanel::amend))
-                    .on_action(cx.listener(GitPanel::cancel))
-                    .on_action(cx.listener(Self::stage_all))
-                    .on_action(cx.listener(Self::unstage_all))
-                    .on_action(cx.listener(Self::stage_selected))
-                    .on_action(cx.listener(Self::unstage_selected))
-                    .on_action(cx.listener(Self::restore_tracked_files))
-                    .on_action(cx.listener(Self::revert_selected))
-                    .on_action(cx.listener(Self::clean_all))
-                    .on_action(cx.listener(Self::generate_commit_message_action))
-            })
+            .on_action(cx.listener(Self::toggle_staged_for_selected))
+            .on_action(cx.listener(GitPanel::commit))
+            .on_action(cx.listener(GitPanel::amend))
+            .on_action(cx.listener(GitPanel::cancel))
+            .on_action(cx.listener(Self::stage_all))
+            .on_action(cx.listener(Self::unstage_all))
+            .on_action(cx.listener(Self::stage_selected))
+            .on_action(cx.listener(Self::unstage_selected))
+            .on_action(cx.listener(Self::restore_tracked_files))
+            .on_action(cx.listener(Self::revert_selected))
+            .on_action(cx.listener(Self::clean_all))
+            .on_action(cx.listener(Self::generate_commit_message_action))
             .on_action(cx.listener(Self::select_first))
             .on_action(cx.listener(Self::select_next))
             .on_action(cx.listener(Self::select_previous))
@@ -3899,7 +3870,7 @@ impl Render for GitPanel {
                     .children(self.render_panel_header(window, cx))
                     .map(|this| {
                         if has_entries {
-                            this.child(self.render_entries(has_write_access, window, cx))
+                            this.child(self.render_entries(true, window, cx))
                         } else {
                             this.child(self.render_empty_state(cx).into_any_element())
                         }

@@ -20,8 +20,8 @@ use git_ui::git_panel::GitPanel;
 use git_ui::project_diff::ProjectDiffToolbar;
 use gpui::{
     Action, App, AppContext as _, Context, DismissEvent, Entity, Focusable, PathPromptOptions,
-    PromptLevel, ReadGlobal, Task, TitlebarOptions, UpdateGlobal, Window, WindowKind,
-    WindowOptions, actions, point, px,
+    PromptLevel, ReadGlobal, TitlebarOptions, UpdateGlobal, Window, WindowKind, WindowOptions,
+    actions, point, px,
 };
 use image_viewer::ImageInfo;
 use migrate::{MigrationBanner, MigrationEvent, MigrationNotification, MigrationType};
@@ -29,10 +29,9 @@ use migrator::migrate_settings;
 pub use open_listener::*;
 use outline_panel::OutlinePanel;
 use paths::{local_settings_file_relative_path, local_tasks_file_relative_path};
-use project::{DirectoryLister, ProjectItem};
+use project::DirectoryLister;
 use project_panel::ProjectPanel;
 use quick_action_bar::QuickActionBar;
-use recent_projects::open_ssh_project;
 use release_channel::{AppCommitSha, ReleaseChannel};
 use rope::Rope;
 use search::project_search::ProjectSearchBar;
@@ -40,7 +39,6 @@ use settings::{
     DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, Settings, SettingsStore,
     initial_project_settings_content, initial_tasks_content, update_settings_file,
 };
-use std::path::PathBuf;
 use std::sync::atomic::{self, AtomicBool};
 use std::{borrow::Cow, path::Path, sync::Arc};
 use terminal_view::terminal_panel::{self, TerminalPanel};
@@ -58,9 +56,7 @@ use workspace::{
 };
 use workspace::{CloseWindow, with_active_or_new_workspace};
 use workspace::{Pane, notifications::DetachAndPromptErr};
-use zed_actions::{
-    OpenAccountSettings, OpenBrowser, OpenDocs, OpenServerSettings, OpenSettings, OpenZedUrl, Quit,
-};
+use zed_actions::{OpenAccountSettings, OpenBrowser, OpenDocs, OpenSettings, OpenZedUrl, Quit};
 
 actions!(
     zed,
@@ -312,7 +308,7 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         });
 
         initialize_panels(window, cx);
-        register_actions(app_state.clone(), workspace, window, cx);
+        register_actions(app_state.clone(), workspace, window);
 
         workspace.focus_handle(cx).focus(window);
     })
@@ -345,12 +341,7 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) {
     .detach();
 }
 
-fn register_actions(
-    app_state: Arc<AppState>,
-    workspace: &mut Workspace,
-    _: &mut Window,
-    cx: &mut Context<Workspace>,
-) {
+fn register_actions(app_state: Arc<AppState>, workspace: &mut Workspace, _: &mut Window) {
     workspace
         .register_action(about)
         .register_action(|_, _: &OpenDocs, _, cx| cx.open_url(DOCS_URL))
@@ -391,41 +382,6 @@ fn register_actions(
                 if let Some(task) = this
                     .update_in(cx, |this, window, cx| {
                         this.open_workspace_for_paths(false, paths, window, cx)
-                    })
-                    .log_err()
-                {
-                    task.await.log_err();
-                }
-            })
-            .detach()
-        })
-        .register_action(|workspace, action: &zed_actions::OpenRemote, window, cx| {
-            if !action.from_existing_connection {
-                cx.propagate();
-                return;
-            }
-            // You need existing remote connection to open it this way
-            if workspace.project().read(cx).is_local() {
-                return;
-            }
-            telemetry::event!("Project Opened");
-            let paths = workspace.prompt_for_open_path(
-                PathPromptOptions {
-                    files: true,
-                    directories: true,
-                    multiple: true,
-                },
-                DirectoryLister::Project(workspace.project().clone()),
-                window,
-                cx,
-            );
-            cx.spawn_in(window, async move |this, cx| {
-                let Some(paths) = paths.await.log_err().flatten() else {
-                    return;
-                };
-                if let Some(task) = this
-                    .update_in(cx, |this, window, cx| {
-                        open_new_ssh_project_from_project(this, paths, window, cx)
                     })
                     .log_err()
                 {
@@ -614,37 +570,6 @@ fn register_actions(
                 }
             }
         });
-    if workspace.project().read(cx).is_via_ssh() {
-        workspace.register_action({
-            move |workspace, _: &OpenServerSettings, window, cx| {
-                let open_server_settings = workspace
-                    .project()
-                    .update(cx, |project, cx| project.open_server_settings(cx));
-
-                cx.spawn_in(window, async move |workspace, cx| {
-                    let buffer = open_server_settings.await?;
-
-                    workspace
-                        .update_in(cx, |workspace, window, cx| {
-                            workspace.open_path(
-                                buffer
-                                    .read(cx)
-                                    .project_path(cx)
-                                    .expect("Settings file must have a location"),
-                                None,
-                                true,
-                                window,
-                                cx,
-                            )
-                        })?
-                        .await?;
-
-                    anyhow::Ok(())
-                })
-                .detach_and_log_err(cx);
-            }
-        });
-    }
 }
 
 fn initialize_pane(
@@ -993,32 +918,6 @@ pub fn handle_settings_changed(error: Option<anyhow::Error>, cx: &mut App) {
             dismiss_app_notification(&id, cx);
         }
     }
-}
-
-pub fn open_new_ssh_project_from_project(
-    workspace: &mut Workspace,
-    paths: Vec<PathBuf>,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) -> Task<anyhow::Result<()>> {
-    let app_state = workspace.app_state().clone();
-    let Some(ssh_client) = workspace.project().read(cx).ssh_client() else {
-        return Task::ready(Err(anyhow::anyhow!("Not an ssh project")));
-    };
-    let connection_options = ssh_client.read(cx).connection_options();
-    cx.spawn_in(window, async move |_, cx| {
-        open_ssh_project(
-            connection_options,
-            paths,
-            app_state,
-            workspace::OpenOptions {
-                open_new_workspace: Some(true),
-                ..Default::default()
-            },
-            cx,
-        )
-        .await
-    })
 }
 
 fn open_project_settings_file(

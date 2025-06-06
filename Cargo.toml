@@ -72,7 +72,6 @@ members = [
     "crates/refineable",
     "crates/refineable/derive_refineable",
     "crates/release_channel",
-    "crates/remote",
     "crates/repl",
     "crates/reqwest_client",
     "crates/rope",
@@ -199,7 +198,6 @@ proto = { path = "crates/proto" }
 recent_projects = { path = "crates/recent_projects" }
 refineable = { path = "crates/refineable" }
 release_channel = { path = "crates/release_channel" }
-remote = { path = "crates/remote" }
 repl = { path = "crates/repl" }
 reqwest_client = { path = "crates/reqwest_client" }
 rope = { path = "crates/rope" }

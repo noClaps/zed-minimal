@@ -8,7 +8,7 @@ use settings::{Settings, SettingsLocation};
 use smol::channel::bounded;
 use std::{
     borrow::Cow,
-    env::{self},
+    env,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -68,17 +68,7 @@ impl Project {
         }
     }
 
-    pub fn ssh_details(&self, cx: &App) -> Option<(String, SshCommand)> {
-        if let Some(ssh_client) = &self.ssh_client {
-            let ssh_client = ssh_client.read(cx);
-            if let Some(args) = ssh_client.ssh_args() {
-                return Some((
-                    ssh_client.connection_options().host.clone(),
-                    SshCommand { arguments: args },
-                ));
-            }
-        }
-
+    pub fn ssh_details(&self) -> Option<(String, SshCommand)> {
         return None;
     }
 
@@ -145,7 +135,7 @@ impl Project {
 
     pub fn exec_in_shell(&self, command: String, cx: &App) -> std::process::Command {
         let path = self.first_project_directory(cx);
-        let ssh_details = self.ssh_details(cx);
+        let ssh_details = self.ssh_details();
         let settings = self.terminal_settings(&path, cx).clone();
 
         let builder = ShellBuilder::new(ssh_details.is_none(), &settings.shell);
@@ -158,7 +148,7 @@ impl Project {
             .unwrap_or_default();
         env.extend(settings.env.clone());
 
-        match &self.ssh_details(cx) {
+        match &self.ssh_details() {
             Some((_, ssh_command)) => {
                 let (command, args) = wrap_for_ssh(
                     ssh_command,
@@ -201,7 +191,7 @@ impl Project {
                 }
             }
         };
-        let ssh_details = this.ssh_details(cx);
+        let ssh_details = this.ssh_details();
 
         let mut settings_location = None;
         if let Some(path) = path.as_ref() {

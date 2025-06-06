@@ -133,7 +133,6 @@ impl Manager {
         for project in self.projects.drain() {
             if let Some(project) = project.upgrade() {
                 project.update(cx, |project, cx| {
-                    project.disconnected_from_host(cx);
                     project.close(cx);
                 });
             }

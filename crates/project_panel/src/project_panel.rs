@@ -4,7 +4,6 @@ mod utils;
 use anyhow::{Context as _, Result};
 use client::{ErrorCode, ErrorExt};
 use collections::{BTreeSet, HashMap, hash_map};
-use command_palette_hooks::CommandPaletteFilter;
 use db::kvp::KEY_VALUE_STORE;
 use editor::{
     Editor, EditorEvent, EditorSettings, ShowScrollbar,
@@ -41,7 +40,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsStore, update_settings_file};
 use smallvec::SmallVec;
-use std::any::TypeId;
 use std::{
     cell::OnceCell,
     cmp,
@@ -415,15 +413,6 @@ impl ProjectPanel {
             })
             .detach();
 
-            let trash_action = [TypeId::of::<Trash>()];
-            let is_remote = project.read(cx).is_via_collab();
-
-            if is_remote {
-                CommandPaletteFilter::update_global(cx, |filter, _cx| {
-                    filter.hide_action_types(&trash_action);
-                });
-            }
-
             let filename_editor = cx.new(|cx| Editor::single_line(window, cx));
 
             cx.subscribe(
@@ -525,7 +514,7 @@ impl ProjectPanel {
                             let file_path = entry.path.clone();
                             let worktree_id = worktree.read(cx).id();
                             let entry_id = entry.id;
-                            let is_via_ssh = project.read(cx).is_via_ssh();
+                            let is_via_ssh = false;
 
                             workspace
                                 .open_path_preview(
@@ -764,76 +753,63 @@ impl ProjectPanel {
             let is_dir = entry.is_dir();
             let is_foldable = auto_fold_dirs && self.is_foldable(entry, worktree);
             let is_unfoldable = auto_fold_dirs && self.is_unfoldable(entry, worktree);
-            let is_read_only = project.is_read_only(cx);
-            let is_remote = project.is_via_collab();
-            let is_local = project.is_local();
 
             let context_menu = ContextMenu::build(window, cx, |menu, _, _| {
                 menu.context(self.focus_handle.clone()).map(|menu| {
-                    if is_read_only {
-                        menu.when(is_dir, |menu| {
-                            menu.action("Search Inside", Box::new(NewSearchInDirectory))
+                    menu.action("New File", Box::new(NewFile))
+                        .action("New Folder", Box::new(NewDirectory))
+                        .separator()
+                        .action("Reveal in Finder", Box::new(RevealInFileManager))
+                        .action("Open in Default App", Box::new(OpenWithSystem))
+                        .action("Open in Terminal", Box::new(OpenInTerminal))
+                        .when(is_dir, |menu| {
+                            menu.separator()
+                                .action("Find in Folder…", Box::new(NewSearchInDirectory))
                         })
-                    } else {
-                        menu.action("New File", Box::new(NewFile))
-                            .action("New Folder", Box::new(NewDirectory))
-                            .separator()
-                            .when(is_local, |menu| {
-                                menu.action("Reveal in Finder", Box::new(RevealInFileManager))
-                            })
-                            .when(is_local, |menu| {
-                                menu.action("Open in Default App", Box::new(OpenWithSystem))
-                            })
-                            .action("Open in Terminal", Box::new(OpenInTerminal))
-                            .when(is_dir, |menu| {
-                                menu.separator()
-                                    .action("Find in Folder…", Box::new(NewSearchInDirectory))
-                            })
-                            .when(is_unfoldable, |menu| {
-                                menu.action("Unfold Directory", Box::new(UnfoldDirectory))
-                            })
-                            .when(is_foldable, |menu| {
-                                menu.action("Fold Directory", Box::new(FoldDirectory))
-                            })
-                            .separator()
-                            .action("Cut", Box::new(Cut))
-                            .action("Copy", Box::new(Copy))
-                            .action("Duplicate", Box::new(Duplicate))
-                            // TODO: Paste should always be visible, cbut disabled when clipboard is empty
-                            .map(|menu| {
-                                if self.clipboard.as_ref().is_some() {
-                                    menu.action("Paste", Box::new(Paste))
-                                } else {
-                                    menu.disabled_action("Paste", Box::new(Paste))
-                                }
-                            })
-                            .separator()
-                            .action("Copy Path", Box::new(zed_actions::workspace::CopyPath))
-                            .action(
-                                "Copy Relative Path",
-                                Box::new(zed_actions::workspace::CopyRelativePath),
-                            )
-                            .separator()
-                            .action("Rename", Box::new(Rename))
-                            .when(!is_root & !is_remote, |menu| {
-                                menu.action("Trash", Box::new(Trash { skip_prompt: false }))
-                            })
-                            .when(!is_root, |menu| {
-                                menu.action("Delete", Box::new(Delete { skip_prompt: false }))
-                            })
-                            .when(!is_remote & is_root, |menu| {
-                                menu.separator()
-                                    .action(
-                                        "Add Folder to Project…",
-                                        Box::new(workspace::AddFolderToProject),
-                                    )
-                                    .action("Remove from Project", Box::new(RemoveFromProject))
-                            })
-                            .when(is_root, |menu| {
-                                menu.separator()
-                                    .action("Collapse All", Box::new(CollapseAllEntries))
-                            })
-                    }
+                        .when(is_unfoldable, |menu| {
+                            menu.action("Unfold Directory", Box::new(UnfoldDirectory))
+                        })
+                        .when(is_foldable, |menu| {
+                            menu.action("Fold Directory", Box::new(FoldDirectory))
+                        })
+                        .separator()
+                        .action("Cut", Box::new(Cut))
+                        .action("Copy", Box::new(Copy))
+                        .action("Duplicate", Box::new(Duplicate))
+                        // TODO: Paste should always be visible, cbut disabled when clipboard is empty
+                        .map(|menu| {
+                            if self.clipboard.as_ref().is_some() {
+                                menu.action("Paste", Box::new(Paste))
+                            } else {
+                                menu.disabled_action("Paste", Box::new(Paste))
+                            }
+                        })
+                        .separator()
+                        .action("Copy Path", Box::new(zed_actions::workspace::CopyPath))
+                        .action(
+                            "Copy Relative Path",
+                            Box::new(zed_actions::workspace::CopyRelativePath),
+                        )
+                        .separator()
+                        .action("Rename", Box::new(Rename))
+                        .when(!is_root, |menu| {
+                            menu.action("Trash", Box::new(Trash { skip_prompt: false }))
+                        })
+                        .when(!is_root, |menu| {
+                            menu.action("Delete", Box::new(Delete { skip_prompt: false }))
+                        })
+                        .when(is_root, |menu| {
+                            menu.separator()
+                                .action(
+                                    "Add Folder to Project…",
+                                    Box::new(workspace::AddFolderToProject),
+                                )
+                                .action("Remove from Project", Box::new(RemoveFromProject))
+                        })
+                        .when(is_root, |menu| {
+                            menu.separator()
+                                .action("Collapse All", Box::new(CollapseAllEntries))
+                        })
                 })
             });
 
@@ -4660,11 +4636,9 @@ fn item_width_estimate(depth: usize, item_text_chars: usize, is_symlink: bool) -
 impl Render for ProjectPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let has_worktree = !self.visible_entries.is_empty();
-        let project = self.project.read(cx);
         let indent_size = ProjectPanelSettings::get_global(cx).indent_size;
         let show_indent_guides =
             ProjectPanelSettings::get_global(cx).indent_guides.show == ShowIndentGuides::Always;
-        let is_local = project.is_local();
 
         if has_worktree {
             let item_count = self
@@ -4779,47 +4753,39 @@ impl Render for ProjectPanel {
                 .on_action(cx.listener(Self::unfold_directory))
                 .on_action(cx.listener(Self::fold_directory))
                 .on_action(cx.listener(Self::remove_from_project))
-                .when(!project.is_read_only(cx), |el| {
-                    el.on_action(cx.listener(Self::new_file))
-                        .on_action(cx.listener(Self::new_directory))
-                        .on_action(cx.listener(Self::rename))
-                        .on_action(cx.listener(Self::delete))
-                        .on_action(cx.listener(Self::trash))
-                        .on_action(cx.listener(Self::cut))
-                        .on_action(cx.listener(Self::copy))
-                        .on_action(cx.listener(Self::paste))
-                        .on_action(cx.listener(Self::duplicate))
-                        .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
-                            if event.up.click_count > 1 {
-                                if let Some(entry_id) = this.last_worktree_root_id {
-                                    let project = this.project.read(cx);
+                .on_action(cx.listener(Self::new_file))
+                .on_action(cx.listener(Self::new_directory))
+                .on_action(cx.listener(Self::rename))
+                .on_action(cx.listener(Self::delete))
+                .on_action(cx.listener(Self::trash))
+                .on_action(cx.listener(Self::cut))
+                .on_action(cx.listener(Self::copy))
+                .on_action(cx.listener(Self::paste))
+                .on_action(cx.listener(Self::duplicate))
+                .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                    if event.up.click_count > 1 {
+                        if let Some(entry_id) = this.last_worktree_root_id {
+                            let project = this.project.read(cx);
 
-                                    let worktree_id = if let Some(worktree) =
-                                        project.worktree_for_entry(entry_id, cx)
-                                    {
-                                        worktree.read(cx).id()
-                                    } else {
-                                        return;
-                                    };
+                            let worktree_id =
+                                if let Some(worktree) = project.worktree_for_entry(entry_id, cx) {
+                                    worktree.read(cx).id()
+                                } else {
+                                    return;
+                                };
 
-                                    this.selection = Some(SelectedEntry {
-                                        worktree_id,
-                                        entry_id,
-                                    });
+                            this.selection = Some(SelectedEntry {
+                                worktree_id,
+                                entry_id,
+                            });
 
-                                    this.new_file(&NewFile, window, cx);
-                                }
-                            }
-                        }))
-                })
-                .when(project.is_local(), |el| {
-                    el.on_action(cx.listener(Self::reveal_in_finder))
-                        .on_action(cx.listener(Self::open_system))
-                        .on_action(cx.listener(Self::open_in_terminal))
-                })
-                .when(project.is_via_ssh(), |el| {
-                    el.on_action(cx.listener(Self::open_in_terminal))
-                })
+                            this.new_file(&NewFile, window, cx);
+                        }
+                    }
+                }))
+                .on_action(cx.listener(Self::reveal_in_finder))
+                .on_action(cx.listener(Self::open_system))
+                .on_action(cx.listener(Self::open_in_terminal))
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -4987,32 +4953,30 @@ impl Render for ProjectPanel {
                                 .log_err();
                         })),
                 )
-                .when(is_local, |div| {
-                    div.drag_over::<ExternalPaths>(|style, _, _, cx| {
-                        style.bg(cx.theme().colors().drop_target_background)
-                    })
-                    .on_drop(cx.listener(
-                        move |this, external_paths: &ExternalPaths, window, cx| {
-                            this.drag_target_entry = None;
-                            this.hover_scroll_task.take();
-                            if let Some(task) = this
-                                .workspace
-                                .update(cx, |workspace, cx| {
-                                    workspace.open_workspace_for_paths(
-                                        true,
-                                        external_paths.paths().to_owned(),
-                                        window,
-                                        cx,
-                                    )
-                                })
-                                .log_err()
-                            {
-                                task.detach_and_log_err(cx);
-                            }
-                            cx.stop_propagation();
-                        },
-                    ))
+                .drag_over::<ExternalPaths>(|style, _, _, cx| {
+                    style.bg(cx.theme().colors().drop_target_background)
                 })
+                .on_drop(
+                    cx.listener(move |this, external_paths: &ExternalPaths, window, cx| {
+                        this.drag_target_entry = None;
+                        this.hover_scroll_task.take();
+                        if let Some(task) = this
+                            .workspace
+                            .update(cx, |workspace, cx| {
+                                workspace.open_workspace_for_paths(
+                                    true,
+                                    external_paths.paths().to_owned(),
+                                    window,
+                                    cx,
+                                )
+                            })
+                            .log_err()
+                        {
+                            task.detach_and_log_err(cx);
+                        }
+                        cx.stop_propagation();
+                    }),
+                )
         }
     }
 }

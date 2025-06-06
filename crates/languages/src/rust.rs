@@ -13,7 +13,7 @@ use project::project_settings::ProjectSettings;
 use regex::Regex;
 use serde_json::json;
 use settings::Settings as _;
-use smol::fs::{self};
+use smol::fs;
 use std::fmt::Display;
 use std::{
     any::Any,

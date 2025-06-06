@@ -18,7 +18,7 @@ use gpui::{
     Subscription, Task, WeakEntity, Window, actions, div,
 };
 use language::{
-    Bias, Buffer, BufferRow, BufferSnapshot, DiagnosticEntry, Point, ToTreeSitterPoint,
+    Bias, Buffer, BufferRow, BufferSnapshot, Capability, DiagnosticEntry, Point, ToTreeSitterPoint,
 };
 use project::{
     DiagnosticSummary, Project, ProjectPath,
@@ -193,7 +193,7 @@ impl ProjectDiagnosticsEditor {
         })
         .detach();
 
-        let excerpts = cx.new(|cx| MultiBuffer::new(project_handle.read(cx).capability()));
+        let excerpts = cx.new(|_| MultiBuffer::new(Capability::ReadWrite));
         let editor = cx.new(|cx| {
             let mut editor =
                 Editor::for_multibuffer(excerpts.clone(), Some(project_handle.clone()), window, cx);

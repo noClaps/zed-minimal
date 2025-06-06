@@ -1259,56 +1259,52 @@ fn possible_open_target(
     }
 
     // Before entire worktree traversal(s), make an attempt to do FS checks if available.
-    let fs_paths_to_check = if workspace.read(cx).project().read(cx).is_local() {
-        potential_paths
-            .into_iter()
-            .flat_map(|path_to_check| {
-                let mut paths_to_check = Vec::new();
-                let maybe_path = &path_to_check.path;
-                if maybe_path.starts_with("~") {
-                    if let Some(home_path) =
-                        maybe_path
-                            .strip_prefix("~")
-                            .ok()
-                            .and_then(|stripped_maybe_path| {
-                                Some(dirs::home_dir()?.join(stripped_maybe_path))
-                            })
-                    {
+    let fs_paths_to_check: Vec<PathWithPosition> = potential_paths
+        .into_iter()
+        .flat_map(|path_to_check| {
+            let mut paths_to_check = Vec::new();
+            let maybe_path = &path_to_check.path;
+            if maybe_path.starts_with("~") {
+                if let Some(home_path) =
+                    maybe_path
+                        .strip_prefix("~")
+                        .ok()
+                        .and_then(|stripped_maybe_path| {
+                            Some(dirs::home_dir()?.join(stripped_maybe_path))
+                        })
+                {
+                    paths_to_check.push(PathWithPosition {
+                        path: home_path,
+                        row: path_to_check.row,
+                        column: path_to_check.column,
+                    });
+                }
+            } else {
+                paths_to_check.push(PathWithPosition {
+                    path: maybe_path.clone(),
+                    row: path_to_check.row,
+                    column: path_to_check.column,
+                });
+                if maybe_path.is_relative() {
+                    if let Some(cwd) = &cwd {
                         paths_to_check.push(PathWithPosition {
-                            path: home_path,
+                            path: cwd.join(maybe_path),
                             row: path_to_check.row,
                             column: path_to_check.column,
                         });
                     }
-                } else {
-                    paths_to_check.push(PathWithPosition {
-                        path: maybe_path.clone(),
-                        row: path_to_check.row,
-                        column: path_to_check.column,
-                    });
-                    if maybe_path.is_relative() {
-                        if let Some(cwd) = &cwd {
-                            paths_to_check.push(PathWithPosition {
-                                path: cwd.join(maybe_path),
-                                row: path_to_check.row,
-                                column: path_to_check.column,
-                            });
-                        }
-                        for worktree in &worktree_candidates {
-                            paths_to_check.push(PathWithPosition {
-                                path: worktree.read(cx).abs_path().join(maybe_path),
-                                row: path_to_check.row,
-                                column: path_to_check.column,
-                            });
-                        }
+                    for worktree in &worktree_candidates {
+                        paths_to_check.push(PathWithPosition {
+                            path: worktree.read(cx).abs_path().join(maybe_path),
+                            row: path_to_check.row,
+                            column: path_to_check.column,
+                        });
                     }
                 }
-                paths_to_check
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+            }
+            paths_to_check
+        })
+        .collect();
 
     let worktree_check_task = cx.spawn(async move |cx| {
         for (worktree, worktree_paths_to_check) in worktree_paths_to_check {

@@ -10,7 +10,7 @@ use smol::io::BufReader;
 use smol::{fs, lock::Mutex};
 use std::fmt::Display;
 use std::{
-    env::{self},
+    env,
     ffi::OsString,
     io,
     path::{Path, PathBuf},
@@ -366,12 +366,8 @@ impl ManagedNodeRuntime {
     async fn install_if_needed(http: &Arc<dyn HttpClient>) -> Result<Self> {
         log::info!("Node runtime install_if_needed");
 
-        let os = "darwin";
-
-        let arch = "arm64";
-
         let version = Self::VERSION;
-        let folder_name = format!("node-{version}-{os}-{arch}");
+        let folder_name = format!("node-{version}-darwin-arm64");
         let node_containing_dir = paths::data_dir().join("node");
         let node_dir = node_containing_dir.join(folder_name);
         let node_binary = node_dir.join(Self::NODE_PATH);
@@ -425,12 +421,7 @@ impl ManagedNodeRuntime {
             let archive_type = ArchiveType::TarGz;
 
             let version = Self::VERSION;
-            let file_name = format!(
-                "node-{version}-{os}-{arch}.{extension}",
-                extension = match archive_type {
-                    ArchiveType::TarGz => "tar.gz",
-                }
-            );
+            let file_name = format!("node-{version}-darwin-arm64.tar.gz");
 
             let url = format!("https://nodejs.org/dist/{version}/{file_name}");
             log::info!("Downloading Node.js binary from {url}");

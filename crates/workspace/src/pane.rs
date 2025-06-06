@@ -1924,14 +1924,10 @@ impl Pane {
                 let new_path = pane.update_in(cx, |pane, window, cx| {
                     pane.activate_item(item_ix, true, true, window, cx);
                     pane.workspace.update(cx, |workspace, cx| {
-                        let lister = if workspace.project().read(cx).is_local() {
-                            DirectoryLister::Local(
-                                workspace.project().clone(),
-                                workspace.app_state().fs.clone(),
-                            )
-                        } else {
-                            DirectoryLister::Project(workspace.project().clone())
-                        };
+                        let lister = DirectoryLister::Local(
+                            workspace.project().clone(),
+                            workspace.app_state().fs.clone(),
+                        );
                         workspace.prompt_for_new_path(lister, window, cx)
                     })
                 })??;
@@ -3061,23 +3057,6 @@ impl Pane {
         let mut to_pane = cx.entity().clone();
         let mut split_direction = self.drag_split_direction;
         let paths = paths.paths().to_vec();
-        let is_remote = self
-            .workspace
-            .update(cx, |workspace, cx| {
-                if workspace.project().read(cx).is_via_collab() {
-                    workspace.show_error(
-                        &anyhow::anyhow!("Cannot drop files on a remote project"),
-                        cx,
-                    );
-                    true
-                } else {
-                    false
-                }
-            })
-            .unwrap_or(true);
-        if is_remote {
-            return;
-        }
 
         self.workspace
             .update(cx, |workspace, cx| {
@@ -3285,7 +3264,6 @@ impl Render for Pane {
         let Some(project) = self.project.upgrade() else {
             return div().track_focus(&self.focus_handle(cx));
         };
-        let is_local = project.read(cx).is_local();
 
         v_flex()
             .key_context(key_context)
@@ -3442,9 +3420,7 @@ impl Render for Pane {
                     .overflow_hidden()
                     .on_drag_move::<DraggedTab>(cx.listener(Self::handle_drag_move))
                     .on_drag_move::<DraggedSelection>(cx.listener(Self::handle_drag_move))
-                    .when(is_local, |div| {
-                        div.on_drag_move::<ExternalPaths>(cx.listener(Self::handle_drag_move))
-                    })
+                    .on_drag_move::<ExternalPaths>(cx.listener(Self::handle_drag_move))
                     .map(|div| {
                         if let Some(item) = self.active_item() {
                             div.id("pane_placeholder")
@@ -3487,9 +3463,7 @@ impl Render for Pane {
                             .bg(cx.theme().colors().drop_target_background)
                             .group_drag_over::<DraggedTab>("", |style| style.visible())
                             .group_drag_over::<DraggedSelection>("", |style| style.visible())
-                            .when(is_local, |div| {
-                                div.group_drag_over::<ExternalPaths>("", |style| style.visible())
-                            })
+                            .group_drag_over::<ExternalPaths>("", |style| style.visible())
                             .when_some(self.can_drop_predicate.clone(), |this, p| {
                                 this.can_drop(move |a, window, cx| p(a, window, cx))
                             })

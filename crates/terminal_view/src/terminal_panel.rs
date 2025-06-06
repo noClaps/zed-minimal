@@ -53,9 +53,7 @@ pub fn init(cx: &mut App) {
             workspace.register_action(TerminalPanel::new_terminal);
             workspace.register_action(TerminalPanel::open_terminal);
             workspace.register_action(|workspace, _: &ToggleFocus, window, cx| {
-                if is_enabled_in_workspace(workspace, cx) {
-                    workspace.toggle_panel_focus::<TerminalPanel>(window, cx);
-                }
+                workspace.toggle_panel_focus::<TerminalPanel>(window, cx);
             });
         },
     )
@@ -458,10 +456,7 @@ impl TerminalPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Task<Result<WeakEntity<Terminal>>> {
-        let Ok(is_local) = self
-            .workspace
-            .update(cx, |workspace, cx| workspace.project().read(cx).is_local())
-        else {
+        let Ok(is_local) = self.workspace.update(cx, |_, _| true) else {
             return Task::ready(Err(anyhow!("Project is not local")));
         };
 
@@ -627,11 +622,6 @@ impl TerminalPanel {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) -> Task<Result<WeakEntity<Terminal>>> {
-        if !is_enabled_in_workspace(workspace, cx) {
-            return Task::ready(Err(anyhow!(
-                "terminal not yet supported for remote projects"
-            )));
-        }
         let window_handle = window.window_handle();
         let project = workspace.project().downgrade();
         cx.spawn_in(window, async move |workspace, cx| {
@@ -667,7 +657,7 @@ impl TerminalPanel {
     ) -> Task<Result<WeakEntity<Terminal>>> {
         let workspace = self.workspace.clone();
         cx.spawn_in(window, async move |terminal_panel, cx| {
-            if workspace.update(cx, |workspace, cx| !is_enabled_in_workspace(workspace, cx))? {
+            if workspace.update(cx, |_, _| false)? {
                 anyhow::bail!("terminal not yet supported for remote projects");
             }
             let pane = terminal_panel.update(cx, |terminal_panel, _| {
@@ -867,12 +857,6 @@ impl TerminalPanel {
         self.active_pane.read(cx).items_len() == 0 && self.pending_terminals_to_add == 0
     }
 
-    fn is_enabled(&self, cx: &App) -> bool {
-        self.workspace.upgrade().map_or(false, |workspace| {
-            is_enabled_in_workspace(workspace.read(cx), cx)
-        })
-    }
-
     fn activate_pane_in_direction(
         &mut self,
         direction: SplitDirection,
@@ -905,10 +889,6 @@ impl TerminalPanel {
     }
 }
 
-fn is_enabled_in_workspace(workspace: &Workspace, cx: &App) -> bool {
-    workspace.project().read(cx).supports_terminal(cx)
-}
-
 pub fn new_terminal_pane(
     workspace: WeakEntity<Workspace>,
     project: Entity<Project>,
@@ -916,7 +896,6 @@ pub fn new_terminal_pane(
     window: &mut Window,
     cx: &mut Context<TerminalPanel>,
 ) -> Entity<Pane> {
-    let is_local = project.read(cx).is_local();
     let terminal_panel = cx.entity().clone();
     let pane = cx.new(|cx| {
         let mut pane = Pane::new(
@@ -1073,7 +1052,7 @@ pub fn new_terminal_pane(
                 {
                     add_paths_to_terminal(pane, &[entry_path], window, cx);
                 }
-            } else if is_local {
+            } else {
                 if let Some(paths) = dropped_item.downcast_ref::<ExternalPaths>() {
                     add_paths_to_terminal(pane, paths.paths(), window, cx);
                 }
@@ -1395,9 +1374,7 @@ impl Panel for TerminalPanel {
     }
 
     fn icon(&self, _window: &Window, cx: &App) -> Option<IconName> {
-        if (self.is_enabled(cx) || !self.has_no_terminals(cx))
-            && TerminalSettings::get_global(cx).button
-        {
+        if TerminalSettings::get_global(cx).button {
             Some(IconName::Terminal)
         } else {
             None

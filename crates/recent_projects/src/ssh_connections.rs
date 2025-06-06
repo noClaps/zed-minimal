@@ -1,22 +1,15 @@
 use std::collections::BTreeSet;
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
-use anyhow::{Context as _, Result};
-use auto_update::AutoUpdater;
+use anyhow::Result;
 use editor::Editor;
-use extension_host::ExtensionStore;
 use futures::channel::oneshot;
 use gpui::{
-    Animation, AnimationExt, AnyWindowHandle, App, AsyncApp, DismissEvent, Entity, EventEmitter,
-    Focusable, FontFeatures, ParentElement as _, PromptLevel, Render, SemanticVersion,
-    SharedString, Task, TextStyleRefinement, Transformation, WeakEntity, percentage,
+    Animation, AnimationExt, App, DismissEvent, Entity, EventEmitter, Focusable, FontFeatures,
+    ParentElement as _, Render, SharedString, TextStyleRefinement, Transformation, percentage,
 };
 
-use language::CursorShape;
 use markdown::{Markdown, MarkdownElement, MarkdownStyle};
-use release_channel::ReleaseChannel;
-use remote::ssh_session::{ConnectionIdentifier, SshPortForwardOption};
-use remote::{SshConnectionOptions, SshPlatform, SshRemoteClient};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{Settings, SettingsSources};
@@ -26,7 +19,7 @@ use ui::{
     LabelCommon, Styled, Window, prelude::*,
 };
 use util::serde::default_true;
-use workspace::{AppState, ModalView, Workspace};
+use workspace::{ModalView, Workspace};
 
 #[derive(Deserialize)]
 pub struct SshSettings {
@@ -39,34 +32,6 @@ pub struct SshSettings {
 impl SshSettings {
     pub fn ssh_connections(&self) -> impl Iterator<Item = SshConnection> + use<> {
         self.ssh_connections.clone().into_iter().flatten()
-    }
-
-    pub fn connection_options_for(
-        &self,
-        host: String,
-        port: Option<u16>,
-        username: Option<String>,
-    ) -> SshConnectionOptions {
-        for conn in self.ssh_connections() {
-            if conn.host == host && conn.username == username && conn.port == port {
-                return SshConnectionOptions {
-                    nickname: conn.nickname,
-                    upload_binary_over_ssh: conn.upload_binary_over_ssh.unwrap_or_default(),
-                    args: Some(conn.args),
-                    host,
-                    port,
-                    username,
-                    port_forwards: conn.port_forwards,
-                    password: None,
-                };
-            }
-        }
-        SshConnectionOptions {
-            host,
-            port,
-            username,
-            ..Default::default()
-        }
     }
 }
 
@@ -91,24 +56,6 @@ pub struct SshConnection {
     // limited outbound internet access.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upload_binary_over_ssh: Option<bool>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub port_forwards: Option<Vec<SshPortForwardOption>>,
-}
-
-impl From<SshConnection> for SshConnectionOptions {
-    fn from(val: SshConnection) -> Self {
-        SshConnectionOptions {
-            host: val.host.into(),
-            username: val.username,
-            port: val.port,
-            password: None,
-            args: Some(val.args),
-            nickname: val.nickname,
-            upload_binary_over_ssh: val.upload_binary_over_ssh.unwrap_or_default(),
-            port_forwards: val.port_forwards,
-        }
-    }
 }
 
 #[derive(Clone, Default, Serialize, PartialEq, Eq, PartialOrd, Ord, Deserialize, JsonSchema)]
@@ -156,68 +103,6 @@ pub struct SshConnectionModal {
 }
 
 impl SshPrompt {
-    pub(crate) fn new(
-        connection_options: &SshConnectionOptions,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let connection_string = connection_options.connection_string().into();
-        let nickname = connection_options.nickname.clone().map(|s| s.into());
-
-        Self {
-            connection_string,
-            nickname,
-            editor: cx.new(|cx| Editor::single_line(window, cx)),
-            status_message: None,
-            cancellation: None,
-            prompt: None,
-        }
-    }
-
-    pub fn set_cancellation_tx(&mut self, tx: oneshot::Sender<()>) {
-        self.cancellation = Some(tx);
-    }
-
-    pub fn set_prompt(
-        &mut self,
-        prompt: String,
-        tx: oneshot::Sender<String>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let theme = ThemeSettings::get_global(cx);
-
-        let refinement = TextStyleRefinement {
-            font_family: Some(theme.buffer_font.family.clone()),
-            font_features: Some(FontFeatures::disable_ligatures()),
-            font_size: Some(theme.buffer_font_size(cx).into()),
-            color: Some(cx.theme().colors().editor_foreground),
-            background_color: Some(gpui::transparent_black()),
-            ..Default::default()
-        };
-
-        self.editor.update(cx, |editor, cx| {
-            if prompt.contains("yes/no") {
-                editor.set_masked(false, cx);
-            } else {
-                editor.set_masked(true, cx);
-            }
-            editor.set_text_style_refinement(refinement);
-            editor.set_cursor_shape(CursorShape::Block, cx);
-        });
-
-        let markdown = cx.new(|cx| Markdown::new_text(prompt.into(), cx));
-        self.prompt = Some((markdown, tx));
-        self.status_message.take();
-        window.focus(&self.editor.focus_handle(cx));
-        cx.notify();
-    }
-
-    pub fn set_status(&mut self, status: Option<String>, cx: &mut Context<Self>) {
-        self.status_message = status.map(|s| s.into());
-        cx.notify();
-    }
-
     pub fn confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some((_, tx)) = self.prompt.take() {
             self.status_message = Some("Connecting".into());
@@ -292,19 +177,6 @@ impl Render for SshPrompt {
 }
 
 impl SshConnectionModal {
-    pub(crate) fn new(
-        connection_options: &SshConnectionOptions,
-        paths: Vec<PathBuf>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        Self {
-            prompt: cx.new(|cx| SshPrompt::new(connection_options, window, cx)),
-            finished: false,
-            paths,
-        }
-    }
-
     fn confirm(&mut self, _: &menu::Confirm, window: &mut Window, cx: &mut Context<Self>) {
         self.prompt
             .update(cx, |prompt, cx| prompt.confirm(window, cx))
@@ -439,253 +311,6 @@ impl ModalView for SshConnectionModal {
     }
 }
 
-#[derive(Clone)]
-pub struct SshClientDelegate {
-    window: AnyWindowHandle,
-    ui: WeakEntity<SshPrompt>,
-    known_password: Option<String>,
-}
-
-impl remote::SshClientDelegate for SshClientDelegate {
-    fn ask_password(&self, prompt: String, tx: oneshot::Sender<String>, cx: &mut AsyncApp) {
-        let mut known_password = self.known_password.clone();
-        if let Some(password) = known_password.take() {
-            tx.send(password).ok();
-        } else {
-            self.window
-                .update(cx, |_, window, cx| {
-                    self.ui.update(cx, |modal, cx| {
-                        modal.set_prompt(prompt, tx, window, cx);
-                    })
-                })
-                .ok();
-        }
-    }
-
-    fn set_status(&self, status: Option<&str>, cx: &mut AsyncApp) {
-        self.update_status(status, cx)
-    }
-
-    fn download_server_binary_locally(
-        &self,
-        platform: SshPlatform,
-        release_channel: ReleaseChannel,
-        version: Option<SemanticVersion>,
-        cx: &mut AsyncApp,
-    ) -> Task<anyhow::Result<PathBuf>> {
-        cx.spawn(async move |cx| {
-            let binary_path = AutoUpdater::download_remote_server_release(
-                platform.os,
-                platform.arch,
-                release_channel,
-                version,
-                cx,
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "Downloading remote server binary (version: {}, os: {}, arch: {})",
-                    version
-                        .map(|v| format!("{}", v))
-                        .unwrap_or("unknown".to_string()),
-                    platform.os,
-                    platform.arch,
-                )
-            })?;
-            Ok(binary_path)
-        })
-    }
-
-    fn get_download_params(
-        &self,
-        platform: SshPlatform,
-        release_channel: ReleaseChannel,
-        version: Option<SemanticVersion>,
-        cx: &mut AsyncApp,
-    ) -> Task<Result<Option<(String, String)>>> {
-        cx.spawn(async move |cx| {
-            AutoUpdater::get_remote_server_release_url(
-                platform.os,
-                platform.arch,
-                release_channel,
-                version,
-                cx,
-            )
-            .await
-        })
-    }
-}
-
-impl SshClientDelegate {
-    fn update_status(&self, status: Option<&str>, cx: &mut AsyncApp) {
-        self.window
-            .update(cx, |_, _, cx| {
-                self.ui.update(cx, |modal, cx| {
-                    modal.set_status(status.map(|s| s.to_string()), cx);
-                })
-            })
-            .ok();
-    }
-}
-
 pub fn is_connecting_over_ssh(workspace: &Workspace, cx: &App) -> bool {
     workspace.active_modal::<SshConnectionModal>(cx).is_some()
-}
-
-pub fn connect_over_ssh(
-    unique_identifier: ConnectionIdentifier,
-    connection_options: SshConnectionOptions,
-    ui: Entity<SshPrompt>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Task<Result<Option<Entity<SshRemoteClient>>>> {
-    let window = window.window_handle();
-    let known_password = connection_options.password.clone();
-    let (tx, rx) = oneshot::channel();
-    ui.update(cx, |ui, _cx| ui.set_cancellation_tx(tx));
-
-    remote::SshRemoteClient::new(
-        unique_identifier,
-        connection_options,
-        rx,
-        Arc::new(SshClientDelegate {
-            window,
-            ui: ui.downgrade(),
-            known_password,
-        }),
-        cx,
-    )
-}
-
-pub async fn open_ssh_project(
-    connection_options: SshConnectionOptions,
-    paths: Vec<PathBuf>,
-    app_state: Arc<AppState>,
-    open_options: workspace::OpenOptions,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    let window = if let Some(window) = open_options.replace_window {
-        window
-    } else {
-        let workspace_position = cx
-            .update(|cx| {
-                workspace::ssh_workspace_position_from_db(
-                    connection_options.host.clone(),
-                    connection_options.port,
-                    connection_options.username.clone(),
-                    &paths,
-                    cx,
-                )
-            })?
-            .await
-            .context("fetching ssh workspace position from db")?;
-
-        let mut options =
-            cx.update(|cx| (app_state.build_window_options)(workspace_position.display, cx))?;
-        options.window_bounds = workspace_position.window_bounds;
-
-        cx.open_window(options, |window, cx| {
-            let project = project::Project::local(
-                app_state.client.clone(),
-                app_state.node_runtime.clone(),
-                app_state.user_store.clone(),
-                app_state.languages.clone(),
-                app_state.fs.clone(),
-                None,
-                cx,
-            );
-            cx.new(|cx| {
-                let mut workspace = Workspace::new(None, project, app_state.clone(), window, cx);
-                workspace.centered_layout = workspace_position.centered_layout;
-                workspace
-            })
-        })?
-    };
-
-    loop {
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        let delegate = window.update(cx, {
-            let connection_options = connection_options.clone();
-            let paths = paths.clone();
-            move |workspace, window, cx| {
-                window.activate_window();
-                workspace.toggle_modal(window, cx, |window, cx| {
-                    SshConnectionModal::new(&connection_options, paths, window, cx)
-                });
-
-                let ui = workspace
-                    .active_modal::<SshConnectionModal>(cx)?
-                    .read(cx)
-                    .prompt
-                    .clone();
-
-                ui.update(cx, |ui, _cx| {
-                    ui.set_cancellation_tx(cancel_tx);
-                });
-
-                Some(Arc::new(SshClientDelegate {
-                    window: window.window_handle(),
-                    ui: ui.downgrade(),
-                    known_password: connection_options.password.clone(),
-                }))
-            }
-        })?;
-
-        let Some(delegate) = delegate else { break };
-
-        let did_open_ssh_project = cx
-            .update(|cx| {
-                workspace::open_ssh_project_with_new_connection(
-                    window,
-                    connection_options.clone(),
-                    cancel_rx,
-                    delegate.clone(),
-                    app_state.clone(),
-                    paths.clone(),
-                    cx,
-                )
-            })?
-            .await;
-
-        window
-            .update(cx, |workspace, _, cx| {
-                if let Some(ui) = workspace.active_modal::<SshConnectionModal>(cx) {
-                    ui.update(cx, |modal, cx| modal.finished(cx))
-                }
-            })
-            .ok();
-
-        if let Err(e) = did_open_ssh_project {
-            log::error!("Failed to open project: {e:?}");
-            let response = window
-                .update(cx, |_, window, cx| {
-                    window.prompt(
-                        PromptLevel::Critical,
-                        "Failed to connect over SSH",
-                        Some(&e.to_string()),
-                        &["Retry", "Ok"],
-                        cx,
-                    )
-                })?
-                .await;
-
-            if response == Ok(0) {
-                continue;
-            }
-        }
-
-        window
-            .update(cx, |workspace, _, cx| {
-                if let Some(client) = workspace.project().read(cx).ssh_client().clone() {
-                    ExtensionStore::global(cx)
-                        .update(cx, |store, cx| store.register_ssh_client(client, cx));
-                }
-            })
-            .ok();
-
-        break;
-    }
-
-    // Already showed the error to the user
-    Ok(())
 }

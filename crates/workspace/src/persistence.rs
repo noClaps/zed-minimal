@@ -10,7 +10,6 @@ use itertools::Itertools;
 
 use language::{LanguageName, Toolchain};
 use project::WorktreeId;
-use remote::ssh_session::SshProjectId;
 use sqlez::{
     bindable::{Bind, Column, StaticColumnCount},
     statement::Statement,
@@ -482,62 +481,6 @@ impl WorkspaceDb {
         })
     }
 
-    pub(crate) fn workspace_for_ssh_project(
-        &self,
-        ssh_project: &SerializedSshProject,
-    ) -> Option<SerializedWorkspace> {
-        let (workspace_id, window_bounds, display, centered_layout, docks, window_id): (
-            WorkspaceId,
-            Option<SerializedWindowBounds>,
-            Option<Uuid>,
-            Option<bool>,
-            DockStructure,
-            Option<u64>,
-        ) = self
-            .select_row_bound(sql! {
-                SELECT
-                    workspace_id,
-                    window_state,
-                    window_x,
-                    window_y,
-                    window_width,
-                    window_height,
-                    display,
-                    centered_layout,
-                    left_dock_visible,
-                    left_dock_active_panel,
-                    left_dock_zoom,
-                    right_dock_visible,
-                    right_dock_active_panel,
-                    right_dock_zoom,
-                    bottom_dock_visible,
-                    bottom_dock_active_panel,
-                    bottom_dock_zoom,
-                    window_id
-                FROM workspaces
-                WHERE ssh_project_id = ?
-            })
-            .and_then(|mut prepared_statement| (prepared_statement)(ssh_project.id.0))
-            .context("No workspaces found")
-            .warn_on_err()
-            .flatten()?;
-
-        Some(SerializedWorkspace {
-            id: workspace_id,
-            location: SerializedWorkspaceLocation::Ssh(ssh_project.clone()),
-            center_group: self
-                .get_center_pane_group(workspace_id)
-                .context("Getting center group")
-                .log_err()?,
-            window_bounds,
-            centered_layout: centered_layout.unwrap_or(false),
-            display,
-            docks,
-            session_id: None,
-            window_id,
-        })
-    }
-
     /// Saves a workspace using the worktree roots. Will garbage collect any workspaces
     /// that used this workspace previously
     pub(crate) async fn save_workspace(&self, workspace: SerializedWorkspace) {
@@ -604,56 +547,7 @@ impl WorkspaceDb {
 
                         prepared_query(args).context("Updating workspace")?;
                     }
-                    SerializedWorkspaceLocation::Ssh(ssh_project) => {
-                        conn.exec_bound(sql!(
-                            DELETE FROM toolchains WHERE workspace_id = ?1;
-                            DELETE FROM workspaces WHERE ssh_project_id = ? AND workspace_id != ?
-                        ))?((ssh_project.id.0, workspace.id))
-                        .context("clearing out old locations")?;
-
-                        // Upsert
-                        conn.exec_bound(sql!(
-                            INSERT INTO workspaces(
-                                workspace_id,
-                                ssh_project_id,
-                                left_dock_visible,
-                                left_dock_active_panel,
-                                left_dock_zoom,
-                                right_dock_visible,
-                                right_dock_active_panel,
-                                right_dock_zoom,
-                                bottom_dock_visible,
-                                bottom_dock_active_panel,
-                                bottom_dock_zoom,
-                                session_id,
-                                window_id,
-                                timestamp
-                            )
-                            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, CURRENT_TIMESTAMP)
-                            ON CONFLICT DO
-                            UPDATE SET
-                                ssh_project_id = ?2,
-                                left_dock_visible = ?3,
-                                left_dock_active_panel = ?4,
-                                left_dock_zoom = ?5,
-                                right_dock_visible = ?6,
-                                right_dock_active_panel = ?7,
-                                right_dock_zoom = ?8,
-                                bottom_dock_visible = ?9,
-                                bottom_dock_active_panel = ?10,
-                                bottom_dock_zoom = ?11,
-                                session_id = ?12,
-                                window_id = ?13,
-                                timestamp = CURRENT_TIMESTAMP
-                        ))?((
-                            workspace.id,
-                            ssh_project.id.0,
-                            workspace.docks,
-                            workspace.session_id,
-                            workspace.window_id
-                        ))
-                        .context("Updating workspace")?;
-                    }
+                    _ => unreachable!()
                 }
 
                 // Save center pane group
@@ -799,18 +693,8 @@ impl WorkspaceDb {
     ) -> Result<Vec<(WorkspaceId, SerializedWorkspaceLocation)>> {
         let mut result = Vec::new();
         let mut delete_tasks = Vec::new();
-        let ssh_projects = self.ssh_projects()?;
 
-        for (id, location, order, ssh_project_id) in self.recent_workspaces()? {
-            if let Some(ssh_project_id) = ssh_project_id.map(SshProjectId) {
-                if let Some(ssh_project) = ssh_projects.iter().find(|rp| rp.id == ssh_project_id) {
-                    result.push((id, SerializedWorkspaceLocation::Ssh(ssh_project.clone())));
-                } else {
-                    delete_tasks.push(self.delete_workspace_by_id(id));
-                }
-                continue;
-            }
-
+        for (id, location, order, _) in self.recent_workspaces()? {
             if location.paths().iter().all(|path| path.exists())
                 && location.paths().iter().any(|path| path.is_dir())
             {

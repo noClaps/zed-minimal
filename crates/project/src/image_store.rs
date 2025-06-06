@@ -11,7 +11,7 @@ use gpui::{
 pub use image::ImageFormat;
 use image::{ExtendedColorType, GenericImageView, ImageReader};
 use language::{DiskState, File};
-use rpc::{AnyProtoClient, ErrorExt as _};
+use rpc::ErrorExt as _;
 use std::num::NonZeroU64;
 use std::path::Path;
 use std::sync::Arc;
@@ -318,7 +318,6 @@ impl ImageStore {
 
     pub fn remote(
         worktree_store: Entity<WorktreeStore>,
-        _upstream_client: AnyProtoClient,
         _remote_id: u64,
         cx: &mut Context<Self>,
     ) -> Self {

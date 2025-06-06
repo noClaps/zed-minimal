@@ -4811,8 +4811,6 @@ impl Editor {
         // OnTypeFormatting returns a list of edits, no need to pass them between Zed instances,
         // hence we do LSP request & edit on host side only — add formats to host's history.
         let push_to_lsp_host_history = true;
-        // If this is not the host, append its history with new edits.
-        let push_to_client_history = project.read(cx).is_via_collab();
 
         let on_type_formatting = project.update(cx, |project, cx| {
             project.on_type_format(
@@ -4824,15 +4822,7 @@ impl Editor {
             )
         });
         Some(cx.spawn_in(window, async move |editor, cx| {
-            if let Some(transaction) = on_type_formatting.await? {
-                if push_to_client_history {
-                    buffer
-                        .update(cx, |buffer, _| {
-                            buffer.push_transaction(transaction, Instant::now());
-                            buffer.finalize_last_transaction();
-                        })
-                        .ok();
-                }
+            if on_type_formatting.await?.is_some() {
                 editor.update(cx, |editor, cx| {
                     editor.refresh_document_highlights(cx);
                 })?;
@@ -7843,7 +7833,6 @@ impl Editor {
             .text_size(TextSize::XSmall.rems(cx))
             .child(h_flex().children(ui::render_modifiers(
                 &accept_keystroke.modifiers,
-                PlatformStyle::platform(),
                 Some(modifiers_color),
                 Some(IconSize::XSmall.rems().into()),
                 true,
@@ -8044,7 +8033,6 @@ impl Editor {
                                         |el, accept_keystroke| {
                                             el.child(h_flex().children(ui::render_modifiers(
                                                 &accept_keystroke.modifiers,
-                                                PlatformStyle::platform(),
                                                 Some(Color::Default),
                                                 Some(IconSize::XSmall.rems().into()),
                                                 false,
@@ -8133,7 +8121,6 @@ impl Editor {
                                     .when(is_platform_style_mac, |parent| parent.gap_1())
                                     .child(h_flex().children(ui::render_modifiers(
                                         &accept_keystroke.modifiers,
-                                        PlatformStyle::platform(),
                                         Some(if !has_completion {
                                             Color::Muted
                                         } else {
@@ -12872,15 +12859,6 @@ impl Editor {
                 return;
             };
 
-            let hide_runnables = project
-                .update(cx, |project, cx| {
-                    // Do not display any test indicators in non-dev server remote projects.
-                    project.is_via_collab() && project.ssh_connection_string(cx).is_none()
-                })
-                .unwrap_or(true);
-            if hide_runnables {
-                return;
-            }
             let new_rows =
                 cx.background_spawn({
                     let snapshot = display_snapshot.clone();
@@ -14059,10 +14037,9 @@ impl Editor {
         locations.sort_by_key(|location| location.buffer.read(cx).remote_id());
         let mut locations = locations.into_iter().peekable();
         let mut ranges: Vec<Range<Anchor>> = Vec::new();
-        let capability = workspace.project().read(cx).capability();
 
         let excerpt_buffer = cx.new(|cx| {
-            let mut multibuffer = MultiBuffer::new(capability);
+            let mut multibuffer = MultiBuffer::new(Capability::ReadWrite);
             while let Some(location) = locations.next() {
                 let buffer = location.buffer.read(cx);
                 let mut ranges_for_buffer = Vec::new();
@@ -17568,8 +17545,7 @@ impl Editor {
                                     buffer.update(cx, |buffer, cx| {
                                         let language = buffer.language()?;
                                         let should_discard = project.update(cx, |project, cx| {
-                                            project.is_local()
-                                                && !project.has_language_servers_for(buffer, cx)
+                                            !project.has_language_servers_for(buffer, cx)
                                         });
                                         should_discard.not().then_some(language.clone())
                                     })
@@ -17586,14 +17562,13 @@ impl Editor {
                 }
 
                 let Some(project) = &self.project else { return };
-                let (telemetry, is_via_ssh) = {
+                let telemetry = {
                     let project = project.read(cx);
                     let telemetry = project.client().telemetry().clone();
-                    let is_via_ssh = project.is_via_ssh();
-                    (telemetry, is_via_ssh)
+                    telemetry
                 };
                 refresh_linked_ranges(self, window, cx);
-                telemetry.log_edit_event("editor", is_via_ssh);
+                telemetry.log_edit_event("editor", false);
             }
             multi_buffer::Event::ExcerptsAdded {
                 buffer,
@@ -18097,7 +18072,9 @@ impl Editor {
         file_extension: Option<String>,
         cx: &App,
     ) {
-        let Some(project) = &self.project else { return };
+        if self.project.is_none() {
+            return;
+        };
 
         // If None, we are in a file without an extension
         let file = self
@@ -18113,12 +18090,11 @@ impl Editor {
 
         let edit_predictions_provider = all_language_settings(file, cx).edit_predictions.provider;
 
-        let project = project.read(cx);
         telemetry::event!(
             event_type,
             file_extension,
             edit_predictions_provider,
-            is_via_ssh = project.is_via_ssh(),
+            is_via_ssh = false,
         );
     }
 

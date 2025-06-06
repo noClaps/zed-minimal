@@ -3,7 +3,7 @@ mod remote_servers;
 mod ssh_config;
 mod ssh_connections;
 
-pub use ssh_connections::{is_connecting_over_ssh, open_ssh_project};
+pub use ssh_connections::is_connecting_over_ssh;
 
 use disconnected_overlay::DisconnectedOverlay;
 use fuzzy::{StringMatch, StringMatchCandidate};
@@ -19,15 +19,12 @@ use picker::{
 pub use remote_servers::RemoteServerProjects;
 use settings::Settings;
 pub use ssh_connections::SshSettings;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 use ui::{KeyBinding, ListItem, ListItemSpacing, Tooltip, prelude::*, tooltip_container};
 use util::{ResultExt, paths::PathExt};
 use workspace::{
-    CloseIntent, HistoryManager, ModalView, OpenOptions, SerializedWorkspaceLocation, WORKSPACE_DB,
-    Workspace, WorkspaceId, with_active_or_new_workspace,
+    CloseIntent, HistoryManager, ModalView, SerializedWorkspaceLocation, WORKSPACE_DB, Workspace,
+    WorkspaceId, with_active_or_new_workspace,
 };
 use zed_actions::{OpenRecent, OpenRemote};
 
@@ -319,40 +316,7 @@ impl PickerDelegate for RecentProjectsDelegate {
                                     workspace.open_workspace_for_paths(false, paths, window, cx)
                                 }
                             }
-                            SerializedWorkspaceLocation::Ssh(ssh_project) => {
-                                let app_state = workspace.app_state().clone();
-
-                                let replace_window = if replace_current_window {
-                                    window.window_handle().downcast::<Workspace>()
-                                } else {
-                                    None
-                                };
-
-                                let open_options = OpenOptions {
-                                    replace_window,
-                                    ..Default::default()
-                                };
-
-                                let connection_options = SshSettings::get_global(cx)
-                                    .connection_options_for(
-                                        ssh_project.host.clone(),
-                                        ssh_project.port,
-                                        ssh_project.user.clone(),
-                                    );
-
-                                let paths = ssh_project.paths.iter().map(PathBuf::from).collect();
-
-                                cx.spawn_in(window, async move |_, cx| {
-                                    open_ssh_project(
-                                        connection_options,
-                                        paths,
-                                        app_state,
-                                        open_options,
-                                        cx,
-                                    )
-                                    .await
-                                })
-                            }
+                            _ => unreachable!(),
                         }
                     }
                 })

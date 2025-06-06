@@ -110,21 +110,11 @@ struct LanguageServerState {
 #[derive(PartialEq, Clone)]
 pub enum LanguageServerKind {
     Local { project: WeakEntity<Project> },
-    Remote { project: WeakEntity<Project> },
-}
-
-impl LanguageServerKind {
-    fn is_remote(&self) -> bool {
-        matches!(self, LanguageServerKind::Remote { .. })
-    }
 }
 
 impl std::fmt::Debug for LanguageServerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LanguageServerKind::Local { .. } => write!(f, "LanguageServerKind::Local"),
-            LanguageServerKind::Remote { .. } => write!(f, "LanguageServerKind::Remote"),
-        }
+        write!(f, "LanguageServerKind::Local")
     }
 }
 
@@ -132,7 +122,6 @@ impl LanguageServerKind {
     fn project(&self) -> Option<&WeakEntity<Project>> {
         match self {
             Self::Local { project } => Some(project),
-            Self::Remote { project } => Some(project),
         }
     }
 }
@@ -202,25 +191,20 @@ pub fn init(cx: &mut App) {
 
     cx.observe_new(move |workspace: &mut Workspace, _, cx| {
         let project = workspace.project();
-        if project.read(cx).is_local() || project.read(cx).is_via_ssh() {
-            log_store.update(cx, |store, cx| {
-                store.add_project(project, cx);
-            });
-        }
+        log_store.update(cx, |store, cx| {
+            store.add_project(project, cx);
+        });
 
         let log_store = log_store.clone();
         workspace.register_action(move |workspace, _: &OpenLanguageServerLogs, window, cx| {
-            let project = workspace.project().read(cx);
-            if project.is_local() || project.is_via_ssh() {
-                workspace.split_item(
-                    SplitDirection::Right,
-                    Box::new(cx.new(|cx| {
-                        LspLogView::new(workspace.project().clone(), log_store.clone(), window, cx)
-                    })),
-                    window,
-                    cx,
-                );
-            }
+            workspace.split_item(
+                SplitDirection::Right,
+                Box::new(cx.new(|cx| {
+                    LspLogView::new(workspace.project().clone(), log_store.clone(), window, cx)
+                })),
+                window,
+                cx,
+            );
         });
     })
     .detach();
@@ -262,14 +246,8 @@ impl LogStore {
                             .retain(|_, state| state.kind.project() != Some(&weak_project));
                     }),
                     cx.subscribe(project, |this, project, event, cx| {
-                        let server_kind = if project.read(cx).is_via_ssh() {
-                            LanguageServerKind::Remote {
-                                project: project.downgrade(),
-                            }
-                        } else {
-                            LanguageServerKind::Local {
-                                project: project.downgrade(),
-                            }
+                        let server_kind = LanguageServerKind::Local {
+                            project: project.downgrade(),
                         };
 
                         match event {
@@ -450,7 +428,7 @@ impl LogStore {
         self.language_servers
             .iter()
             .filter_map(move |(id, state)| match &state.kind {
-                LanguageServerKind::Local { project } | LanguageServerKind::Remote { project } => {
+                LanguageServerKind::Local { project } => {
                     if project == lookup_project {
                         Some(*id)
                     } else {
@@ -715,23 +693,21 @@ impl LspLogView {
         let mut rows = log_store
             .language_servers
             .iter()
-            .map(|(server_id, state)| match &state.kind {
-                LanguageServerKind::Local { .. } | LanguageServerKind::Remote { .. } => {
-                    let worktree_root_name = state
-                        .worktree_id
-                        .and_then(|id| self.project.read(cx).worktree_for_id(id, cx))
-                        .map(|worktree| worktree.read(cx).root_name().to_string())
-                        .unwrap_or_else(|| "Unknown worktree".to_string());
+            .map(|(server_id, state)| {
+                let worktree_root_name = state
+                    .worktree_id
+                    .and_then(|id| self.project.read(cx).worktree_for_id(id, cx))
+                    .map(|worktree| worktree.read(cx).root_name().to_string())
+                    .unwrap_or_else(|| "Unknown worktree".to_string());
 
-                    LogMenuItem {
-                        server_id: *server_id,
-                        server_name: state.name.clone().unwrap_or(unknown_server.clone()),
-                        server_kind: state.kind.clone(),
-                        worktree_root_name,
-                        rpc_trace_enabled: state.rpc_state.is_some(),
-                        selected_entry: self.active_entry_kind,
-                        trace_level: lsp::TraceValue::Off,
-                    }
+                LogMenuItem {
+                    server_id: *server_id,
+                    server_name: state.name.clone().unwrap_or(unknown_server.clone()),
+                    server_kind: state.kind.clone(),
+                    worktree_root_name,
+                    rpc_trace_enabled: state.rpc_state.is_some(),
+                    selected_entry: self.active_entry_kind,
+                    trace_level: lsp::TraceValue::Off,
                 }
             })
             .chain(
@@ -1232,7 +1208,6 @@ impl Render for LspLogToolbarItemView {
             });
         let view_selector = current_server.map(|server| {
             let server_id = server.server_id;
-            let is_remote = server.server_kind.is_remote();
             let rpc_trace_enabled = server.rpc_trace_enabled;
             let log_view = log_view.clone();
             PopoverMenu::new("LspViewSelector")
@@ -1252,55 +1227,53 @@ impl Render for LspLogToolbarItemView {
                                 view.show_logs_for_server(server_id, window, cx);
                             }),
                         )
-                        .when(!is_remote, |this| {
-                            this.entry(
-                                SERVER_TRACE,
-                                None,
-                                window.handler_for(&log_view, move |view, window, cx| {
-                                    view.show_trace_for_server(server_id, window, cx);
-                                }),
-                            )
-                            .custom_entry(
-                                {
-                                    let log_toolbar_view = log_toolbar_view.clone();
-                                    move |window, _| {
-                                        h_flex()
-                                            .w_full()
-                                            .justify_between()
-                                            .child(Label::new(RPC_MESSAGES))
-                                            .child(
-                                                div().child(
-                                                    Checkbox::new(
-                                                        "LspLogEnableRpcTrace",
-                                                        if rpc_trace_enabled {
+                        .entry(
+                            SERVER_TRACE,
+                            None,
+                            window.handler_for(&log_view, move |view, window, cx| {
+                                view.show_trace_for_server(server_id, window, cx);
+                            }),
+                        )
+                        .custom_entry(
+                            {
+                                let log_toolbar_view = log_toolbar_view.clone();
+                                move |window, _| {
+                                    h_flex()
+                                        .w_full()
+                                        .justify_between()
+                                        .child(Label::new(RPC_MESSAGES))
+                                        .child(
+                                            div().child(
+                                                Checkbox::new(
+                                                    "LspLogEnableRpcTrace",
+                                                    if rpc_trace_enabled {
+                                                        ToggleState::Selected
+                                                    } else {
+                                                        ToggleState::Unselected
+                                                    },
+                                                )
+                                                .on_click(window.listener_for(
+                                                    &log_toolbar_view,
+                                                    move |view, selection, window, cx| {
+                                                        let enabled = matches!(
+                                                            selection,
                                                             ToggleState::Selected
-                                                        } else {
-                                                            ToggleState::Unselected
-                                                        },
-                                                    )
-                                                    .on_click(window.listener_for(
-                                                        &log_toolbar_view,
-                                                        move |view, selection, window, cx| {
-                                                            let enabled = matches!(
-                                                                selection,
-                                                                ToggleState::Selected
-                                                            );
-                                                            view.toggle_rpc_logging_for_server(
-                                                                server_id, enabled, window, cx,
-                                                            );
-                                                            cx.stop_propagation();
-                                                        },
-                                                    )),
-                                                ),
-                                            )
-                                            .into_any_element()
-                                    }
-                                },
-                                window.handler_for(&log_view, move |view, window, cx| {
-                                    view.show_rpc_trace_for_server(server_id, window, cx);
-                                }),
-                            )
-                        })
+                                                        );
+                                                        view.toggle_rpc_logging_for_server(
+                                                            server_id, enabled, window, cx,
+                                                        );
+                                                        cx.stop_propagation();
+                                                    },
+                                                )),
+                                            ),
+                                        )
+                                        .into_any_element()
+                                }
+                            },
+                            window.handler_for(&log_view, move |view, window, cx| {
+                                view.show_rpc_trace_for_server(server_id, window, cx);
+                            }),
+                        )
                         .entry(
                             SERVER_INFO,
                             None,

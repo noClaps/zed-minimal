@@ -24,7 +24,6 @@ use assets::Assets;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
 use parking_lot::Mutex;
 use project::project_settings::ProjectSettings;
-use recent_projects::{SshSettings, open_ssh_project};
 use release_channel::{AppCommitSha, AppVersion, ReleaseChannel};
 use session::{AppSession, Session};
 use settings::{Settings, SettingsStore, watch_config_file};
@@ -403,9 +402,7 @@ Error: Running Zed as root or via sudo is unsupported.
         auto_update_ui::init(cx);
         reliability::init(
             client.http_client(),
-            system_id.as_ref().map(|id| id.to_string()),
             installation_id.clone().map(|id| id.to_string()),
-            session_id.clone(),
             cx,
         );
 
@@ -572,23 +569,6 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
         return;
     }
 
-    if let Some(connection_options) = request.ssh_connection {
-        cx.spawn(async move |mut cx| {
-            let paths_with_position =
-                derive_paths_with_position(app_state.fs.as_ref(), request.open_paths).await;
-            open_ssh_project(
-                connection_options,
-                paths_with_position.into_iter().map(|p| p.path).collect(),
-                app_state,
-                workspace::OpenOptions::default(),
-                &mut cx,
-            )
-            .await
-        })
-        .detach_and_log_err(cx);
-        return;
-    }
-
     let mut task = None;
     if !request.open_paths.is_empty() {
         let app_state = app_state.clone();
@@ -693,25 +673,7 @@ async fn restore_or_create_workspace(app_state: Arc<AppState>, cx: &mut AsyncApp
                     })?;
                     task.await?;
                 }
-                SerializedWorkspaceLocation::Ssh(ssh) => {
-                    let connection_options = cx.update(|cx| {
-                        SshSettings::get_global(cx)
-                            .connection_options_for(ssh.host, ssh.port, ssh.user)
-                    })?;
-                    let app_state = app_state.clone();
-                    cx.spawn(async move |cx| {
-                        recent_projects::open_ssh_project(
-                            connection_options,
-                            ssh.paths.into_iter().map(PathBuf::from).collect(),
-                            app_state,
-                            workspace::OpenOptions::default(),
-                            cx,
-                        )
-                        .await
-                        .log_err();
-                    })
-                    .detach();
-                }
+                _ => unreachable!(),
             }
         }
     } else if matches!(KEY_VALUE_STORE.read_kvp(FIRST_OPEN), Ok(None)) {

@@ -75,15 +75,6 @@ pub fn init(cx: &mut App) {
                 let workspace = Workspace::for_window(window, cx);
                 let project = workspace.map(|workspace| workspace.read(cx).project().clone());
 
-                let is_local_project = project
-                    .as_ref()
-                    .map(|project| project.read(cx).is_local())
-                    .unwrap_or(false);
-
-                if !is_local_project {
-                    return;
-                }
-
                 let buffer = editor.buffer().read(cx).as_singleton();
 
                 let language = buffer

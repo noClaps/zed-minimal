@@ -2,12 +2,11 @@ use crate::stdout_is_a_pty;
 use anyhow::{Context as _, Result};
 use backtrace::{self, Backtrace};
 use chrono::Utc;
-use client::{TelemetrySettings, telemetry};
+use client::telemetry;
 use db::kvp::KEY_VALUE_STORE;
 use gpui::{App, AppContext as _, SemanticVersion};
 use http_client::{self, HttpClient, HttpClientWithUrl, HttpRequestExt, Method};
 use paths::{crashes_dir, crashes_retired_dir};
-use project::Project;
 use release_channel::{AppCommitSha, RELEASE_CHANNEL, ReleaseChannel};
 use settings::Settings;
 use smol::stream::StreamExt;
@@ -165,13 +164,7 @@ fn get_main_module_base_address() -> *mut c_void {
     dl_info.dli_fbase
 }
 
-pub fn init(
-    http_client: Arc<HttpClientWithUrl>,
-    system_id: Option<String>,
-    installation_id: Option<String>,
-    session_id: String,
-    cx: &mut App,
-) {
+pub fn init(http_client: Arc<HttpClientWithUrl>, installation_id: Option<String>, cx: &mut App) {
     monitor_main_thread_hangs(http_client.clone(), installation_id.clone(), cx);
 
     let Some(panic_report_url) = http_client
@@ -187,51 +180,6 @@ pub fn init(
         installation_id.clone(),
         cx,
     );
-
-    cx.observe_new(move |project: &mut Project, _, cx| {
-        let http_client = http_client.clone();
-        let panic_report_url = panic_report_url.clone();
-        let session_id = session_id.clone();
-        let installation_id = installation_id.clone();
-        let system_id = system_id.clone();
-
-        if let Some(ssh_client) = project.ssh_client() {
-            ssh_client.update(cx, |client, cx| {
-                if TelemetrySettings::get_global(cx).diagnostics {
-                    let request = client.proto_client().request(proto::GetPanicFiles {});
-                    cx.background_spawn(async move {
-                        let panic_files = request.await?;
-                        for file in panic_files.file_contents {
-                            let panic: Option<Panic> = serde_json::from_str(&file)
-                                .log_err()
-                                .or_else(|| {
-                                    file.lines()
-                                        .next()
-                                        .and_then(|line| serde_json::from_str(line).ok())
-                                })
-                                .unwrap_or_else(|| {
-                                    log::error!("failed to deserialize panic file {:?}", file);
-                                    None
-                                });
-
-                            if let Some(mut panic) = panic {
-                                panic.session_id = session_id.clone();
-                                panic.system_id = system_id.clone();
-                                panic.installation_id = installation_id.clone();
-
-                                upload_panic(&http_client, &panic_report_url, panic, &mut None)
-                                    .await?;
-                            }
-                        }
-
-                        anyhow::Ok(())
-                    })
-                    .detach_and_log_err(cx);
-                }
-            })
-        }
-    })
-    .detach();
 }
 
 pub fn monitor_main_thread_hangs(

@@ -155,11 +155,7 @@ impl Render for TitleBar {
                             }),
                     ),
             )
-            .when(!window.is_fullscreen(), |title_bar| {
-                match self.platform_style {
-                    PlatformStyle::Mac => title_bar,
-                }
-            })
+            .when(!window.is_fullscreen(), |title_bar| title_bar)
     }
 }
 

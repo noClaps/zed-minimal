@@ -2633,10 +2633,9 @@ impl LocalLspStore {
                     .unwrap_or_default();
                 if available_commands.contains(&command.command) {
                     lsp_store.update(cx, |lsp_store, _| {
-                        if let LspStoreMode::Local(mode) = &mut lsp_store.mode {
-                            mode.last_workspace_edits_by_language_server
-                                .remove(&language_server.server_id());
-                        }
+                        let LspStoreMode::Local(mode) = &mut lsp_store.mode;
+                        mode.last_workspace_edits_by_language_server
+                            .remove(&language_server.server_id());
                     })?;
 
                     language_server
@@ -2650,14 +2649,13 @@ impl LocalLspStore {
                         .context("execute command")?;
 
                     lsp_store.update(cx, |this, _| {
-                        if let LspStoreMode::Local(mode) = &mut this.mode {
-                            project_transaction.0.extend(
-                                mode.last_workspace_edits_by_language_server
-                                    .remove(&language_server.server_id())
-                                    .unwrap_or_default()
-                                    .0,
-                            )
-                        }
+                        let LspStoreMode::Local(mode) = &mut this.mode;
+                        project_transaction.0.extend(
+                            mode.last_workspace_edits_by_language_server
+                                .remove(&language_server.server_id())
+                                .unwrap_or_default()
+                                .0,
+                        )
                     })?;
                 } else {
                     log::warn!(
@@ -3378,14 +3376,8 @@ pub struct FormattableBuffer {
     ranges: Option<Vec<Range<Anchor>>>,
 }
 
-pub struct RemoteLspStore {
-    upstream_client: Option<AnyProtoClient>,
-    upstream_project_id: u64,
-}
-
 pub(crate) enum LspStoreMode {
-    Local(LocalLspStore),   // ssh host and collab host
-    Remote(RemoteLspStore), // collab guest
+    Local(LocalLspStore), // ssh host and collab host
 }
 
 impl LspStoreMode {
@@ -3521,41 +3513,20 @@ impl LspStore {
         client.add_entity_request_handler(Self::handle_lsp_command::<GetDocumentDiagnostics>);
     }
 
-    pub fn as_remote(&self) -> Option<&RemoteLspStore> {
-        match &self.mode {
-            LspStoreMode::Remote(remote_lsp_store) => Some(remote_lsp_store),
-            _ => None,
-        }
-    }
-
     pub fn as_local(&self) -> Option<&LocalLspStore> {
         match &self.mode {
             LspStoreMode::Local(local_lsp_store) => Some(local_lsp_store),
-            _ => None,
         }
     }
 
     pub fn as_local_mut(&mut self) -> Option<&mut LocalLspStore> {
         match &mut self.mode {
             LspStoreMode::Local(local_lsp_store) => Some(local_lsp_store),
-            _ => None,
         }
     }
 
     pub fn upstream_client(&self) -> Option<(AnyProtoClient, u64)> {
-        match &self.mode {
-            LspStoreMode::Remote(RemoteLspStore {
-                upstream_client: Some(upstream_client),
-                upstream_project_id,
-                ..
-            }) => Some((upstream_client.clone(), *upstream_project_id)),
-
-            LspStoreMode::Remote(RemoteLspStore {
-                upstream_client: None,
-                ..
-            }) => None,
-            LspStoreMode::Local(_) => None,
-        }
+        None
     }
 
     pub fn new_local(
@@ -3659,44 +3630,6 @@ impl LspStore {
                 .response_from_proto(response, this, buffer, cx.clone())
                 .await
         })
-    }
-
-    pub(super) fn new_remote(
-        buffer_store: Entity<BufferStore>,
-        worktree_store: Entity<WorktreeStore>,
-        toolchain_store: Option<Entity<ToolchainStore>>,
-        languages: Arc<LanguageRegistry>,
-        upstream_client: AnyProtoClient,
-        project_id: u64,
-        fs: Arc<dyn Fs>,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        cx.subscribe(&buffer_store, Self::on_buffer_store_event)
-            .detach();
-        cx.subscribe(&worktree_store, Self::on_worktree_store_event)
-            .detach();
-        let _maintain_workspace_config = {
-            let (sender, receiver) = watch::channel();
-            (Self::maintain_workspace_config(fs, receiver, cx), sender)
-        };
-        Self {
-            mode: LspStoreMode::Remote(RemoteLspStore {
-                upstream_client: Some(upstream_client),
-                upstream_project_id: project_id,
-            }),
-            downstream_client: None,
-            last_formatting_failure: None,
-            buffer_store,
-            worktree_store,
-            languages: languages.clone(),
-            language_server_statuses: Default::default(),
-            nonce: StdRng::from_entropy().r#gen(),
-            diagnostic_summaries: Default::default(),
-            active_entry: None,
-            toolchain_store,
-            _maintain_workspace_config,
-            _maintain_buffer_languages: Self::maintain_buffer_languages(languages.clone(), cx),
-        }
     }
 
     fn on_buffer_store_event(
@@ -6463,15 +6396,6 @@ impl LspStore {
         self.downstream_client.take();
     }
 
-    pub fn disconnected_from_ssh_remote(&mut self) {
-        if let LspStoreMode::Remote(RemoteLspStore {
-            upstream_client, ..
-        }) = &mut self.mode
-        {
-            upstream_client.take();
-        }
-    }
-
     pub(crate) fn set_language_server_statuses_from_proto(
         &mut self,
         language_servers: Vec<proto::LanguageServer>,
@@ -6625,7 +6549,6 @@ impl LspStore {
     ) -> Result<bool> {
         let local = match &mut self.mode {
             LspStoreMode::Local(local_lsp_store) => local_lsp_store,
-            _ => anyhow::bail!("update_worktree_diagnostics called on remote"),
         };
 
         let summaries_for_tree = self.diagnostic_summaries.entry(worktree_id).or_default();
@@ -8632,9 +8555,6 @@ impl LspStore {
     ) -> Task<Vec<WorktreeId>> {
         let local = match &mut self.mode {
             LspStoreMode::Local(local) => local,
-            _ => {
-                return Task::ready(Vec::new());
-            }
         };
 
         let mut orphaned_worktrees = vec![];

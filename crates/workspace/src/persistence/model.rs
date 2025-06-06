@@ -11,7 +11,6 @@ use db::sqlez::{
 use gpui::{AsyncWindowContext, Entity, WeakEntity};
 use itertools::Itertools as _;
 use project::Project;
-use remote::ssh_session::SshProjectId;
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
@@ -22,7 +21,6 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SerializedSshProject {
-    pub id: SshProjectId,
     pub host: String,
     pub port: Option<u16>,
     pub paths: Vec<String>,
@@ -57,20 +55,8 @@ impl StaticColumnCount for SerializedSshProject {
     }
 }
 
-impl Bind for &SerializedSshProject {
-    fn bind(&self, statement: &Statement, start_index: i32) -> Result<i32> {
-        let next_index = statement.bind(&self.id.0, start_index)?;
-        let next_index = statement.bind(&self.host, next_index)?;
-        let next_index = statement.bind(&self.port, next_index)?;
-        let raw_paths = serde_json::to_string(&self.paths)?;
-        let next_index = statement.bind(&raw_paths, next_index)?;
-        statement.bind(&self.user, next_index)
-    }
-}
-
 impl Column for SerializedSshProject {
     fn column(statement: &mut Statement, start_index: i32) -> Result<(Self, i32)> {
-        let id = statement.column_int64(start_index)?;
         let host = statement.column_text(start_index + 1)?.to_string();
         let (port, _) = Option::<u16>::column(statement, start_index + 2)?;
         let raw_paths = statement.column_text(start_index + 3)?.to_string();
@@ -80,7 +66,6 @@ impl Column for SerializedSshProject {
 
         Ok((
             Self {
-                id: SshProjectId(id as u64),
                 host,
                 port,
                 paths,

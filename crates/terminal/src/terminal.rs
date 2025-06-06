@@ -18,7 +18,7 @@ use alacritty_terminal::{
         cell::{Cell, Flags},
         search::{Match, RegexIter, RegexSearch},
     },
-    tty::{self},
+    tty,
     vi_mode::{ViModeCursor, ViMotion},
     vte::ansi::{
         ClearMode, CursorStyle as AlacCursorStyle, Handler, NamedPrivateMode, PrivateMode,
