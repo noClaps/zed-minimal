@@ -18,8 +18,8 @@ use editor::{
 };
 use git::blame::ParsedCommitMessage;
 use git::repository::{
-    Branch, CommitDetails, CommitOptions, CommitSummary, DiffType, FetchOptions, PushOptions,
-    Remote, RemoteCommandOutput, ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
+    Branch, CommitDetails, CommitOptions, CommitSummary, FetchOptions, PushOptions, Remote,
+    RemoteCommandOutput, ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
 };
 use git::status::StageStatus;
 use git::{Amend, ToggleStaged, repository::RepoPath, status::FileStatus};
@@ -1804,10 +1804,6 @@ impl GitPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.can_push_and_pull(cx) {
-            return;
-        }
-
         let Some(repo) = self.active_repository.clone() else {
             return;
         };
@@ -2086,7 +2082,7 @@ impl GitPanel {
         })
     }
 
-    fn get_current_remote(
+    fn get_remote(
         &mut self,
         always_select: bool,
         window: &mut Window,

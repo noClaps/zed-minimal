@@ -90,7 +90,7 @@ use std::{
 use text::{Anchor, BufferId, LineEnding, OffsetRangeExt};
 use url::Url;
 use util::{
-    ConnectionResult, ResultExt as _, debug_panic, defer, maybe, merge_json_value_into,
+    ConnectionResult, ResultExt as _, defer, maybe, merge_json_value_into,
     paths::{PathExt, SanitizedPath},
     post_inc,
 };

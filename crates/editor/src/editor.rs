@@ -113,14 +113,7 @@ use markdown::Markdown;
 use mouse_context_menu::MouseContextMenu;
 use persistence::DB;
 use project::{
-    BreakpointWithPosition, CompletionResponse, LspPullDiagnostics, ProjectPath, PulledDiagnostics,
-    debugger::{
-        breakpoint_store::{
-            BreakpointEditAction, BreakpointSessionState, BreakpointState, BreakpointStore,
-            BreakpointStoreEvent,
-        },
-        session::{Session, SessionEvent},
-    },
+    CompletionResponse, LspPullDiagnostics, ProjectPath, PulledDiagnostics,
     project_settings::DiagnosticSeverity,
 };
 
