@@ -107,6 +107,7 @@ members = [
     "crates/ui_prompt",
     "crates/util",
     "crates/util_macros",
+    "crates/watch",
     "crates/welcome",
     "crates/workspace",
     "crates/worktree",
@@ -232,6 +233,8 @@ ui_input = { path = "crates/ui_input" }
 ui_macros = { path = "crates/ui_macros" }
 ui_prompt = { path = "crates/ui_prompt" }
 util = { path = "crates/util" }
+util_macros = { path = "crates/util_macros" }
+watch = { path = "crates/watch" }
 welcome = { path = "crates/welcome" }
 workspace = { path = "crates/workspace" }
 worktree = { path = "crates/worktree" }
@@ -255,7 +258,6 @@ async-recursion = "1.0.0"
 async-tar = "0.5.0"
 async-trait = "0.1"
 async-tungstenite = "0.29.1"
-async-watch = "0.3.1"
 async_zip = { version = "0.0.17", features = ["deflate", "deflate64"] }
 base64 = "0.22"
 bitflags = "2.6.0"

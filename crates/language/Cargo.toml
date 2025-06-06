@@ -15,7 +15,6 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-async-watch.workspace = true
 clock.workspace = true
 collections.workspace = true
 ec4rs.workspace = true
@@ -49,4 +48,5 @@ theme.workspace = true
 tree-sitter.workspace = true
 unicase = "2.6"
 util.workspace = true
+watch.workspace = true
 diffy = "0.4.2"

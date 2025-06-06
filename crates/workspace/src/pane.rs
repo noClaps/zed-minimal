@@ -2918,6 +2918,7 @@ impl Pane {
                             if is_at_same_position
                                 || (moved_right && is_pinned_in_to_pane)
                                 || (!moved_right && !is_pinned_in_to_pane)
+                                || (!moved_right && was_pinned_in_from_pane)
                             {
                                 return;
                             }
