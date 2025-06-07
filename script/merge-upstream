@@ -1,0 +1,4 @@
+#!/bin/sh
+
+git checkout -b zed-industries-main main
+git pull git@github.com:zed-industries/zed.git main --no-ff
