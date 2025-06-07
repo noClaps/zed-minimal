@@ -95,7 +95,3 @@ pub fn initial_project_settings_content() -> Cow<'static, str> {
 pub fn initial_keymap_content() -> Cow<'static, str> {
     asset_str::<SettingsAssets>("keymaps/initial.json")
 }
-
-pub fn initial_tasks_content() -> Cow<'static, str> {
-    asset_str::<SettingsAssets>("settings/initial_tasks.json")
-}

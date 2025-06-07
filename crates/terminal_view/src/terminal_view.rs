@@ -15,11 +15,10 @@ use itertools::Itertools;
 use persistence::TERMINAL_DB;
 use project::{Entry, Metadata, Project, search::SearchQuery, terminals::TerminalKind};
 use schemars::JsonSchema;
-use task::TaskId;
 use terminal::{
     Clear, Copy, Event, HoveredWord, MaybeNavigationTarget, Paste, ScrollLineDown, ScrollLineUp,
-    ScrollPageDown, ScrollPageUp, ScrollToBottom, ScrollToTop, ShowCharacterPalette, TaskState,
-    TaskStatus, Terminal, TerminalBounds, ToggleViMode,
+    ScrollPageDown, ScrollPageUp, ScrollToBottom, ScrollToTop, ShowCharacterPalette, Terminal,
+    TerminalBounds, ToggleViMode,
     alacritty_terminal::{
         index::Point,
         term::{TermMode, search::RegexSearch},
@@ -30,9 +29,7 @@ use terminal_element::{TerminalElement, is_blank};
 use terminal_panel::TerminalPanel;
 use terminal_scrollbar::TerminalScrollHandle;
 use terminal_tab_tooltip::TerminalTooltip;
-use ui::{
-    ContextMenu, Icon, IconName, Label, Scrollbar, ScrollbarState, Tooltip, h_flex, prelude::*,
-};
+use ui::{ContextMenu, Icon, IconName, Label, Scrollbar, ScrollbarState, h_flex, prelude::*};
 use util::{ResultExt, paths::PathWithPosition};
 use workspace::{
     CloseActiveItem, NewCenterTerminal, NewTerminal, OpenOptions, OpenVisible, ToolbarItemLocation,
@@ -392,16 +389,6 @@ impl TerminalView {
         cx.notify();
     }
 
-    fn rerun_task(&mut self, _: &RerunTask, window: &mut Window, cx: &mut Context<Self>) {
-        let task = self
-            .terminal
-            .read(cx)
-            .task()
-            .map(|task| terminal_rerun_override(&task.id))
-            .unwrap_or_default();
-        window.dispatch_action(Box::new(task), cx);
-    }
-
     fn clear(&mut self, _: &Clear, _: &mut Window, cx: &mut Context<Self>) {
         self.scroll_top = px(0.);
         self.terminal.update(cx, |term, _| term.clear());
@@ -746,17 +733,6 @@ impl TerminalView {
         dispatch_context
     }
 
-    fn set_terminal(
-        &mut self,
-        terminal: Entity<Terminal>,
-        window: &mut Window,
-        cx: &mut Context<TerminalView>,
-    ) {
-        self._terminal_subscriptions =
-            subscribe_for_terminal_events(&terminal, self.workspace.clone(), window, cx);
-        self.terminal = terminal;
-    }
-
     // Hack: Using editor in terminal causes cyclic dependency i.e. editor -> terminal -> project -> editor.
     fn map_show_scrollbar_from_editor_to_terminal(
         show_scrollbar: editor::ShowScrollbar,
@@ -886,36 +862,6 @@ impl TerminalView {
                 .cursor_default()
                 .children(Scrollbar::vertical(self.scrollbar_state.clone())),
         )
-    }
-
-    fn rerun_button(task: &TaskState) -> Option<IconButton> {
-        if !task.show_rerun {
-            return None;
-        }
-
-        let task_id = task.id.clone();
-        Some(
-            IconButton::new("rerun-icon", IconName::Rerun)
-                .icon_size(IconSize::Small)
-                .size(ButtonSize::Compact)
-                .icon_color(Color::Default)
-                .shape(ui::IconButtonShape::Square)
-                .tooltip(move |window, cx| {
-                    Tooltip::for_action("Rerun task", &RerunTask, window, cx)
-                })
-                .on_click(move |_, window, cx| {
-                    window.dispatch_action(Box::new(terminal_rerun_override(&task_id)), cx);
-                }),
-        )
-    }
-}
-
-fn terminal_rerun_override(task: &TaskId) -> zed_actions::Rerun {
-    zed_actions::Rerun {
-        task_id: Some(task.0.clone()),
-        allow_concurrent_runs: Some(true),
-        use_new_terminal: Some(false),
-        reevaluate_context: false,
     }
 }
 
@@ -1427,7 +1373,6 @@ impl Render for TerminalView {
             .on_action(cx.listener(TerminalView::toggle_vi_mode))
             .on_action(cx.listener(TerminalView::show_character_palette))
             .on_action(cx.listener(TerminalView::select_all))
-            .on_action(cx.listener(TerminalView::rerun_task))
             .on_key_down(cx.listener(Self::key_down))
             .on_mouse_down(
                 MouseButton::Right,
@@ -1499,30 +1444,7 @@ impl Item for TerminalView {
         let terminal = self.terminal().read(cx);
         let title = terminal.title(true);
 
-        let (icon, icon_color, rerun_button) = match terminal.task() {
-            Some(terminal_task) => match &terminal_task.status {
-                TaskStatus::Running => (
-                    IconName::Play,
-                    Color::Disabled,
-                    TerminalView::rerun_button(&terminal_task),
-                ),
-                TaskStatus::Unknown => (
-                    IconName::Warning,
-                    Color::Warning,
-                    TerminalView::rerun_button(&terminal_task),
-                ),
-                TaskStatus::Completed { success } => {
-                    let rerun_button = TerminalView::rerun_button(&terminal_task);
-
-                    if *success {
-                        (IconName::Check, Color::Success, rerun_button)
-                    } else {
-                        (IconName::XCircle, Color::Error, rerun_button)
-                    }
-                }
-            },
-            None => (IconName::Terminal, Color::Muted, None),
-        };
+        let (icon, icon_color) = (IconName::Terminal, Color::Muted);
 
         h_flex()
             .gap_1()
@@ -1530,21 +1452,7 @@ impl Item for TerminalView {
             .child(
                 h_flex()
                     .group("term-tab-icon")
-                    .child(
-                        div()
-                            .when(rerun_button.is_some(), |this| {
-                                this.hover(|style| style.invisible().w_0())
-                            })
-                            .child(Icon::new(icon).color(icon_color)),
-                    )
-                    .when_some(rerun_button, |this, rerun_button| {
-                        this.child(
-                            div()
-                                .absolute()
-                                .visible_on_hover("term-tab-icon")
-                                .child(rerun_button),
-                        )
-                    }),
+                    .child(div().child(Icon::new(icon).color(icon_color))),
             )
             .child(Label::new(title).color(params.text_color()))
             .into_any()
@@ -1596,25 +1504,6 @@ impl Item for TerminalView {
         }))
     }
 
-    fn is_dirty(&self, cx: &gpui::App) -> bool {
-        match self.terminal.read(cx).task() {
-            Some(task) => task.status == TaskStatus::Running,
-            None => self.has_bell(),
-        }
-    }
-
-    fn has_conflict(&self, _cx: &App) -> bool {
-        false
-    }
-
-    fn can_save_as(&self, _cx: &App) -> bool {
-        false
-    }
-
-    fn is_singleton(&self, _cx: &App) -> bool {
-        true
-    }
-
     fn as_searchable(&self, handle: &Entity<Self>) -> Option<Box<dyn SearchableItemHandle>> {
         Some(Box::new(handle.clone()))
     }
@@ -1641,20 +1530,16 @@ impl Item for TerminalView {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.terminal().read(cx).task().is_none() {
-            if let Some((new_id, old_id)) = workspace.database_id().zip(self.workspace_id) {
-                log::debug!(
-                    "Updating workspace id for the terminal, old: {old_id:?}, new: {new_id:?}",
-                );
-                cx.background_spawn(TERMINAL_DB.update_workspace_id(
-                    new_id,
-                    old_id,
-                    cx.entity_id().as_u64(),
-                ))
-                .detach();
-            }
-            self.workspace_id = workspace.database_id();
+        if let Some((new_id, old_id)) = workspace.database_id().zip(self.workspace_id) {
+            log::debug!("Updating workspace id for the terminal, old: {old_id:?}, new: {new_id:?}",);
+            cx.background_spawn(TERMINAL_DB.update_workspace_id(
+                new_id,
+                old_id,
+                cx.entity_id().as_u64(),
+            ))
+            .detach();
         }
+        self.workspace_id = workspace.database_id();
     }
 
     fn to_item_events(event: &Self::Event, mut f: impl FnMut(ItemEvent)) {
@@ -1685,9 +1570,6 @@ impl SerializableItem for TerminalView {
         cx: &mut Context<Self>,
     ) -> Option<Task<anyhow::Result<()>>> {
         let terminal = self.terminal().read(cx);
-        if terminal.task().is_some() {
-            return None;
-        }
 
         if let Some((cwd, workspace_id)) = terminal.working_directory().zip(self.workspace_id) {
             self.cwd_serialized = true;

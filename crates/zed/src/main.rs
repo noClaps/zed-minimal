@@ -444,7 +444,6 @@ Error: Running Zed as root or via sudo is unsupported.
         project_symbols::init(cx);
         project_panel::init(cx);
         outline_panel::init(cx);
-        tasks_ui::init(cx);
         snippets_ui::init(cx);
         search::init(cx);
         terminal_view::init(cx);

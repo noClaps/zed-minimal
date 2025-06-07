@@ -41,7 +41,6 @@ settings.workspace = true
 smallvec.workspace = true
 sqlez.workspace = true
 strum.workspace = true
-task.workspace = true
 telemetry.workspace = true
 theme.workspace = true
 ui.workspace = true

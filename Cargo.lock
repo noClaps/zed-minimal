@@ -2031,7 +2031,6 @@ dependencies = [
  "smol",
  "snippet",
  "sum_tree",
- "task",
  "telemetry",
  "text",
  "theme",
@@ -2235,7 +2234,6 @@ dependencies = [
  "semantic_version",
  "serde",
  "serde_json",
- "serde_json_lenient",
  "settings",
  "telemetry",
  "toml",
@@ -3164,12 +3162,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbd780fe5cc30f81464441920d82ac8740e2e46b29a6fad543ddd075229ce37e"
 
 [[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
 name = "home"
 version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3913,7 +3905,6 @@ dependencies = [
  "streaming-iterator",
  "strsim",
  "sum_tree",
- "task",
  "text",
  "theme",
  "tree-sitter",
@@ -3989,7 +3980,6 @@ dependencies = [
  "async-compression",
  "async-tar",
  "async-trait",
- "chrono",
  "collections",
  "futures",
  "gpui",
@@ -4013,7 +4003,6 @@ dependencies = [
  "serde_json",
  "settings",
  "smol",
- "task",
  "toml",
  "tree-sitter",
  "tree-sitter-bash",
@@ -4034,7 +4023,6 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-yaml",
  "util",
- "which 6.0.3",
 ]
 
 [[package]]
@@ -5050,12 +5038,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "pathdiff"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
-
-[[package]]
 name = "pathfinder_geometry"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5796,7 +5778,6 @@ dependencies = [
  "lsp",
  "node_runtime",
  "parking_lot",
- "pathdiff",
  "paths",
  "postage",
  "prettier",
@@ -5814,7 +5795,6 @@ dependencies = [
  "snippet",
  "snippet_provider",
  "sum_tree",
- "task",
  "tempfile",
  "terminal",
  "text",
@@ -7711,49 +7691,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e502f78cdbb8ba4718f566c418c52bc729126ffd16baee5baa718cf25dd5a69a"
 
 [[package]]
-name = "task"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "collections",
- "futures",
- "gpui",
- "hex",
- "parking_lot",
- "proto",
- "schemars",
- "serde",
- "serde_json",
- "serde_json_lenient",
- "sha2",
- "shellexpand 2.1.2",
- "util",
- "zed_actions",
-]
-
-[[package]]
-name = "tasks_ui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "collections",
- "editor",
- "file_icons",
- "fuzzy",
- "gpui",
- "itertools 0.14.0",
- "menu",
- "picker",
- "project",
- "serde",
- "task",
- "ui",
- "util",
- "workspace",
- "zed_actions",
-]
-
-[[package]]
 name = "telemetry"
 version = "0.1.0"
 dependencies = [
@@ -7813,7 +7750,6 @@ dependencies = [
  "settings",
  "smol",
  "sysinfo",
- "task",
  "theme",
  "thiserror 2.0.12",
  "util",
@@ -7844,13 +7780,11 @@ dependencies = [
  "settings",
  "shellexpand 2.1.2",
  "smol",
- "task",
  "terminal",
  "theme",
  "ui",
  "util",
  "workspace",
- "zed_actions",
 ]
 
 [[package]]
@@ -8791,14 +8725,6 @@ dependencies = [
  "take-until",
  "tempfile",
  "unicase",
-]
-
-[[package]]
-name = "util_macros"
-version = "0.1.0"
-dependencies = [
- "quote",
- "syn 2.0.101",
 ]
 
 [[package]]
@@ -10280,7 +10206,6 @@ dependencies = [
  "smallvec",
  "sqlez",
  "strum 0.27.1",
- "task",
  "telemetry",
  "theme",
  "ui",
@@ -10471,7 +10396,6 @@ dependencies = [
  "snippets_ui",
  "sysinfo",
  "tab_switcher",
- "tasks_ui",
  "telemetry",
  "telemetry_events",
  "terminal_view",

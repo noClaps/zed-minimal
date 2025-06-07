@@ -137,12 +137,8 @@ pub struct LanguageSettings {
     pub auto_indent_on_paste: bool,
     /// Controls how the editor handles the autoclosed characters.
     pub always_treat_brackets_as_autoclosed: bool,
-    /// Which code actions to run on save
-    pub code_actions_on_format: HashMap<String, bool>,
     /// Whether to perform linked edits
     pub linked_edits: bool,
-    /// Task configuration for this language.
-    pub tasks: LanguageTaskConfig,
     /// Whether to pop the completions menu while typing in an editor without
     /// explicitly requesting it.
     pub show_completions_on_input: bool,
@@ -489,11 +485,6 @@ pub struct LanguageSettingsContent {
     ///
     /// Default: true
     pub use_on_type_format: Option<bool>,
-    /// Which code actions to run on save after the formatter.
-    /// These are not run if formatting is off.
-    ///
-    /// Default: {} (or {"source.organizeImports": true} for Go).
-    pub code_actions_on_format: Option<HashMap<String, bool>>,
     /// Whether to perform linked edits of associated ranges, if the language server supports it.
     /// For example, when editing opening <html> tag, the contents of the closing </html> tag will be edited as well.
     ///
@@ -503,10 +494,6 @@ pub struct LanguageSettingsContent {
     ///
     /// Default: true
     pub auto_indent_on_paste: Option<bool>,
-    /// Task configuration for this language.
-    ///
-    /// Default: {}
-    pub tasks: Option<LanguageTaskConfig>,
     /// Whether to pop the completions menu while typing in an editor without
     /// explicitly requesting it.
     ///
@@ -844,8 +831,6 @@ pub enum Formatter {
         /// The arguments to pass to the program.
         arguments: Option<Arc<[String]>>,
     },
-    /// Files should be formatted using code actions executed by language servers.
-    CodeActions(HashMap<String, bool>),
 }
 
 /// The settings for indent guides.
@@ -975,25 +960,6 @@ fn edit_debounce_ms() -> u64 {
 
 fn scroll_debounce_ms() -> u64 {
     50
-}
-
-/// The task settings for a particular language.
-#[derive(Debug, Clone, Deserialize, PartialEq, Serialize, JsonSchema)]
-pub struct LanguageTaskConfig {
-    /// Extra task variables to set for a particular language.
-    #[serde(default)]
-    pub variables: HashMap<String, String>,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    /// Use LSP tasks over Zed language extension ones.
-    /// If no LSP tasks are returned due to error/timeout or regular execution,
-    /// Zed language extension tasks will be used instead.
-    ///
-    /// Other Zed tasks will still be shown:
-    /// * Zed task from either of the task config file
-    /// * Zed task from history (e.g. one-off task was spawned before)
-    #[serde(default = "default_true")]
-    pub prefer_lsp: bool,
 }
 
 impl InlayHintSettings {
@@ -1324,12 +1290,7 @@ fn merge_settings(settings: &mut LanguageSettings, src: &LanguageSettingsContent
     merge(&mut settings.show_wrap_guides, src.show_wrap_guides);
     merge(&mut settings.wrap_guides, src.wrap_guides.clone());
     merge(&mut settings.indent_guides, src.indent_guides);
-    merge(
-        &mut settings.code_actions_on_format,
-        src.code_actions_on_format.clone(),
-    );
     merge(&mut settings.linked_edits, src.linked_edits);
-    merge(&mut settings.tasks, src.tasks.clone());
 
     merge(
         &mut settings.preferred_line_length,

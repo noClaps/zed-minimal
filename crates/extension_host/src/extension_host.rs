@@ -35,7 +35,6 @@ use language::{
     QUERY_FILENAME_PREFIXES,
 };
 use node_runtime::NodeRuntime;
-use project::ContextProviderWithTasks;
 use release_channel::ReleaseChannel;
 use semantic_version::SemanticVersion;
 use serde::{Deserialize, Serialize};
@@ -1191,19 +1190,10 @@ impl ExtensionStore {
                     let config = std::fs::read_to_string(language_path.join("config.toml"))?;
                     let config: LanguageConfig = ::toml::from_str(&config)?;
                     let queries = load_plugin_queries(&language_path);
-                    let context_provider =
-                        std::fs::read_to_string(language_path.join("tasks.json"))
-                            .ok()
-                            .and_then(|contents| {
-                                let definitions =
-                                    serde_json_lenient::from_str(&contents).log_err()?;
-                                Some(Arc::new(ContextProviderWithTasks::new(definitions)) as Arc<_>)
-                            });
 
                     Ok(LoadedLanguage {
                         config,
                         queries,
-                        context_provider,
                         toolchain_provider: None,
                     })
                 }),

@@ -1,23 +1,19 @@
 use crate::{Project, ProjectPath};
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use collections::HashMap;
 use gpui::{AnyWindowHandle, App, AppContext as _, Context, Entity, Task, WeakEntity};
 use itertools::Itertools;
 use language::LanguageName;
 use settings::{Settings, SettingsLocation};
-use smol::channel::bounded;
 use std::{
     borrow::Cow,
-    env,
     path::{Path, PathBuf},
     sync::Arc,
 };
-use task::{DEFAULT_REMOTE_SHELL, Shell, ShellBuilder, SpawnInTerminal};
 use terminal::{
-    TaskState, TaskStatus, Terminal, TerminalBuilder,
+    DEFAULT_REMOTE_SHELL, ShellBuilder, Terminal, TerminalBuilder,
     terminal_settings::{self, TerminalSettings, VenvSettings},
 };
-use util::ResultExt;
 
 pub struct Terminals {
     pub(crate) local_handles: Vec<WeakEntity<terminal::Terminal>>,
@@ -29,8 +25,6 @@ pub struct Terminals {
 pub enum TerminalKind {
     /// Run a shell at the given path (or $HOME if None)
     Shell(Option<PathBuf>),
-    /// Run a task.
-    Task(SpawnInTerminal),
 }
 
 /// SshCommand describes how to connect to a remote server
@@ -80,13 +74,6 @@ impl Project {
     ) -> Task<Result<Entity<Terminal>>> {
         let path: Option<Arc<Path>> = match &kind {
             TerminalKind::Shell(path) => path.as_ref().map(|path| Arc::from(path.as_ref())),
-            TerminalKind::Task(spawn_task) => {
-                if let Some(cwd) = &spawn_task.cwd {
-                    Some(Arc::from(cwd.as_ref()))
-                } else {
-                    self.active_project_directory(cx)
-                }
-            }
         };
 
         let mut settings_location = None;
@@ -183,13 +170,6 @@ impl Project {
         let this = &mut *self;
         let path: Option<Arc<Path>> = match &kind {
             TerminalKind::Shell(path) => path.as_ref().map(|path| Arc::from(path.as_ref())),
-            TerminalKind::Task(spawn_task) => {
-                if let Some(cwd) = &spawn_task.cwd {
-                    Some(Arc::from(cwd.as_ref()))
-                } else {
-                    this.active_project_directory(cx)
-                }
-            }
         };
         let ssh_details = this.ssh_details();
 
@@ -203,8 +183,6 @@ impl Project {
             }
         }
         let settings = TerminalSettings::get(settings_location, cx).clone();
-
-        let (completion_tx, completion_rx) = bounded(1);
 
         // Start with the environment that we might have inherited from the Zed CLI.
         let mut env = this
@@ -224,105 +202,19 @@ impl Project {
 
         let mut python_venv_activate_command = None;
 
-        let (spawn_task, shell) = match kind {
+        let shell = match kind {
             TerminalKind::Shell(_) => {
                 if let Some(python_venv_directory) = &python_venv_directory {
                     python_venv_activate_command =
                         this.python_activate_command(python_venv_directory, &settings.detect_venv);
                 }
 
-                match &ssh_details {
-                    Some((host, ssh_command)) => {
-                        log::debug!("Connecting to a remote server: {ssh_command:?}");
-
-                        // Alacritty sets its terminfo to `alacritty`, this requiring hosts to have it installed
-                        // to properly display colors.
-                        // We do not have the luxury of assuming the host has it installed,
-                        // so we set it to a default that does not break the highlighting via ssh.
-                        env.entry("TERM".to_string())
-                            .or_insert_with(|| "xterm-256color".to_string());
-
-                        let (program, args) =
-                            wrap_for_ssh(&ssh_command, None, path.as_deref(), env, None);
-                        env = HashMap::default();
-                        (
-                            Option::<TaskState>::None,
-                            Shell::WithArguments {
-                                program,
-                                args,
-                                title_override: Some(format!("{} — Terminal", host).into()),
-                            },
-                        )
-                    }
-                    None => (None, settings.shell),
-                }
-            }
-            TerminalKind::Task(spawn_task) => {
-                let task_state = Some(TaskState {
-                    id: spawn_task.id,
-                    full_label: spawn_task.full_label,
-                    label: spawn_task.label,
-                    command_label: spawn_task.command_label,
-                    hide: spawn_task.hide,
-                    status: TaskStatus::Running,
-                    show_summary: spawn_task.show_summary,
-                    show_command: spawn_task.show_command,
-                    show_rerun: spawn_task.show_rerun,
-                    completion_rx,
-                });
-
-                env.extend(spawn_task.env);
-
-                if let Some(venv_path) = &python_venv_directory {
-                    env.insert(
-                        "VIRTUAL_ENV".to_string(),
-                        venv_path.to_string_lossy().to_string(),
-                    );
-                }
-
-                match &ssh_details {
-                    Some((host, ssh_command)) => {
-                        log::debug!("Connecting to a remote server: {ssh_command:?}");
-                        env.entry("TERM".to_string())
-                            .or_insert_with(|| "xterm-256color".to_string());
-                        let (program, args) = wrap_for_ssh(
-                            &ssh_command,
-                            Some((&spawn_task.command, &spawn_task.args)),
-                            path.as_deref(),
-                            env,
-                            python_venv_directory.as_deref(),
-                        );
-                        env = HashMap::default();
-                        (
-                            task_state,
-                            Shell::WithArguments {
-                                program,
-                                args,
-                                title_override: Some(format!("{} — Terminal", host).into()),
-                            },
-                        )
-                    }
-                    None => {
-                        if let Some(venv_path) = &python_venv_directory {
-                            add_environment_path(&mut env, &venv_path.join("bin")).log_err();
-                        }
-
-                        (
-                            task_state,
-                            Shell::WithArguments {
-                                program: spawn_task.command,
-                                args: spawn_task.args,
-                                title_override: None,
-                            },
-                        )
-                    }
-                }
+                settings.shell
             }
         };
         TerminalBuilder::new(
             local_path.map(|path| path.to_path_buf()),
             python_venv_directory,
-            spawn_task,
             shell,
             env,
             settings.cursor_shape.unwrap_or_default(),
@@ -330,7 +222,6 @@ impl Project {
             settings.max_scroll_history_lines,
             ssh_details.is_some(),
             window,
-            completion_tx,
             cx,
         )
         .map(|builder| {
@@ -570,17 +461,4 @@ pub fn wrap_for_ssh(
     args.push("-t".to_string());
     args.push(shell_invocation);
     (program, args)
-}
-
-fn add_environment_path(env: &mut HashMap<String, String>, new_path: &Path) -> Result<()> {
-    let mut env_paths = vec![new_path.to_path_buf()];
-    if let Some(path) = env.get("PATH").or(env::var("PATH").ok().as_ref()) {
-        let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();
-        env_paths.append(&mut paths);
-    }
-
-    let paths = std::env::join_paths(env_paths).context("failed to create PATH env variable")?;
-    env.insert("PATH".to_string(), paths.to_string_lossy().to_string());
-
-    Ok(())
 }

@@ -27,7 +27,6 @@ serde_derive.workspace = true
 settings.workspace = true
 sysinfo.workspace = true
 smol.workspace = true
-task.workspace = true
 theme.workspace = true
 thiserror.workspace = true
 util.workspace = true

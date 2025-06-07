@@ -15,7 +15,6 @@ mod manifest;
 mod outline;
 pub mod proto;
 mod syntax_map;
-mod task_context;
 mod text_diff;
 mod toolchain;
 
@@ -30,7 +29,7 @@ use gpui::{App, AsyncApp, Entity, SharedString, Task};
 pub use highlight_map::HighlightMap;
 use http_client::HttpClient;
 pub use language_registry::{LanguageName, LoadedLanguage};
-use lsp::{CodeActionKind, InitializeParams, LanguageServerBinary, LanguageServerBinaryOptions};
+use lsp::{InitializeParams, LanguageServerBinary, LanguageServerBinaryOptions};
 pub use manifest::{ManifestDelegate, ManifestName, ManifestProvider, ManifestQuery};
 use parking_lot::Mutex;
 use regex::Regex;
@@ -60,8 +59,6 @@ use std::{
 };
 use std::{num::NonZeroU32, sync::OnceLock};
 use syntax_map::{QueryCursorHandle, SyntaxSnapshot};
-use task::RunnableTag;
-pub use task_context::{ContextLocation, ContextProvider, RunnableRange};
 pub use text_diff::{
     DiffOptions, apply_diff_patch, line_diff, text_diff, text_diff_with_options, unified_diff,
 };
@@ -222,10 +219,6 @@ impl CachedLspAdapter {
             .clone()
             .get_language_server_command(delegate, toolchains, binary_options, cached_binary, cx)
             .await
-    }
-
-    pub fn code_action_kinds(&self) -> Option<Vec<CodeActionKind>> {
-        self.adapter.code_action_kinds()
     }
 
     pub fn process_diagnostics(
@@ -573,11 +566,6 @@ pub trait LspAdapter: 'static + Send + Sync {
         _cx: &mut AsyncApp,
     ) -> Result<Option<Value>> {
         Ok(None)
-    }
-
-    /// Returns a list of code actions supported by a given LspAdapter
-    fn code_action_kinds(&self) -> Option<Vec<CodeActionKind>> {
-        None
     }
 
     fn disk_based_diagnostic_sources(&self) -> Vec<String> {
@@ -1024,7 +1012,6 @@ pub struct Language {
     pub(crate) id: LanguageId,
     pub(crate) config: LanguageConfig,
     pub(crate) grammar: Option<Arc<Grammar>>,
-    pub(crate) context_provider: Option<Arc<dyn ContextProvider>>,
     pub(crate) toolchain: Option<Arc<dyn ToolchainLister>>,
 }
 
@@ -1044,7 +1031,6 @@ pub struct Grammar {
     pub(crate) highlights_query: Option<Query>,
     pub(crate) brackets_config: Option<BracketsConfig>,
     pub(crate) redactions_config: Option<RedactionConfig>,
-    pub(crate) runnable_config: Option<RunnableConfig>,
     pub(crate) indents_config: Option<IndentConfig>,
     pub outline_config: Option<OutlineConfig>,
     pub text_object_config: Option<TextObjectConfig>,
@@ -1139,12 +1125,6 @@ enum RunnableCapture {
     Run,
 }
 
-struct RunnableConfig {
-    pub query: Query,
-    /// A mapping from capture indice to capture kind
-    pub extra_captures: Vec<RunnableCapture>,
-}
-
 struct OverrideConfig {
     query: Query,
     values: HashMap<u32, OverrideEntry>,
@@ -1204,20 +1184,13 @@ impl Language {
                     injection_config: None,
                     override_config: None,
                     redactions_config: None,
-                    runnable_config: None,
                     error_query: Query::new(&ts_language, "(ERROR) @error").ok(),
                     ts_language,
                     highlight_map: Default::default(),
                 })
             }),
-            context_provider: None,
             toolchain: None,
         }
-    }
-
-    pub fn with_context_provider(mut self, provider: Option<Arc<dyn ContextProvider>>) -> Self {
-        self.context_provider = provider;
-        self
     }
 
     pub fn with_toolchain_lister(mut self, provider: Option<Arc<dyn ToolchainLister>>) -> Self {
@@ -1299,11 +1272,6 @@ impl Language {
             };
             extra_captures.push(kind);
         }
-
-        grammar.runnable_config = Some(RunnableConfig {
-            extra_captures,
-            query,
-        });
 
         Ok(self)
     }
@@ -1621,10 +1589,6 @@ impl Language {
             .code_fence_block_name
             .clone()
             .unwrap_or_else(|| self.config.name.as_ref().to_lowercase().into())
-    }
-
-    pub fn context_provider(&self) -> Option<Arc<dyn ContextProvider>> {
-        self.context_provider.clone()
     }
 
     pub fn toolchain_lister(&self) -> Option<Arc<dyn ToolchainLister>> {

@@ -157,7 +157,6 @@ impl HeadlessExtensionStore {
                         Ok(LoadedLanguage {
                             config: config.clone(),
                             queries: LanguageQueries::default(),
-                            context_provider: None,
                             toolchain_provider: None,
                         })
                     }),

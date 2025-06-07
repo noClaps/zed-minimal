@@ -258,7 +258,6 @@ impl Prettier {
             server_name,
             server_binary,
             &prettier_dir,
-            None,
             Default::default(),
             &mut cx,
         )

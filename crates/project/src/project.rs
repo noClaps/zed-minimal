@@ -10,8 +10,6 @@ mod manifest_tree;
 pub mod prettier_store;
 pub mod project_settings;
 pub mod search;
-mod task_inventory;
-pub mod task_store;
 pub mod terminals;
 pub mod toolchain_store;
 pub mod worktree_store;
@@ -58,8 +56,8 @@ use language::{
     Unclipped, language_settings::InlayHintKind,
 };
 use lsp::{
-    CodeActionKind, CompletionContext, CompletionItemKind, DocumentHighlightKind, InsertTextMode,
-    LanguageServerId, LanguageServerName,
+    CompletionContext, CompletionItemKind, DocumentHighlightKind, InsertTextMode, LanguageServerId,
+    LanguageServerName,
 };
 use lsp_command::*;
 use lsp_store::{CompletionDocumentation, LspFormatTarget, OpenLspBufferHandle};
@@ -88,7 +86,6 @@ use std::{
     time::Duration,
 };
 
-use task_store::TaskStore;
 use terminals::Terminals;
 use text::{Anchor, BufferId};
 use util::{
@@ -104,9 +101,6 @@ use worktree_store::{WorktreeStore, WorktreeStoreEvent};
 
 pub use fs::*;
 pub use language::Location;
-pub use task_inventory::{
-    BasicContextProvider, ContextProviderWithTasks, Inventory, TaskContexts, TaskSourceKind,
-};
 
 pub use buffer_store::ProjectTransaction;
 pub use lsp_store::{
@@ -151,7 +145,6 @@ pub struct Project {
 
     client: Arc<client::Client>,
     join_project_response_message_id: u32,
-    task_store: Entity<TaskStore>,
     user_store: Entity<UserStore>,
     fs: Arc<dyn Fs>,
     client_state: ProjectClientState,
@@ -271,7 +264,6 @@ pub enum Event {
     Reshared,
     Rejoined,
     RefreshInlayHints,
-    RefreshCodeLens,
     RevealInProjectPanel(ProjectEntryId),
     SnippetEdit(BufferId, Vec<(lsp::Range, Snippet)>),
     ExpandedAllForEntry(WorktreeId, ProjectEntryId),
@@ -532,66 +524,17 @@ pub(crate) struct CoreCompletion {
     source: CompletionSource,
 }
 
-/// A code action provided by a language server.
-#[derive(Clone, Debug)]
-pub struct CodeAction {
-    /// The id of the language server that produced this code action.
-    pub server_id: LanguageServerId,
-    /// The range of the buffer where this code action is applicable.
-    pub range: Range<Anchor>,
-    /// The raw code action provided by the language server.
-    /// Can be either an action or a command.
-    pub lsp_action: LspAction,
-    /// Whether the action needs to be resolved using the language server.
-    pub resolved: bool,
-}
-
 /// An action sent back by a language server.
 #[derive(Clone, Debug)]
 pub enum LspAction {
-    /// An action with the full data, may have a command or may not.
-    /// May require resolving.
-    Action(Box<lsp::CodeAction>),
     /// A command data to run as an action.
     Command(lsp::Command),
-    /// A code lens data to run as an action.
-    CodeLens(lsp::CodeLens),
 }
 
 impl LspAction {
     pub fn title(&self) -> &str {
         match self {
-            Self::Action(action) => &action.title,
             Self::Command(command) => &command.title,
-            Self::CodeLens(lens) => lens
-                .command
-                .as_ref()
-                .map(|command| command.title.as_str())
-                .unwrap_or("Unknown command"),
-        }
-    }
-
-    fn action_kind(&self) -> Option<lsp::CodeActionKind> {
-        match self {
-            Self::Action(action) => action.kind.clone(),
-            Self::Command(_) => Some(lsp::CodeActionKind::new("command")),
-            Self::CodeLens(_) => Some(lsp::CodeActionKind::new("code lens")),
-        }
-    }
-
-    fn edit(&self) -> Option<&lsp::WorkspaceEdit> {
-        match self {
-            Self::Action(action) => action.edit.as_ref(),
-            Self::Command(_) => None,
-            Self::CodeLens(_) => None,
-        }
-    }
-
-    fn command(&self) -> Option<&lsp::Command> {
-        match self {
-            Self::Action(action) => action.command.as_ref(),
-            Self::Command(command) => Some(command),
-            Self::CodeLens(lens) => lens.command.as_ref(),
         }
     }
 }
@@ -839,7 +782,6 @@ impl Project {
         LspStore::init(&client);
         GitStore::init(&client);
         SettingsObserver::init(&client);
-        TaskStore::init(Some(&client));
         ToolchainStore::init(&client);
     }
 
@@ -891,24 +833,7 @@ impl Project {
                 )
             });
 
-            let task_store = cx.new(|cx| {
-                TaskStore::local(
-                    buffer_store.downgrade(),
-                    worktree_store.clone(),
-                    toolchain_store.read(cx).as_language_toolchain_store(),
-                    environment.clone(),
-                    cx,
-                )
-            });
-
-            let settings_observer = cx.new(|cx| {
-                SettingsObserver::new_local(
-                    fs.clone(),
-                    worktree_store.clone(),
-                    task_store.clone(),
-                    cx,
-                )
-            });
+            let settings_observer = cx.new(|_| SettingsObserver::new_local(worktree_store.clone()));
             cx.subscribe(&settings_observer, Self::on_settings_observer_event)
                 .detach();
 
@@ -955,7 +880,6 @@ impl Project {
                 snippets,
                 languages,
                 client,
-                task_store,
                 user_store,
                 settings_observer,
                 fs,
@@ -1077,10 +1001,6 @@ impl Project {
             ProjectClientState::Local => None,
             ProjectClientState::Shared { remote_id, .. } => Some(remote_id),
         }
-    }
-
-    pub fn task_store(&self) -> &Entity<TaskStore> {
-        &self.task_store
     }
 
     pub fn snippets(&self) -> &Entity<SnippetProvider> {
@@ -1397,9 +1317,6 @@ impl Project {
         self.lsp_store.update(cx, |lsp_store, cx| {
             lsp_store.shared(project_id, self.client.clone().into(), cx)
         });
-        self.task_store.update(cx, |task_store, cx| {
-            task_store.shared(project_id, self.client.clone().into(), cx);
-        });
         self.settings_observer.update(cx, |settings_observer, cx| {
             settings_observer.shared(project_id, self.client.clone().into(), cx)
         });
@@ -1481,9 +1398,6 @@ impl Project {
             self.buffer_store.update(cx, |buffer_store, cx| {
                 buffer_store.forget_shared_buffers();
                 buffer_store.unshared(cx)
-            });
-            self.task_store.update(cx, |task_store, cx| {
-                task_store.unshared(cx);
             });
             self.settings_observer.update(cx, |settings_observer, cx| {
                 settings_observer.unshared(cx);
@@ -1841,7 +1755,6 @@ impl Project {
                 };
             }
             LspStoreEvent::RefreshInlayHints => cx.emit(Event::RefreshInlayHints),
-            LspStoreEvent::RefreshCodeLens => cx.emit(Event::RefreshCodeLens),
             LspStoreEvent::LanguageServerPrompt(prompt) => {
                 cx.emit(Event::LanguageServerPrompt(prompt.clone()))
             }
@@ -1898,19 +1811,6 @@ impl Project {
                 }
                 Ok(path) => cx.emit(Event::HideToast {
                     notification_id: format!("local-settings-{path:?}").into(),
-                }),
-                Err(_) => {}
-            },
-            SettingsObserverEvent::LocalTasksUpdated(result) => match result {
-                Err(InvalidSettingsError::Tasks { message, path }) => {
-                    let message = format!("Failed to set local tasks in {path:?}:\n{message}");
-                    cx.emit(Event::Toast {
-                        notification_id: format!("local-tasks-{path:?}").into(),
-                        message,
-                    });
-                }
-                Ok(path) => cx.emit(Event::HideToast {
-                    notification_id: format!("local-tasks-{path:?}").into(),
                 }),
                 Err(_) => {}
             },
@@ -2454,72 +2354,6 @@ impl Project {
         let position = position.to_point_utf16(buffer.read(cx));
         self.lsp_store.update(cx, |lsp_store, cx| {
             lsp_store.completions(buffer, position, context, cx)
-        })
-    }
-
-    pub fn code_actions<T: Clone + ToOffset>(
-        &mut self,
-        buffer_handle: &Entity<Buffer>,
-        range: Range<T>,
-        kinds: Option<Vec<CodeActionKind>>,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<Vec<CodeAction>>> {
-        let buffer = buffer_handle.read(cx);
-        let range = buffer.anchor_before(range.start)..buffer.anchor_before(range.end);
-        self.lsp_store.update(cx, |lsp_store, cx| {
-            lsp_store.code_actions(buffer_handle, range, kinds, cx)
-        })
-    }
-
-    pub fn code_lens<T: Clone + ToOffset>(
-        &mut self,
-        buffer_handle: &Entity<Buffer>,
-        range: Range<T>,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<Vec<CodeAction>>> {
-        let snapshot = buffer_handle.read(cx).snapshot();
-        let range = snapshot.anchor_before(range.start)..snapshot.anchor_after(range.end);
-        let code_lens_actions = self
-            .lsp_store
-            .update(cx, |lsp_store, cx| lsp_store.code_lens(buffer_handle, cx));
-
-        cx.background_spawn(async move {
-            let mut code_lens_actions = code_lens_actions.await?;
-            code_lens_actions.retain(|code_lens_action| {
-                range
-                    .start
-                    .cmp(&code_lens_action.range.start, &snapshot)
-                    .is_ge()
-                    && range
-                        .end
-                        .cmp(&code_lens_action.range.end, &snapshot)
-                        .is_le()
-            });
-            Ok(code_lens_actions)
-        })
-    }
-
-    pub fn apply_code_action(
-        &self,
-        buffer_handle: Entity<Buffer>,
-        action: CodeAction,
-        push_to_history: bool,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<ProjectTransaction>> {
-        self.lsp_store.update(cx, |lsp_store, cx| {
-            lsp_store.apply_code_action(buffer_handle, action, push_to_history, cx)
-        })
-    }
-
-    pub fn apply_code_action_kind(
-        &self,
-        buffers: HashSet<Entity<Buffer>>,
-        kind: CodeActionKind,
-        push_to_history: bool,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<ProjectTransaction>> {
-        self.lsp_store.update(cx, |lsp_store, cx| {
-            lsp_store.apply_code_action_kind(buffers, kind, push_to_history, cx)
         })
     }
 

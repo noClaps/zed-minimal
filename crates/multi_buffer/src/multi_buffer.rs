@@ -5316,28 +5316,6 @@ impl MultiBufferSnapshot {
         .map(|(range, _, _)| range)
     }
 
-    pub fn runnable_ranges(
-        &self,
-        range: Range<Anchor>,
-    ) -> impl Iterator<Item = language::RunnableRange> + '_ {
-        let range = range.start.to_offset(self)..range.end.to_offset(self);
-        self.lift_buffer_metadata(range, move |buffer, range| {
-            Some(
-                buffer
-                    .runnable_ranges(range.clone())
-                    .filter(move |runnable| {
-                        runnable.run_range.start >= range.start
-                            && runnable.run_range.end < range.end
-                    })
-                    .map(|runnable| (runnable.run_range.clone(), runnable)),
-            )
-        })
-        .map(|(run_range, runnable, _)| language::RunnableRange {
-            run_range,
-            ..runnable
-        })
-    }
-
     pub fn line_indents(
         &self,
         start_row: MultiBufferRow,

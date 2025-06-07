@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use collections::HashMap;
 use gpui::AsyncApp;
 use language::{LanguageToolchainStore, LspAdapter, LspAdapterDelegate};
-use lsp::{CodeActionKind, LanguageServerBinary, LanguageServerName};
+use lsp::{LanguageServerBinary, LanguageServerName};
 use node_runtime::NodeRuntime;
 use project::{Fs, lsp_store::language_server_settings};
 use serde_json::Value;
@@ -155,15 +155,6 @@ impl LspAdapter for VtslsLspAdapter {
         _: &dyn LspAdapterDelegate,
     ) -> Option<LanguageServerBinary> {
         get_cached_ts_server_binary(container_dir, &self.node).await
-    }
-
-    fn code_action_kinds(&self) -> Option<Vec<CodeActionKind>> {
-        Some(vec![
-            CodeActionKind::QUICKFIX,
-            CodeActionKind::REFACTOR,
-            CodeActionKind::REFACTOR_EXTRACT,
-            CodeActionKind::SOURCE,
-        ])
     }
 
     async fn label_for_completion(

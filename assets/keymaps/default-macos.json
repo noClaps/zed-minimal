@@ -391,7 +391,6 @@
       // System Preferences->Keyboard->Keyboard Shortcuts->Input Sources->Select the previous input source (uncheck)
       "ctrl-space": "editor::ShowCompletions",
       "ctrl-shift-space": "editor::ShowWordCompletions",
-      "cmd-.": "editor::ToggleCodeActions",
       "cmd-k r": "editor::RevealInFileManager",
       "cmd-k p": "editor::CopyPath",
       "cmd-\\": "pane::SplitRight",
@@ -491,14 +490,7 @@
     "context": "Workspace && !Terminal",
     "use_key_equivalents": true,
     "bindings": {
-      "cmd-n": "workspace::NewFile",
-      "cmd-shift-r": "task::Spawn",
-      "cmd-alt-r": "task::Rerun",
-      "ctrl-alt-shift-r": ["task::Spawn", { "reveal_target": "center" }]
-      // also possible to spawn tasks by name:
-      // "foo-bar": ["task::Spawn", { "task_name": "MyTask", "reveal_target": "dock" }]
-      // or by tag:
-      // "foo-bar": ["task::Spawn", { "task_tag": "MyTag" }],
+      "cmd-n": "workspace::NewFile"
     }
   },
   {
@@ -548,14 +540,7 @@
     }
   },
   {
-    "context": "Editor && showing_code_actions",
-    "use_key_equivalents": true,
-    "bindings": {
-      "enter": "editor::ConfirmCodeAction"
-    }
-  },
-  {
-    "context": "Editor && (showing_code_actions || showing_completions)",
+    "context": "Editor && showing_completions",
     "use_key_equivalents": true,
     "bindings": {
       "up": "editor::ContextMenuPrevious",
@@ -826,8 +811,7 @@
       "ctrl-alt-up": "pane::SplitUp",
       "ctrl-alt-down": "pane::SplitDown",
       "ctrl-alt-left": "pane::SplitLeft",
-      "ctrl-alt-right": "pane::SplitRight",
-      "cmd-alt-r": "terminal::RerunTask"
+      "ctrl-alt-right": "pane::SplitRight"
     }
   },
   {

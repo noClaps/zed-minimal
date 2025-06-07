@@ -1,3 +1,4 @@
+use crate::Shell;
 use alacritty_terminal::vte::ansi::{
     CursorShape as AlacCursorShape, CursorStyle as AlacCursorStyle,
 };
@@ -9,7 +10,6 @@ use schemars::{JsonSchema, r#gen::SchemaGenerator, schema::RootSchema};
 use serde_derive::{Deserialize, Serialize};
 use settings::{SettingsJsonSchemaParams, SettingsSources, add_references_to_properties};
 use std::path::PathBuf;
-use task::Shell;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

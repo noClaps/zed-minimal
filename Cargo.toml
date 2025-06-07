@@ -88,8 +88,6 @@ members = [
     "crates/sqlez_macros",
     "crates/sum_tree",
     "crates/tab_switcher",
-    "crates/task",
-    "crates/tasks_ui",
     "crates/telemetry",
     "crates/telemetry_events",
     "crates/terminal",
@@ -106,7 +104,6 @@ members = [
     "crates/ui_macros",
     "crates/ui_prompt",
     "crates/util",
-    "crates/util_macros",
     "crates/watch",
     "crates/welcome",
     "crates/workspace",
@@ -215,8 +212,6 @@ sqlez = { path = "crates/sqlez" }
 sqlez_macros = { path = "crates/sqlez_macros" }
 sum_tree = { path = "crates/sum_tree" }
 tab_switcher = { path = "crates/tab_switcher" }
-task = { path = "crates/task" }
-tasks_ui = { path = "crates/tasks_ui" }
 telemetry = { path = "crates/telemetry" }
 telemetry_events = { path = "crates/telemetry_events" }
 terminal = { path = "crates/terminal" }
@@ -233,7 +228,6 @@ ui_input = { path = "crates/ui_input" }
 ui_macros = { path = "crates/ui_macros" }
 ui_prompt = { path = "crates/ui_prompt" }
 util = { path = "crates/util" }
-util_macros = { path = "crates/util_macros" }
 watch = { path = "crates/watch" }
 welcome = { path = "crates/welcome" }
 workspace = { path = "crates/workspace" }
@@ -281,7 +275,6 @@ futures-lite = "1.13"
 git2 = { version = "0.20.1", default-features = false }
 globset = "0.4"
 heck = "0.5"
-hex = "0.4.3"
 http = "1.1"
 ignore = "0.4.22"
 image = "0.25.1"
@@ -306,7 +299,6 @@ objc = "0.2"
 ordered-float = "2.1.1"
 palette = { version = "0.7.5", default-features = false, features = ["std"] }
 parking_lot = "0.12.1"
-pathdiff = "0.2"
 pet = { git = "https://github.com/microsoft/python-environment-tools.git", rev = "845945b830297a50de0e24020b980a65e4820559" }
 pet-conda = { git = "https://github.com/microsoft/python-environment-tools.git", rev = "845945b830297a50de0e24020b980a65e4820559" }
 pet-core = { git = "https://github.com/microsoft/python-environment-tools.git", rev = "845945b830297a50de0e24020b980a65e4820559" }

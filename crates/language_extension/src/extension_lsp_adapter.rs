@@ -15,7 +15,7 @@ use language::{
     BinaryStatus, CodeLabel, HighlightId, Language, LanguageName, LanguageToolchainStore,
     LspAdapter, LspAdapterDelegate,
 };
-use lsp::{CodeActionKind, LanguageServerBinary, LanguageServerBinaryOptions, LanguageServerName};
+use lsp::{LanguageServerBinary, LanguageServerBinaryOptions, LanguageServerName};
 use serde::Serialize;
 use serde_json::Value;
 use util::{ResultExt, maybe};
@@ -182,23 +182,6 @@ impl LspAdapter for ExtensionLspAdapter {
         _: &dyn LspAdapterDelegate,
     ) -> Option<LanguageServerBinary> {
         unreachable!("get_language_server_command is overridden")
-    }
-
-    fn code_action_kinds(&self) -> Option<Vec<CodeActionKind>> {
-        let code_action_kinds = self
-            .extension
-            .manifest()
-            .language_servers
-            .get(&self.language_server_id)
-            .and_then(|server| server.code_action_kinds.clone());
-
-        code_action_kinds.or(Some(vec![
-            CodeActionKind::EMPTY,
-            CodeActionKind::QUICKFIX,
-            CodeActionKind::REFACTOR,
-            CodeActionKind::REFACTOR_EXTRACT,
-            CodeActionKind::SOURCE,
-        ]))
     }
 
     fn language_ids(&self) -> HashMap<String, String> {

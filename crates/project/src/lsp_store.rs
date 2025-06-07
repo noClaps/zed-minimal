@@ -3,8 +3,8 @@ pub mod lsp_ext_command;
 pub mod rust_analyzer_ext;
 
 use crate::{
-    CodeAction, Completion, CompletionResponse, CompletionSource, CoreCompletion, Hover, InlayHint,
-    LspAction, LspPullDiagnostics, ProjectItem, ProjectPath, ProjectTransaction, PulledDiagnostics,
+    Completion, CompletionResponse, CompletionSource, CoreCompletion, Hover, InlayHint,
+    LspPullDiagnostics, ProjectItem, ProjectPath, ProjectTransaction, PulledDiagnostics,
     ResolveState, Symbol, ToolchainStore,
     buffer_store::{BufferStore, BufferStoreEvent},
     environment::ProjectEnvironment,
@@ -51,13 +51,12 @@ use language::{
     range_from_lsp, range_to_lsp,
 };
 use lsp::{
-    CodeActionKind, CompletionContext, DiagnosticSeverity, DiagnosticTag,
-    DidChangeWatchedFilesRegistrationOptions, Edit, FileOperationFilter, FileOperationPatternKind,
-    FileOperationRegistrationOptions, FileRename, FileSystemWatcher, LanguageServer,
-    LanguageServerBinary, LanguageServerBinaryOptions, LanguageServerId, LanguageServerName,
-    LspRequestFuture, MessageActionItem, MessageType, OneOf, RenameFilesParams, SymbolKind,
-    TextEdit, WillRenameFiles, WorkDoneProgressCancelParams, WorkspaceFolder,
-    notification::DidRenameFiles,
+    CompletionContext, DiagnosticSeverity, DiagnosticTag, DidChangeWatchedFilesRegistrationOptions,
+    Edit, FileOperationFilter, FileOperationPatternKind, FileOperationRegistrationOptions,
+    FileRename, FileSystemWatcher, LanguageServer, LanguageServerBinary,
+    LanguageServerBinaryOptions, LanguageServerId, LanguageServerName, LspRequestFuture,
+    MessageActionItem, MessageType, OneOf, RenameFilesParams, SymbolKind, TextEdit,
+    WillRenameFiles, WorkDoneProgressCancelParams, WorkspaceFolder, notification::DidRenameFiles,
 };
 use node_runtime::read_package_installed_version;
 use parking_lot::Mutex;
@@ -90,8 +89,7 @@ use std::{
 use text::{Anchor, BufferId, LineEnding, OffsetRangeExt};
 use url::Url;
 use util::{
-    ConnectionResult, ResultExt as _, defer, maybe, merge_json_value_into,
-    paths::{PathExt, SanitizedPath},
+    ConnectionResult, ResultExt as _, defer, maybe, merge_json_value_into, paths::SanitizedPath,
     post_inc,
 };
 
@@ -220,7 +218,6 @@ impl LocalLspStore {
                     server_name,
                     binary,
                     &root_path,
-                    adapter.code_action_kinds(),
                     pending_workspace_folders,
                     cx,
                 )
@@ -825,28 +822,6 @@ impl LocalLspStore {
             .detach();
 
         language_server
-            .on_request::<lsp::request::CodeLensRefresh, _, _>({
-                let this = this.clone();
-                move |(), cx| {
-                    let this = this.clone();
-                    let mut cx = cx.clone();
-                    async move {
-                        this.update(&mut cx, |this, cx| {
-                            cx.emit(LspStoreEvent::RefreshCodeLens);
-                            this.downstream_client.as_ref().map(|(client, project_id)| {
-                                client.send(proto::RefreshCodeLens {
-                                    project_id: *project_id,
-                                })
-                            })
-                        })?
-                        .transpose()?;
-                        Ok(())
-                    }
-                }
-            })
-            .detach();
-
-        language_server
             .on_request::<lsp::request::WorkspaceDiagnosticRefresh, _, _>({
                 let this = this.clone();
                 move |(), cx| {
@@ -1108,74 +1083,6 @@ impl LocalLspStore {
             })
     }
 
-    async fn execute_code_action_kind_locally(
-        lsp_store: WeakEntity<LspStore>,
-        mut buffers: Vec<Entity<Buffer>>,
-        kind: CodeActionKind,
-        push_to_history: bool,
-        cx: &mut AsyncApp,
-    ) -> anyhow::Result<ProjectTransaction> {
-        // Do not allow multiple concurrent code actions requests for the
-        // same buffer.
-        lsp_store.update(cx, |this, cx| {
-            let this = this.as_local_mut().unwrap();
-            buffers.retain(|buffer| {
-                this.buffers_being_formatted
-                    .insert(buffer.read(cx).remote_id())
-            });
-        })?;
-        let _cleanup = defer({
-            let this = lsp_store.clone();
-            let mut cx = cx.clone();
-            let buffers = &buffers;
-            move || {
-                this.update(&mut cx, |this, cx| {
-                    let this = this.as_local_mut().unwrap();
-                    for buffer in buffers {
-                        this.buffers_being_formatted
-                            .remove(&buffer.read(cx).remote_id());
-                    }
-                })
-                .ok();
-            }
-        });
-        let mut project_transaction = ProjectTransaction::default();
-
-        for buffer in &buffers {
-            let adapters_and_servers = lsp_store.update(cx, |lsp_store, cx| {
-                buffer.update(cx, |buffer, cx| {
-                    lsp_store
-                        .as_local()
-                        .unwrap()
-                        .language_servers_for_buffer(buffer, cx)
-                        .map(|(adapter, lsp)| (adapter.clone(), lsp.clone()))
-                        .collect::<Vec<_>>()
-                })
-            })?;
-            for (lsp_adapter, language_server) in adapters_and_servers.iter() {
-                let actions = Self::get_server_code_actions_from_action_kinds(
-                    &lsp_store,
-                    language_server.server_id(),
-                    vec![kind.clone()],
-                    buffer,
-                    cx,
-                )
-                .await?;
-                Self::execute_code_actions_on_server(
-                    &lsp_store,
-                    language_server,
-                    lsp_adapter,
-                    actions,
-                    push_to_history,
-                    &mut project_transaction,
-                    cx,
-                )
-                .await?;
-            }
-        }
-        Ok(project_transaction)
-    }
-
     async fn format_locally(
         lsp_store: WeakEntity<LspStore>,
         mut buffers: Vec<FormattableBuffer>,
@@ -1338,26 +1245,6 @@ impl LocalLspStore {
             })?;
         }
 
-        // Formatter for `code_actions_on_format` that runs before
-        // the rest of the formatters
-        let mut code_actions_on_format_formatter = None;
-        let should_run_code_actions_on_format = !matches!(
-            (trigger, &settings.format_on_save),
-            (FormatTrigger::Save, &FormatOnSave::Off)
-        );
-        if should_run_code_actions_on_format {
-            let have_code_actions_to_run_on_format = settings
-                .code_actions_on_format
-                .values()
-                .any(|enabled| *enabled);
-            if have_code_actions_to_run_on_format {
-                zlog::trace!(logger => "going to run code actions on format");
-                code_actions_on_format_formatter = Some(Formatter::CodeActions(
-                    settings.code_actions_on_format.clone(),
-                ));
-            }
-        }
-
         let formatters = match (trigger, &settings.format_on_save) {
             (FormatTrigger::Save, FormatOnSave::Off) => &[],
             (FormatTrigger::Save, FormatOnSave::List(formatters)) => formatters.as_ref(),
@@ -1376,8 +1263,6 @@ impl LocalLspStore {
                 }
             }
         };
-
-        let formatters = code_actions_on_format_formatter.iter().chain(formatters);
 
         for formatter in formatters {
             match formatter {
@@ -1511,360 +1396,6 @@ impl LocalLspStore {
                             buffer.edit(edits, None, cx);
                         },
                     )?;
-                }
-                Formatter::CodeActions(code_actions) => {
-                    let logger = zlog::scoped!(logger => "code-actions");
-                    zlog::trace!(logger => "formatting");
-                    let _timer = zlog::time!(logger => "Formatting buffer using code actions");
-
-                    let Some(buffer_path_abs) = buffer.abs_path.as_ref() else {
-                        zlog::warn!(logger => "Cannot format buffer that is not backed by a file on disk using code actions. Skipping");
-                        continue;
-                    };
-                    let code_action_kinds = code_actions
-                        .iter()
-                        .filter_map(|(action_kind, enabled)| {
-                            enabled.then_some(action_kind.clone().into())
-                        })
-                        .collect::<Vec<_>>();
-                    if code_action_kinds.is_empty() {
-                        zlog::trace!(logger => "No code action kinds enabled, skipping");
-                        continue;
-                    }
-                    zlog::trace!(logger => "Attempting to resolve code actions {:?}", &code_action_kinds);
-
-                    let mut actions_and_servers = Vec::new();
-
-                    for (index, (_, language_server)) in adapters_and_servers.iter().enumerate() {
-                        let actions_result = Self::get_server_code_actions_from_action_kinds(
-                            &lsp_store,
-                            language_server.server_id(),
-                            code_action_kinds.clone(),
-                            &buffer.handle,
-                            cx,
-                        )
-                        .await
-                        .with_context(
-                            || format!("Failed to resolve code actions with kinds {:?} for language server {}",
-                                code_action_kinds.iter().map(|kind| kind.as_str()).join(", "),
-                                language_server.name())
-                        );
-                        let Ok(actions) = actions_result else {
-                            // note: it may be better to set result to the error and break formatters here
-                            // but for now we try to execute the actions that we can resolve and skip the rest
-                            zlog::error!(
-                                logger =>
-                                "Failed to resolve code actions with kinds {:?} with language server {}",
-                                code_action_kinds.iter().map(|kind| kind.as_str()).join(", "),
-                                language_server.name()
-                            );
-                            continue;
-                        };
-                        for action in actions {
-                            actions_and_servers.push((action, index));
-                        }
-                    }
-
-                    if actions_and_servers.is_empty() {
-                        zlog::warn!(logger => "No code actions were resolved, continuing");
-                        continue;
-                    }
-
-                    'actions: for (mut action, server_index) in actions_and_servers {
-                        let server = &adapters_and_servers[server_index].1;
-
-                        let describe_code_action = |action: &CodeAction| {
-                            format!(
-                                "code action '{}' with title \"{}\" on server {}",
-                                action
-                                    .lsp_action
-                                    .action_kind()
-                                    .unwrap_or("unknown".into())
-                                    .as_str(),
-                                action.lsp_action.title(),
-                                server.name(),
-                            )
-                        };
-
-                        zlog::trace!(logger => "Executing {}", describe_code_action(&action));
-
-                        if let Err(err) = Self::try_resolve_code_action(server, &mut action).await {
-                            zlog::error!(
-                                logger =>
-                                "Failed to resolve {}. Error: {}",
-                                describe_code_action(&action),
-                                err
-                            );
-                            continue;
-                        }
-
-                        if let Some(edit) = action.lsp_action.edit().cloned() {
-                            // NOTE: code below duplicated from `Self::deserialize_workspace_edit`
-                            // but filters out and logs warnings for code actions that cause unreasonably
-                            // difficult handling on our part, such as:
-                            // - applying edits that call commands
-                            //   which can result in arbitrary workspace edits being sent from the server that
-                            //   have no way of being tied back to the command that initiated them (i.e. we
-                            //   can't know which edits are part of the format request, or if the server is done sending
-                            //   actions in response to the command)
-                            // - actions that create/delete/modify/rename files other than the one we are formatting
-                            //   as we then would need to handle such changes correctly in the local history as well
-                            //   as the remote history through the ProjectTransaction
-                            // - actions with snippet edits, as these simply don't make sense in the context of a format request
-                            // Supporting these actions is not impossible, but not supported as of yet.
-                            if edit.changes.is_none() && edit.document_changes.is_none() {
-                                zlog::trace!(
-                                    logger =>
-                                    "No changes for code action. Skipping {}",
-                                    describe_code_action(&action),
-                                );
-                                continue;
-                            }
-
-                            let mut operations = Vec::new();
-                            if let Some(document_changes) = edit.document_changes {
-                                match document_changes {
-                                    lsp::DocumentChanges::Edits(edits) => operations.extend(
-                                        edits.into_iter().map(lsp::DocumentChangeOperation::Edit),
-                                    ),
-                                    lsp::DocumentChanges::Operations(ops) => operations = ops,
-                                }
-                            } else if let Some(changes) = edit.changes {
-                                operations.extend(changes.into_iter().map(|(uri, edits)| {
-                                    lsp::DocumentChangeOperation::Edit(lsp::TextDocumentEdit {
-                                        text_document:
-                                            lsp::OptionalVersionedTextDocumentIdentifier {
-                                                uri,
-                                                version: None,
-                                            },
-                                        edits: edits.into_iter().map(Edit::Plain).collect(),
-                                    })
-                                }));
-                            }
-
-                            let mut edits = Vec::with_capacity(operations.len());
-
-                            if operations.is_empty() {
-                                zlog::trace!(
-                                    logger =>
-                                    "No changes for code action. Skipping {}",
-                                    describe_code_action(&action),
-                                );
-                                continue;
-                            }
-                            for operation in operations {
-                                let op = match operation {
-                                    lsp::DocumentChangeOperation::Edit(op) => op,
-                                    lsp::DocumentChangeOperation::Op(_) => {
-                                        zlog::warn!(
-                                            logger =>
-                                            "Code actions which create, delete, or rename files are not supported on format. Skipping {}",
-                                            describe_code_action(&action),
-                                        );
-                                        continue 'actions;
-                                    }
-                                };
-                                let Ok(file_path) = op.text_document.uri.to_file_path() else {
-                                    zlog::warn!(
-                                        logger =>
-                                        "Failed to convert URI '{:?}' to file path. Skipping {}",
-                                        &op.text_document.uri,
-                                        describe_code_action(&action),
-                                    );
-                                    continue 'actions;
-                                };
-                                if &file_path != buffer_path_abs {
-                                    zlog::warn!(
-                                        logger =>
-                                        "File path '{:?}' does not match buffer path '{:?}'. Skipping {}",
-                                        file_path,
-                                        buffer_path_abs,
-                                        describe_code_action(&action),
-                                    );
-                                    continue 'actions;
-                                }
-
-                                let mut lsp_edits = Vec::new();
-                                for edit in op.edits {
-                                    match edit {
-                                        Edit::Plain(edit) => {
-                                            if !lsp_edits.contains(&edit) {
-                                                lsp_edits.push(edit);
-                                            }
-                                        }
-                                        Edit::Annotated(edit) => {
-                                            if !lsp_edits.contains(&edit.text_edit) {
-                                                lsp_edits.push(edit.text_edit);
-                                            }
-                                        }
-                                        Edit::Snippet(_) => {
-                                            zlog::warn!(
-                                                logger =>
-                                                "Code actions which produce snippet edits are not supported during formatting. Skipping {}",
-                                                describe_code_action(&action),
-                                            );
-                                            continue 'actions;
-                                        }
-                                    }
-                                }
-                                let edits_result = lsp_store
-                                    .update(cx, |lsp_store, cx| {
-                                        lsp_store.as_local_mut().unwrap().edits_from_lsp(
-                                            &buffer.handle,
-                                            lsp_edits,
-                                            server.server_id(),
-                                            op.text_document.version,
-                                            cx,
-                                        )
-                                    })?
-                                    .await;
-                                let Ok(resolved_edits) = edits_result else {
-                                    zlog::warn!(
-                                        logger =>
-                                        "Failed to resolve edits from LSP for buffer {:?} while handling {}",
-                                        buffer_path_abs.as_path(),
-                                        describe_code_action(&action),
-                                    );
-                                    continue 'actions;
-                                };
-                                edits.extend(resolved_edits);
-                            }
-
-                            if edits.is_empty() {
-                                zlog::warn!(logger => "No edits resolved from LSP");
-                                continue;
-                            }
-
-                            extend_formatting_transaction(
-                                buffer,
-                                formatting_transaction_id,
-                                cx,
-                                |buffer, cx| {
-                                    buffer.edit(edits, None, cx);
-                                },
-                            )?;
-                        }
-
-                        if let Some(command) = action.lsp_action.command() {
-                            zlog::warn!(
-                                logger =>
-                                "Executing code action command '{}'. This may cause formatting to abort unnecessarily as well as splitting formatting into two entries in the undo history",
-                                &command.command,
-                            );
-
-                            // bail early if command is invalid
-                            let server_capabilities = server.capabilities();
-                            let available_commands = server_capabilities
-                                .execute_command_provider
-                                .as_ref()
-                                .map(|options| options.commands.as_slice())
-                                .unwrap_or_default();
-                            if !available_commands.contains(&command.command) {
-                                zlog::warn!(
-                                    logger =>
-                                    "Cannot execute a command {} not listed in the language server capabilities of server {}",
-                                    command.command,
-                                    server.name(),
-                                );
-                                continue;
-                            }
-
-                            // noop so we just ensure buffer hasn't been edited since resolving code actions
-                            extend_formatting_transaction(
-                                buffer,
-                                formatting_transaction_id,
-                                cx,
-                                |_, _| {},
-                            )?;
-                            zlog::info!(logger => "Executing command {}", &command.command);
-
-                            lsp_store.update(cx, |this, _| {
-                                this.as_local_mut()
-                                    .unwrap()
-                                    .last_workspace_edits_by_language_server
-                                    .remove(&server.server_id());
-                            })?;
-
-                            let execute_command_result = server
-                                .request::<lsp::request::ExecuteCommand>(
-                                    lsp::ExecuteCommandParams {
-                                        command: command.command.clone(),
-                                        arguments: command.arguments.clone().unwrap_or_default(),
-                                        ..Default::default()
-                                    },
-                                )
-                                .await
-                                .into_response();
-
-                            if execute_command_result.is_err() {
-                                zlog::error!(
-                                    logger =>
-                                    "Failed to execute command '{}' as part of {}",
-                                    &command.command,
-                                    describe_code_action(&action),
-                                );
-                                continue 'actions;
-                            }
-
-                            let mut project_transaction_command =
-                                lsp_store.update(cx, |this, _| {
-                                    this.as_local_mut()
-                                        .unwrap()
-                                        .last_workspace_edits_by_language_server
-                                        .remove(&server.server_id())
-                                        .unwrap_or_default()
-                                })?;
-
-                            if let Some(transaction) =
-                                project_transaction_command.0.remove(&buffer.handle)
-                            {
-                                zlog::trace!(
-                                    logger =>
-                                    "Successfully captured {} edits that resulted from command {}",
-                                    transaction.edit_ids.len(),
-                                    &command.command,
-                                );
-                                let transaction_id_project_transaction = transaction.id;
-                                buffer.handle.update(cx, |buffer, _| {
-                                    // it may have been removed from history if push_to_history was
-                                    // false in deserialize_workspace_edit. If so push it so we
-                                    // can merge it with the format transaction
-                                    // and pop the combined transaction off the history stack
-                                    // later if push_to_history is false
-                                    if buffer.get_transaction(transaction.id).is_none() {
-                                        buffer.push_transaction(transaction, Instant::now());
-                                    }
-                                    buffer.merge_transactions(
-                                        transaction_id_project_transaction,
-                                        formatting_transaction_id,
-                                    );
-                                })?;
-                            }
-
-                            if !project_transaction_command.0.is_empty() {
-                                let extra_buffers = project_transaction_command
-                                    .0
-                                    .keys()
-                                    .filter_map(|buffer_handle| {
-                                        buffer_handle
-                                            .read_with(cx, |b, cx| b.project_path(cx))
-                                            .ok()
-                                            .flatten()
-                                    })
-                                    .map(|p| p.path.to_sanitized_string())
-                                    .join(", ");
-                                zlog::warn!(
-                                    logger =>
-                                    "Unexpected edits to buffers other than the buffer actively being formatted due to command {}. Impacted buffers: [{}].",
-                                    &command.command,
-                                    extra_buffers,
-                                );
-                                // NOTE: if this case is hit, the proper thing to do is to for each buffer, merge the extra transaction
-                                // into the existing transaction in project_transaction if there is one, and if there isn't one in project_transaction,
-                                // add it so it's included, and merge it into the format transaction when its created later
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -2071,40 +1602,6 @@ impl LocalLspStore {
                 .update(cx, |buffer, cx| buffer.diff(stdout, cx))?
                 .await,
         ))
-    }
-
-    async fn try_resolve_code_action(
-        lang_server: &LanguageServer,
-        action: &mut CodeAction,
-    ) -> anyhow::Result<()> {
-        match &mut action.lsp_action {
-            LspAction::Action(lsp_action) => {
-                if !action.resolved
-                    && GetCodeActions::can_resolve_actions(&lang_server.capabilities())
-                    && lsp_action.data.is_some()
-                    && (lsp_action.command.is_none() || lsp_action.edit.is_none())
-                {
-                    *lsp_action = Box::new(
-                        lang_server
-                            .request::<lsp::request::CodeActionResolveRequest>(*lsp_action.clone())
-                            .await
-                            .into_response()?,
-                    );
-                }
-            }
-            LspAction::CodeLens(lens) => {
-                if !action.resolved && GetCodeLens::can_resolve_lens(&lang_server.capabilities()) {
-                    *lens = lang_server
-                        .request::<lsp::request::CodeLensResolve>(lens.clone())
-                        .await
-                        .into_response()?;
-                }
-            }
-            LspAction::Command(_) => {}
-        }
-
-        action.resolved = true;
-        anyhow::Ok(())
     }
 
     fn initialize_buffer(&mut self, buffer_handle: &Entity<Buffer>, cx: &mut Context<LspStore>) {
@@ -2596,101 +2093,6 @@ impl LocalLspStore {
         } else {
             Ok((buffer.read(cx)).text_snapshot())
         }
-    }
-
-    async fn get_server_code_actions_from_action_kinds(
-        lsp_store: &WeakEntity<LspStore>,
-        language_server_id: LanguageServerId,
-        code_action_kinds: Vec<lsp::CodeActionKind>,
-        buffer: &Entity<Buffer>,
-        cx: &mut AsyncApp,
-    ) -> Result<Vec<CodeAction>> {
-        let actions = lsp_store
-            .update(cx, move |this, cx| {
-                let request = GetCodeActions {
-                    range: text::Anchor::MIN..text::Anchor::MAX,
-                    kinds: Some(code_action_kinds),
-                };
-                let server = LanguageServerToQuery::Other(language_server_id);
-                this.request_lsp(buffer.clone(), server, request, cx)
-            })?
-            .await?;
-        return Ok(actions);
-    }
-
-    pub async fn execute_code_actions_on_server(
-        lsp_store: &WeakEntity<LspStore>,
-        language_server: &Arc<LanguageServer>,
-        lsp_adapter: &Arc<CachedLspAdapter>,
-        actions: Vec<CodeAction>,
-        push_to_history: bool,
-        project_transaction: &mut ProjectTransaction,
-        cx: &mut AsyncApp,
-    ) -> anyhow::Result<()> {
-        for mut action in actions {
-            Self::try_resolve_code_action(language_server, &mut action)
-                .await
-                .context("resolving a formatting code action")?;
-
-            if let Some(edit) = action.lsp_action.edit() {
-                if edit.changes.is_none() && edit.document_changes.is_none() {
-                    continue;
-                }
-
-                let new = Self::deserialize_workspace_edit(
-                    lsp_store.upgrade().context("project dropped")?,
-                    edit.clone(),
-                    push_to_history,
-                    lsp_adapter.clone(),
-                    language_server.clone(),
-                    cx,
-                )
-                .await?;
-                project_transaction.0.extend(new.0);
-            }
-
-            if let Some(command) = action.lsp_action.command() {
-                let server_capabilities = language_server.capabilities();
-                let available_commands = server_capabilities
-                    .execute_command_provider
-                    .as_ref()
-                    .map(|options| options.commands.as_slice())
-                    .unwrap_or_default();
-                if available_commands.contains(&command.command) {
-                    lsp_store.update(cx, |lsp_store, _| {
-                        let LspStoreMode::Local(mode) = &mut lsp_store.mode;
-                        mode.last_workspace_edits_by_language_server
-                            .remove(&language_server.server_id());
-                    })?;
-
-                    language_server
-                        .request::<lsp::request::ExecuteCommand>(lsp::ExecuteCommandParams {
-                            command: command.command.clone(),
-                            arguments: command.arguments.clone().unwrap_or_default(),
-                            ..Default::default()
-                        })
-                        .await
-                        .into_response()
-                        .context("execute command")?;
-
-                    lsp_store.update(cx, |this, _| {
-                        let LspStoreMode::Local(mode) = &mut this.mode;
-                        project_transaction.0.extend(
-                            mode.last_workspace_edits_by_language_server
-                                .remove(&language_server.server_id())
-                                .unwrap_or_default()
-                                .0,
-                        )
-                    })?;
-                } else {
-                    log::warn!(
-                        "Cannot execute a command {} not listed in the language server capabilities",
-                        command.command
-                    )
-                }
-            }
-        }
-        return Ok(());
     }
 
     pub async fn deserialize_text_edits(
@@ -3443,7 +2845,6 @@ pub enum LspStoreEvent {
     },
     Notification(String),
     RefreshInlayHints,
-    RefreshCodeLens,
     DiagnosticsUpdated {
         language_server_id: LanguageServerId,
         path: ProjectPath,
@@ -3492,22 +2893,18 @@ impl LspStore {
         client.add_entity_message_handler(Self::handle_language_server_log);
         client.add_entity_message_handler(Self::handle_update_diagnostic_summary);
         client.add_entity_request_handler(Self::handle_format_buffers);
-        client.add_entity_request_handler(Self::handle_apply_code_action_kind);
         client.add_entity_request_handler(Self::handle_resolve_completion_documentation);
-        client.add_entity_request_handler(Self::handle_apply_code_action);
         client.add_entity_request_handler(Self::handle_inlay_hints);
         client.add_entity_request_handler(Self::handle_get_project_symbols);
         client.add_entity_request_handler(Self::handle_resolve_inlay_hint);
         client.add_entity_request_handler(Self::handle_open_buffer_for_symbol);
         client.add_entity_request_handler(Self::handle_refresh_inlay_hints);
-        client.add_entity_request_handler(Self::handle_refresh_code_lens);
         client.add_entity_request_handler(Self::handle_on_type_formatting);
         client.add_entity_request_handler(Self::handle_apply_additional_edits_for_completion);
         client.add_entity_request_handler(Self::handle_register_buffer_with_language_servers);
         client.add_entity_request_handler(Self::handle_rename_project_entry);
         client.add_entity_request_handler(Self::handle_language_server_id_for_name);
         client.add_entity_request_handler(Self::handle_pull_workspace_diagnostics);
-        client.add_entity_request_handler(Self::handle_lsp_command::<GetCodeActions>);
         client.add_entity_request_handler(Self::handle_lsp_command::<GetCompletions>);
         client.add_entity_request_handler(Self::handle_lsp_command::<GetHover>);
         client.add_entity_request_handler(Self::handle_lsp_command::<GetDefinition>);
@@ -3527,9 +2924,6 @@ impl LspStore {
         client.add_entity_request_handler(Self::handle_lsp_command::<lsp_ext_command::OpenDocs>);
         client.add_entity_request_handler(
             Self::handle_lsp_command::<lsp_ext_command::GoToParentModule>,
-        );
-        client.add_entity_request_handler(
-            Self::handle_lsp_command::<lsp_ext_command::GetLspRunnables>,
         );
         client.add_entity_request_handler(
             Self::handle_lsp_command::<lsp_ext_command::SwitchSourceHeader>,
@@ -4512,160 +3906,6 @@ impl LspStore {
         }
     }
 
-    pub fn apply_code_action(
-        &self,
-        buffer_handle: Entity<Buffer>,
-        mut action: CodeAction,
-        push_to_history: bool,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<ProjectTransaction>> {
-        if let Some((upstream_client, project_id)) = self.upstream_client() {
-            let request = proto::ApplyCodeAction {
-                project_id,
-                buffer_id: buffer_handle.read(cx).remote_id().into(),
-                action: Some(Self::serialize_code_action(&action)),
-            };
-            let buffer_store = self.buffer_store();
-            cx.spawn(async move |_, cx| {
-                let response = upstream_client
-                    .request(request)
-                    .await?
-                    .transaction
-                    .context("missing transaction")?;
-
-                buffer_store
-                    .update(cx, |buffer_store, cx| {
-                        buffer_store.deserialize_project_transaction(response, push_to_history, cx)
-                    })?
-                    .await
-            })
-        } else if self.mode.is_local() {
-            let Some((lsp_adapter, lang_server)) = buffer_handle.update(cx, |buffer, cx| {
-                self.language_server_for_local_buffer(buffer, action.server_id, cx)
-                    .map(|(adapter, server)| (adapter.clone(), server.clone()))
-            }) else {
-                return Task::ready(Ok(ProjectTransaction::default()));
-            };
-            cx.spawn(async move |this,  cx| {
-                LocalLspStore::try_resolve_code_action(&lang_server, &mut action)
-                    .await
-                    .context("resolving a code action")?;
-                if let Some(edit) = action.lsp_action.edit() {
-                    if edit.changes.is_some() || edit.document_changes.is_some() {
-                        return LocalLspStore::deserialize_workspace_edit(
-                            this.upgrade().context("no app present")?,
-                            edit.clone(),
-                            push_to_history,
-                            lsp_adapter.clone(),
-                            lang_server.clone(),
-                            cx,
-                        )
-                        .await;
-                    }
-                }
-
-                if let Some(command) = action.lsp_action.command() {
-                    let server_capabilities = lang_server.capabilities();
-                    let available_commands = server_capabilities
-                        .execute_command_provider
-                        .as_ref()
-                        .map(|options| options.commands.as_slice())
-                        .unwrap_or_default();
-                    if available_commands.contains(&command.command) {
-                        this.update(cx, |this, _| {
-                            this.as_local_mut()
-                                .unwrap()
-                                .last_workspace_edits_by_language_server
-                                .remove(&lang_server.server_id());
-                        })?;
-
-                        let _result = lang_server
-                            .request::<lsp::request::ExecuteCommand>(lsp::ExecuteCommandParams {
-                                command: command.command.clone(),
-                                arguments: command.arguments.clone().unwrap_or_default(),
-                                ..lsp::ExecuteCommandParams::default()
-                            })
-                            .await.into_response()
-                            .context("execute command")?;
-
-                        return this.update(cx, |this, _| {
-                            this.as_local_mut()
-                                .unwrap()
-                                .last_workspace_edits_by_language_server
-                                .remove(&lang_server.server_id())
-                                .unwrap_or_default()
-                        });
-                    } else {
-                        log::warn!("Cannot execute a command {} not listed in the language server capabilities", command.command);
-                    }
-                }
-
-                Ok(ProjectTransaction::default())
-            })
-        } else {
-            Task::ready(Err(anyhow!("no upstream client and not local")))
-        }
-    }
-
-    pub fn apply_code_action_kind(
-        &mut self,
-        buffers: HashSet<Entity<Buffer>>,
-        kind: CodeActionKind,
-        push_to_history: bool,
-        cx: &mut Context<Self>,
-    ) -> Task<anyhow::Result<ProjectTransaction>> {
-        if let Some(_) = self.as_local() {
-            cx.spawn(async move |lsp_store, cx| {
-                let buffers = buffers.into_iter().collect::<Vec<_>>();
-                let result = LocalLspStore::execute_code_action_kind_locally(
-                    lsp_store.clone(),
-                    buffers,
-                    kind,
-                    push_to_history,
-                    cx,
-                )
-                .await;
-                lsp_store.update(cx, |lsp_store, _| {
-                    lsp_store.update_last_formatting_failure(&result);
-                })?;
-                result
-            })
-        } else if let Some((client, project_id)) = self.upstream_client() {
-            let buffer_store = self.buffer_store();
-            cx.spawn(async move |lsp_store, cx| {
-                let result = client
-                    .request(proto::ApplyCodeActionKind {
-                        project_id,
-                        kind: kind.as_str().to_owned(),
-                        buffer_ids: buffers
-                            .iter()
-                            .map(|buffer| {
-                                buffer.read_with(cx, |buffer, _| buffer.remote_id().into())
-                            })
-                            .collect::<Result<_>>()?,
-                    })
-                    .await
-                    .and_then(|result| result.transaction.context("missing transaction"));
-                lsp_store.update(cx, |lsp_store, _| {
-                    lsp_store.update_last_formatting_failure(&result);
-                })?;
-
-                let transaction_response = result?;
-                buffer_store
-                    .update(cx, |buffer_store, cx| {
-                        buffer_store.deserialize_project_transaction(
-                            transaction_response,
-                            push_to_history,
-                            cx,
-                        )
-                    })?
-                    .await
-            })
-        } else {
-            Task::ready(Ok(ProjectTransaction::default()))
-        }
-    }
-
     pub fn resolve_inlay_hint(
         &self,
         hint: InlayHint,
@@ -4877,137 +4117,6 @@ impl LspStore {
             },
             cx,
         )
-    }
-
-    pub fn code_actions(
-        &mut self,
-        buffer_handle: &Entity<Buffer>,
-        range: Range<Anchor>,
-        kinds: Option<Vec<CodeActionKind>>,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<Vec<CodeAction>>> {
-        if let Some((upstream_client, project_id)) = self.upstream_client() {
-            let request_task = upstream_client.request(proto::MultiLspQuery {
-                buffer_id: buffer_handle.read(cx).remote_id().into(),
-                version: serialize_version(&buffer_handle.read(cx).version()),
-                project_id,
-                strategy: Some(proto::multi_lsp_query::Strategy::All(
-                    proto::AllLanguageServers {},
-                )),
-                request: Some(proto::multi_lsp_query::Request::GetCodeActions(
-                    GetCodeActions {
-                        range: range.clone(),
-                        kinds: kinds.clone(),
-                    }
-                    .to_proto(project_id, buffer_handle.read(cx)),
-                )),
-            });
-            let buffer = buffer_handle.clone();
-            cx.spawn(async move |weak_project, cx| {
-                let Some(project) = weak_project.upgrade() else {
-                    return Ok(Vec::new());
-                };
-                let responses = request_task.await?.responses;
-                let actions = join_all(
-                    responses
-                        .into_iter()
-                        .filter_map(|lsp_response| match lsp_response.response? {
-                            proto::lsp_response::Response::GetCodeActionsResponse(response) => {
-                                Some(response)
-                            }
-                            _ => None,
-                        })
-                        .map(|code_actions_response| {
-                            GetCodeActions {
-                                range: range.clone(),
-                                kinds: kinds.clone(),
-                            }
-                            .response_from_proto(
-                                code_actions_response,
-                                project.clone(),
-                                buffer.clone(),
-                                cx.clone(),
-                            )
-                        }),
-                )
-                .await;
-
-                Ok(actions
-                    .into_iter()
-                    .collect::<Result<Vec<Vec<_>>>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect())
-            })
-        } else {
-            let all_actions_task = self.request_multiple_lsp_locally(
-                buffer_handle,
-                Some(range.start),
-                GetCodeActions {
-                    range: range.clone(),
-                    kinds: kinds.clone(),
-                },
-                cx,
-            );
-            cx.spawn(async move |_, _| Ok(all_actions_task.await.into_iter().flatten().collect()))
-        }
-    }
-
-    pub fn code_lens(
-        &mut self,
-        buffer_handle: &Entity<Buffer>,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<Vec<CodeAction>>> {
-        if let Some((upstream_client, project_id)) = self.upstream_client() {
-            let request_task = upstream_client.request(proto::MultiLspQuery {
-                buffer_id: buffer_handle.read(cx).remote_id().into(),
-                version: serialize_version(&buffer_handle.read(cx).version()),
-                project_id,
-                strategy: Some(proto::multi_lsp_query::Strategy::All(
-                    proto::AllLanguageServers {},
-                )),
-                request: Some(proto::multi_lsp_query::Request::GetCodeLens(
-                    GetCodeLens.to_proto(project_id, buffer_handle.read(cx)),
-                )),
-            });
-            let buffer = buffer_handle.clone();
-            cx.spawn(async move |weak_project, cx| {
-                let Some(project) = weak_project.upgrade() else {
-                    return Ok(Vec::new());
-                };
-                let responses = request_task.await?.responses;
-                let code_lens = join_all(
-                    responses
-                        .into_iter()
-                        .filter_map(|lsp_response| match lsp_response.response? {
-                            proto::lsp_response::Response::GetCodeLensResponse(response) => {
-                                Some(response)
-                            }
-                            _ => None,
-                        })
-                        .map(|code_lens_response| {
-                            GetCodeLens.response_from_proto(
-                                code_lens_response,
-                                project.clone(),
-                                buffer.clone(),
-                                cx.clone(),
-                            )
-                        }),
-                )
-                .await;
-
-                Ok(code_lens
-                    .into_iter()
-                    .collect::<Result<Vec<Vec<_>>>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect())
-            })
-        } else {
-            let code_lens_task =
-                self.request_multiple_lsp_locally(buffer_handle, None::<usize>, GetCodeLens, cx);
-            cx.spawn(async move |_, _| Ok(code_lens_task.await.into_iter().flatten().collect()))
-        }
     }
 
     #[inline(never)]
@@ -6975,43 +6084,6 @@ impl LspStore {
                         .collect(),
                 })
             }
-            Some(proto::multi_lsp_query::Request::GetCodeActions(get_code_actions)) => {
-                let get_code_actions = GetCodeActions::from_proto(
-                    get_code_actions,
-                    this.clone(),
-                    buffer.clone(),
-                    cx.clone(),
-                )
-                .await?;
-
-                let all_actions = this
-                    .update(&mut cx, |project, cx| {
-                        project.request_multiple_lsp_locally(
-                            &buffer,
-                            Some(get_code_actions.range.start),
-                            get_code_actions,
-                            cx,
-                        )
-                    })?
-                    .await
-                    .into_iter();
-
-                this.update(&mut cx, |project, cx| proto::MultiLspQueryResponse {
-                    responses: all_actions
-                        .map(|code_actions| proto::LspResponse {
-                            response: Some(proto::lsp_response::Response::GetCodeActionsResponse(
-                                GetCodeActions::response_to_proto(
-                                    code_actions,
-                                    project,
-                                    sender_id,
-                                    &buffer_version,
-                                    cx,
-                                ),
-                            )),
-                        })
-                        .collect(),
-                })
-            }
             Some(proto::multi_lsp_query::Request::GetSignatureHelp(get_signature_help)) => {
                 let get_signature_help = GetSignatureHelp::from_proto(
                     get_signature_help,
@@ -7047,43 +6119,6 @@ impl LspStore {
                                     ),
                                 ),
                             ),
-                        })
-                        .collect(),
-                })
-            }
-            Some(proto::multi_lsp_query::Request::GetCodeLens(get_code_lens)) => {
-                let get_code_lens = GetCodeLens::from_proto(
-                    get_code_lens,
-                    this.clone(),
-                    buffer.clone(),
-                    cx.clone(),
-                )
-                .await?;
-
-                let code_lens_actions = this
-                    .update(&mut cx, |project, cx| {
-                        project.request_multiple_lsp_locally(
-                            &buffer,
-                            None::<usize>,
-                            get_code_lens,
-                            cx,
-                        )
-                    })?
-                    .await
-                    .into_iter();
-
-                this.update(&mut cx, |project, cx| proto::MultiLspQueryResponse {
-                    responses: code_lens_actions
-                        .map(|actions| proto::LspResponse {
-                            response: Some(proto::lsp_response::Response::GetCodeLensResponse(
-                                GetCodeLens::response_to_proto(
-                                    actions,
-                                    project,
-                                    sender_id,
-                                    &buffer_version,
-                                    cx,
-                                ),
-                            )),
                         })
                         .collect(),
                 })
@@ -7130,36 +6165,8 @@ impl LspStore {
                 })
             }
             None => anyhow::bail!("empty multi lsp query request"),
+            _ => unreachable!(),
         }
-    }
-
-    async fn handle_apply_code_action(
-        this: Entity<Self>,
-        envelope: TypedEnvelope<proto::ApplyCodeAction>,
-        mut cx: AsyncApp,
-    ) -> Result<proto::ApplyCodeActionResponse> {
-        let sender_id = envelope.original_sender_id().unwrap_or_default();
-        let action =
-            Self::deserialize_code_action(envelope.payload.action.context("invalid action")?)?;
-        let apply_code_action = this.update(&mut cx, |this, cx| {
-            let buffer_id = BufferId::new(envelope.payload.buffer_id)?;
-            let buffer = this.buffer_store.read(cx).get_existing(buffer_id)?;
-            anyhow::Ok(this.apply_code_action(buffer, action, false, cx))
-        })??;
-
-        let project_transaction = apply_code_action.await?;
-        let project_transaction = this.update(&mut cx, |this, cx| {
-            this.buffer_store.update(cx, |buffer_store, cx| {
-                buffer_store.serialize_project_transaction_for_peer(
-                    project_transaction,
-                    sender_id,
-                    cx,
-                )
-            })
-        })?;
-        Ok(proto::ApplyCodeActionResponse {
-            transaction: Some(project_transaction),
-        })
     }
 
     async fn handle_register_buffer_with_language_servers(
@@ -8143,17 +7150,6 @@ impl LspStore {
         })
     }
 
-    async fn handle_refresh_code_lens(
-        this: Entity<Self>,
-        _: TypedEnvelope<proto::RefreshCodeLens>,
-        mut cx: AsyncApp,
-    ) -> Result<proto::Ack> {
-        this.update(&mut cx, |_, cx| {
-            cx.emit(LspStoreEvent::RefreshCodeLens);
-        })?;
-        Ok(proto::Ack {})
-    }
-
     async fn handle_open_buffer_for_symbol(
         this: Entity<Self>,
         envelope: TypedEnvelope<proto::OpenBufferForSymbol>,
@@ -8515,51 +7511,6 @@ impl LspStore {
             })
         })?;
         Ok(proto::FormatBuffersResponse {
-            transaction: Some(project_transaction),
-        })
-    }
-
-    async fn handle_apply_code_action_kind(
-        this: Entity<Self>,
-        envelope: TypedEnvelope<proto::ApplyCodeActionKind>,
-        mut cx: AsyncApp,
-    ) -> Result<proto::ApplyCodeActionKindResponse> {
-        let sender_id = envelope.original_sender_id().unwrap_or_default();
-        let format = this.update(&mut cx, |this, cx| {
-            let mut buffers = HashSet::default();
-            for buffer_id in &envelope.payload.buffer_ids {
-                let buffer_id = BufferId::new(*buffer_id)?;
-                buffers.insert(this.buffer_store.read(cx).get_existing(buffer_id)?);
-            }
-            let kind = match envelope.payload.kind.as_str() {
-                "" => CodeActionKind::EMPTY,
-                "quickfix" => CodeActionKind::QUICKFIX,
-                "refactor" => CodeActionKind::REFACTOR,
-                "refactor.extract" => CodeActionKind::REFACTOR_EXTRACT,
-                "refactor.inline" => CodeActionKind::REFACTOR_INLINE,
-                "refactor.rewrite" => CodeActionKind::REFACTOR_REWRITE,
-                "source" => CodeActionKind::SOURCE,
-                "source.organizeImports" => CodeActionKind::SOURCE_ORGANIZE_IMPORTS,
-                "source.fixAll" => CodeActionKind::SOURCE_FIX_ALL,
-                _ => anyhow::bail!(
-                    "Invalid code action kind {}",
-                    envelope.payload.kind.as_str()
-                ),
-            };
-            anyhow::Ok(this.apply_code_action_kind(buffers, kind, false, cx))
-        })??;
-
-        let project_transaction = format.await?;
-        let project_transaction = this.update(&mut cx, |this, cx| {
-            this.buffer_store.update(cx, |buffer_store, cx| {
-                buffer_store.serialize_project_transaction_for_peer(
-                    project_transaction,
-                    sender_id,
-                    cx,
-                )
-            })
-        })?;
-        Ok(proto::ApplyCodeActionKindResponse {
             transaction: Some(project_transaction),
         })
     }
@@ -9496,61 +8447,6 @@ impl LspStore {
         })
     }
 
-    pub(crate) fn serialize_code_action(action: &CodeAction) -> proto::CodeAction {
-        let (kind, lsp_action) = match &action.lsp_action {
-            LspAction::Action(code_action) => (
-                proto::code_action::Kind::Action as i32,
-                serde_json::to_vec(code_action).unwrap(),
-            ),
-            LspAction::Command(command) => (
-                proto::code_action::Kind::Command as i32,
-                serde_json::to_vec(command).unwrap(),
-            ),
-            LspAction::CodeLens(code_lens) => (
-                proto::code_action::Kind::CodeLens as i32,
-                serde_json::to_vec(code_lens).unwrap(),
-            ),
-        };
-
-        proto::CodeAction {
-            server_id: action.server_id.0 as u64,
-            start: Some(serialize_anchor(&action.range.start)),
-            end: Some(serialize_anchor(&action.range.end)),
-            lsp_action,
-            kind,
-            resolved: action.resolved,
-        }
-    }
-
-    pub(crate) fn deserialize_code_action(action: proto::CodeAction) -> Result<CodeAction> {
-        let start = action
-            .start
-            .and_then(deserialize_anchor)
-            .context("invalid start")?;
-        let end = action
-            .end
-            .and_then(deserialize_anchor)
-            .context("invalid end")?;
-        let lsp_action = match proto::code_action::Kind::from_i32(action.kind) {
-            Some(proto::code_action::Kind::Action) => {
-                LspAction::Action(serde_json::from_slice(&action.lsp_action)?)
-            }
-            Some(proto::code_action::Kind::Command) => {
-                LspAction::Command(serde_json::from_slice(&action.lsp_action)?)
-            }
-            Some(proto::code_action::Kind::CodeLens) => {
-                LspAction::CodeLens(serde_json::from_slice(&action.lsp_action)?)
-            }
-            None => anyhow::bail!("Unknown action kind {}", action.kind),
-        };
-        Ok(CodeAction {
-            server_id: LanguageServerId(action.server_id as usize),
-            range: start..end,
-            resolved: action.resolved,
-            lsp_action,
-        })
-    }
-
     fn update_last_formatting_failure<T>(&mut self, formatting_result: &anyhow::Result<T>) {
         match &formatting_result {
             Ok(_) => self.last_formatting_failure = None,
@@ -10322,7 +9218,6 @@ pub struct SshLspAdapter {
     name: LanguageServerName,
     binary: LanguageServerBinary,
     initialization_options: Option<String>,
-    code_action_kinds: Option<Vec<CodeActionKind>>,
 }
 
 impl SshLspAdapter {
@@ -10330,15 +9225,11 @@ impl SshLspAdapter {
         name: LanguageServerName,
         binary: LanguageServerBinary,
         initialization_options: Option<String>,
-        code_action_kinds: Option<String>,
     ) -> Self {
         Self {
             name,
             binary,
             initialization_options,
-            code_action_kinds: code_action_kinds
-                .as_ref()
-                .and_then(|c| serde_json::from_str(c).ok()),
         }
     }
 }
@@ -10359,10 +9250,6 @@ impl LspAdapter for SshLspAdapter {
         };
         let result = serde_json::from_str(options)?;
         Ok(result)
-    }
-
-    fn code_action_kinds(&self) -> Option<Vec<CodeActionKind>> {
-        self.code_action_kinds.clone()
     }
 
     async fn check_if_user_installed(

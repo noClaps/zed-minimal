@@ -9,7 +9,7 @@ use http_client::github::{GitHubLspBinaryVersion, latest_github_release};
 use language::{LanguageRegistry, LanguageToolchainStore, LspAdapter, LspAdapterDelegate};
 use lsp::{LanguageServerBinary, LanguageServerName};
 use node_runtime::NodeRuntime;
-use project::{ContextProviderWithTasks, Fs, lsp_store::language_server_settings};
+use project::{Fs, lsp_store::language_server_settings};
 use serde_json::{Value, json};
 use settings::{KeymapFile, SettingsJsonSchemaParams, SettingsStore};
 use smol::{fs, io::BufReader, lock::RwLock};
@@ -21,7 +21,6 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use task::{TaskTemplate, TaskTemplates, VariableName};
 use util::{ResultExt, archive::extract_zip, fs::remove_matching, maybe, merge_json_value_into};
 
 const SERVER_PATH: &str =
@@ -30,25 +29,6 @@ const SERVER_PATH: &str =
 // Origin: https://github.com/SchemaStore/schemastore
 const TSCONFIG_SCHEMA: &str = include_str!("json/schemas/tsconfig.json");
 const PACKAGE_JSON_SCHEMA: &str = include_str!("json/schemas/package.json");
-
-pub(super) fn json_task_context() -> ContextProviderWithTasks {
-    ContextProviderWithTasks::new(TaskTemplates(vec![
-        TaskTemplate {
-            label: "package script $ZED_CUSTOM_script".to_owned(),
-            command: "npm --prefix $ZED_DIRNAME run".to_owned(),
-            args: vec![VariableName::Custom("script".into()).template_value()],
-            tags: vec!["package-script".into()],
-            ..TaskTemplate::default()
-        },
-        TaskTemplate {
-            label: "composer script $ZED_CUSTOM_script".to_owned(),
-            command: "composer -d $ZED_DIRNAME".to_owned(),
-            args: vec![VariableName::Custom("script".into()).template_value()],
-            tags: vec!["composer-script".into()],
-            ..TaskTemplate::default()
-        },
-    ]))
-}
 
 fn server_binary_arguments(server_path: &Path) -> Vec<OsString> {
     vec![server_path.into(), "--stdio".into()]
@@ -82,7 +62,6 @@ impl JsonLspAdapter {
             cx,
         );
 
-        let tasks_schema = task::TaskTemplates::generate_json_schema();
         let tsconfig_schema = serde_json::Value::from_str(TSCONFIG_SCHEMA).unwrap();
         let package_json_schema = serde_json::Value::from_str(PACKAGE_JSON_SCHEMA).unwrap();
 
@@ -106,13 +85,6 @@ impl JsonLspAdapter {
             {
                 "fileMatch": [schema_file_match(paths::keymap_file())],
                 "schema": keymap_schema,
-            },
-            {
-                "fileMatch": [
-                    schema_file_match(paths::tasks_file()),
-                    paths::local_tasks_file_relative_path()
-                ],
-                "schema": tasks_schema,
             },
             {
                 "fileMatch": [

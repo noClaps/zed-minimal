@@ -73,25 +73,6 @@ pub struct SelectToEndOfLine {
 
 #[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ToggleCodeActions {
-    // Source from which the action was deployed.
-    #[serde(default)]
-    #[serde(skip)]
-    pub deployed_from: Option<CodeActionSource>,
-    // Run first available task if there is only one.
-    #[serde(default)]
-    #[serde(skip)]
-    pub quick_launch: bool,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum CodeActionSource {
-    Indicator(DisplayRow),
-    QuickActionBar,
-}
-
-#[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct ConfirmCompletion {
     #[serde(default)]
     pub item_ix: Option<usize>,
@@ -100,13 +81,6 @@ pub struct ConfirmCompletion {
 #[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ComposeCompletion {
-    #[serde(default)]
-    pub item_ix: Option<usize>,
-}
-
-#[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ConfirmCodeAction {
     #[serde(default)]
     pub item_ix: Option<usize>,
 }
@@ -196,13 +170,6 @@ pub struct DeleteToPreviousWordStart {
 #[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
 pub struct FoldAtLevel(pub u32);
 
-#[derive(PartialEq, Clone, Deserialize, Default, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SpawnNearestTask {
-    #[serde(default)]
-    pub reveal: task::RevealStrategy,
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Default)]
 pub enum UuidVersion {
     #[default]
@@ -214,7 +181,6 @@ impl_actions!(
     editor,
     [
         ComposeCompletion,
-        ConfirmCodeAction,
         ConfirmCompletion,
         DeleteToBeginningOfLine,
         DeleteToNextWordEnd,
@@ -235,9 +201,7 @@ impl_actions!(
         SelectToBeginningOfLine,
         SelectToEndOfLine,
         SelectUpByLines,
-        SpawnNearestTask,
         ShowCompletions,
-        ToggleCodeActions,
         ToggleComments,
         FoldAtLevel,
     ]

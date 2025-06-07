@@ -65,7 +65,6 @@ impl ProposedChangesEditor {
                 let mut editor = Editor::for_multibuffer(multibuffer.clone(), project, window, cx);
                 editor.set_expand_all_diff_hunks(cx);
                 editor.set_completion_provider(None);
-                editor.clear_code_action_providers();
                 editor.set_semantics_provider(
                     editor
                         .semantics_provider()

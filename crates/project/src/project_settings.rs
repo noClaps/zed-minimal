@@ -1,20 +1,16 @@
 use anyhow::Context as _;
 use collections::HashMap;
 use fs::Fs;
-use futures::StreamExt as _;
-use gpui::{App, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Task};
+use gpui::{App, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter};
 use lsp::LanguageServerName;
-use paths::{local_settings_file_relative_path, task_file_name};
+use paths::local_settings_file_relative_path;
 use rpc::{
     AnyProtoClient, TypedEnvelope,
     proto::{self, FromProto, ToProto},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use settings::{
-    InvalidSettingsError, LocalSettingsKind, Settings, SettingsLocation, SettingsSources,
-    SettingsStore, watch_config_file,
-};
+use settings::{InvalidSettingsError, LocalSettingsKind, Settings, SettingsSources, SettingsStore};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -23,10 +19,7 @@ use std::{
 use util::{ResultExt, serde::default_true};
 use worktree::{Worktree, WorktreeId};
 
-use crate::{
-    task_store::{TaskSettingsLocation, TaskStore},
-    worktree_store::WorktreeStore,
-};
+use crate::worktree_store::WorktreeStore;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -408,7 +401,6 @@ pub enum SettingsObserverMode {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SettingsObserverEvent {
     LocalSettingsUpdated(Result<PathBuf, InvalidSettingsError>),
-    LocalTasksUpdated(Result<PathBuf, InvalidSettingsError>),
 }
 
 impl EventEmitter<SettingsObserverEvent> for SettingsObserver {}
@@ -417,8 +409,6 @@ pub struct SettingsObserver {
     downstream_client: Option<AnyProtoClient>,
     worktree_store: Entity<WorktreeStore>,
     project_id: u64,
-    task_store: Entity<TaskStore>,
-    _global_task_config_watcher: Task<()>,
 }
 
 /// SettingsObserver observers changes to .zed/{settings, task}.json files in local worktrees
@@ -431,41 +421,19 @@ impl SettingsObserver {
         client.add_entity_message_handler(Self::handle_update_worktree_settings);
     }
 
-    pub fn new_local(
-        fs: Arc<dyn Fs>,
-        worktree_store: Entity<WorktreeStore>,
-        task_store: Entity<TaskStore>,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new_local(worktree_store: Entity<WorktreeStore>) -> Self {
         Self {
             worktree_store,
-            task_store,
             downstream_client: None,
             project_id: 0,
-            _global_task_config_watcher: Self::subscribe_to_global_task_file_changes(
-                fs.clone(),
-                paths::tasks_file().clone(),
-                cx,
-            ),
         }
     }
 
-    pub fn new_remote(
-        fs: Arc<dyn Fs>,
-        worktree_store: Entity<WorktreeStore>,
-        task_store: Entity<TaskStore>,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new_remote(worktree_store: Entity<WorktreeStore>) -> Self {
         Self {
             worktree_store,
-            task_store,
             downstream_client: None,
             project_id: 0,
-            _global_task_config_watcher: Self::subscribe_to_global_task_file_changes(
-                fs.clone(),
-                paths::tasks_file().clone(),
-                cx,
-            ),
         }
     }
 
@@ -555,7 +523,6 @@ impl SettingsObserver {
     ) {
         let worktree_id = worktree.read(cx).id();
         let remote_worktree_id = worktree.read(cx).id();
-        let task_store = self.task_store.clone();
 
         for (directory, kind, file_content) in settings_contents {
             match kind {
@@ -586,35 +553,6 @@ impl SettingsObserver {
                             }
                         }
                     }),
-                LocalSettingsKind::Tasks => {
-                    let result = task_store.update(cx, |task_store, cx| {
-                        task_store.update_user_tasks(
-                            TaskSettingsLocation::Worktree(SettingsLocation {
-                                worktree_id,
-                                path: directory.as_ref(),
-                            }),
-                            file_content.as_deref(),
-                            cx,
-                        )
-                    });
-
-                    match result {
-                        Err(InvalidSettingsError::Tasks { path, message }) => {
-                            log::error!("Failed to set local tasks in {path:?}: {message:?}");
-                            cx.emit(SettingsObserverEvent::LocalTasksUpdated(Err(
-                                InvalidSettingsError::Tasks { path, message },
-                            )));
-                        }
-                        Err(e) => {
-                            log::error!("Failed to set local tasks: {e}");
-                        }
-                        Ok(()) => {
-                            cx.emit(SettingsObserverEvent::LocalTasksUpdated(Ok(
-                                directory.join(task_file_name())
-                            )));
-                        }
-                    }
-                }
             };
 
             if let Some(downstream_client) = &self.downstream_client {
@@ -630,68 +568,11 @@ impl SettingsObserver {
             }
         }
     }
-
-    fn subscribe_to_global_task_file_changes(
-        fs: Arc<dyn Fs>,
-        file_path: PathBuf,
-        cx: &mut Context<Self>,
-    ) -> Task<()> {
-        let mut user_tasks_file_rx =
-            watch_config_file(&cx.background_executor(), fs, file_path.clone());
-        let user_tasks_content = cx.background_executor().block(user_tasks_file_rx.next());
-        let weak_entry = cx.weak_entity();
-        cx.spawn(async move |settings_observer, cx| {
-            let Ok(task_store) = settings_observer.read_with(cx, |settings_observer, _| {
-                settings_observer.task_store.clone()
-            }) else {
-                return;
-            };
-            if let Some(user_tasks_content) = user_tasks_content {
-                let Ok(()) = task_store.update(cx, |task_store, cx| {
-                    task_store
-                        .update_user_tasks(
-                            TaskSettingsLocation::Global(&file_path),
-                            Some(&user_tasks_content),
-                            cx,
-                        )
-                        .log_err();
-                }) else {
-                    return;
-                };
-            }
-            while let Some(user_tasks_content) = user_tasks_file_rx.next().await {
-                let Ok(result) = task_store.update(cx, |task_store, cx| {
-                    task_store.update_user_tasks(
-                        TaskSettingsLocation::Global(&file_path),
-                        Some(&user_tasks_content),
-                        cx,
-                    )
-                }) else {
-                    break;
-                };
-
-                weak_entry
-                    .update(cx, |_, cx| match result {
-                        Ok(()) => cx.emit(SettingsObserverEvent::LocalTasksUpdated(Ok(
-                            file_path.clone()
-                        ))),
-                        Err(err) => cx.emit(SettingsObserverEvent::LocalTasksUpdated(Err(
-                            InvalidSettingsError::Tasks {
-                                path: file_path.clone(),
-                                message: err.to_string(),
-                            },
-                        ))),
-                    })
-                    .ok();
-            }
-        })
-    }
 }
 
 pub fn local_settings_kind_from_proto(kind: proto::LocalSettingsKind) -> LocalSettingsKind {
     match kind {
         proto::LocalSettingsKind::Settings => LocalSettingsKind::Settings,
-        proto::LocalSettingsKind::Tasks => LocalSettingsKind::Tasks,
         proto::LocalSettingsKind::Editorconfig => LocalSettingsKind::Editorconfig,
         _ => unreachable!(),
     }
@@ -700,7 +581,6 @@ pub fn local_settings_kind_from_proto(kind: proto::LocalSettingsKind) -> LocalSe
 pub fn local_settings_kind_to_proto(kind: LocalSettingsKind) -> proto::LocalSettingsKind {
     match kind {
         LocalSettingsKind::Settings => proto::LocalSettingsKind::Settings,
-        LocalSettingsKind::Tasks => proto::LocalSettingsKind::Tasks,
         LocalSettingsKind::Editorconfig => proto::LocalSettingsKind::Editorconfig,
     }
 }

@@ -59,14 +59,9 @@ fn serialize_pane(pane: &Entity<Pane>, active: bool, cx: &mut App) -> Serialized
     let children = pane
         .items()
         .filter_map(|item| {
-            let terminal_view = item.act_as::<TerminalView>(cx)?;
-            if terminal_view.read(cx).terminal().read(cx).task().is_some() {
-                None
-            } else {
-                let id = item.item_id().as_u64();
-                items_to_serialize.insert(id);
-                Some(id)
-            }
+            let id = item.item_id().as_u64();
+            items_to_serialize.insert(id);
+            Some(id)
         })
         .collect::<Vec<_>>();
     let active_item = pane

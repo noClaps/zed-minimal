@@ -2,7 +2,6 @@ use crate::{
     Copy, CopyAndTrim, CopyPermalinkToLine, Cut, DisplayPoint, DisplaySnapshot, Editor,
     FindAllReferences, GoToDeclaration, GoToDefinition, GoToImplementation, GoToTypeDefinition,
     Paste, Rename, RevealInFileManager, SelectMode, SelectionExt, ToDisplayPoint,
-    ToggleCodeActions,
     actions::{Format, FormatSelections},
     selections_collection::SelectionsCollection,
 };
@@ -213,13 +212,6 @@ pub fn deploy_context_menu(
                 .when(has_selections, |cx| {
                     cx.action("Format Selections", Box::new(FormatSelections))
                 })
-                .action(
-                    "Show Code Actions",
-                    Box::new(ToggleCodeActions {
-                        deployed_from: None,
-                        quick_launch: false,
-                    }),
-                )
                 .separator()
                 .action("Cut", Box::new(Cut))
                 .action("Copy", Box::new(Copy))

@@ -160,12 +160,6 @@ pub fn keymap_backup_file() -> &'static PathBuf {
     KEYMAP_FILE.get_or_init(|| config_dir().join("keymap_backup.json"))
 }
 
-/// Returns the path to the `tasks.json` file.
-pub fn tasks_file() -> &'static PathBuf {
-    static TASKS_FILE: OnceLock<PathBuf> = OnceLock::new();
-    TASKS_FILE.get_or_init(|| config_dir().join("tasks.json"))
-}
-
 /// Returns the path to the extensions directory.
 ///
 /// This is where installed extensions are stored.
@@ -233,20 +227,6 @@ pub fn local_settings_folder_relative_path() -> &'static Path {
 pub fn local_settings_file_relative_path() -> &'static Path {
     Path::new(".zed-min/settings.json")
 }
-
-/// Returns the relative path to a `tasks.json` file within a project.
-pub fn local_tasks_file_relative_path() -> &'static Path {
-    Path::new(".zed-min/tasks.json")
-}
-
-pub fn debug_task_file_name() -> &'static str {
-    "debug.json"
-}
-
-pub fn task_file_name() -> &'static str {
-    "tasks.json"
-}
-
 /// Returns the relative path to a `debug.json` file within a project.
 /// .zed/debug.json
 pub fn local_debug_file_relative_path() -> &'static Path {

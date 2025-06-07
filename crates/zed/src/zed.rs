@@ -28,7 +28,7 @@ use migrate::{MigrationBanner, MigrationEvent, MigrationNotification, MigrationT
 use migrator::migrate_settings;
 pub use open_listener::*;
 use outline_panel::OutlinePanel;
-use paths::{local_settings_file_relative_path, local_tasks_file_relative_path};
+use paths::local_settings_file_relative_path;
 use project::DirectoryLister;
 use project_panel::ProjectPanel;
 use quick_action_bar::QuickActionBar;
@@ -37,7 +37,7 @@ use rope::Rope;
 use search::project_search::ProjectSearchBar;
 use settings::{
     DEFAULT_KEYMAP_PATH, InvalidSettingsError, KeymapFile, Settings, SettingsStore,
-    initial_project_settings_content, initial_tasks_content, update_settings_file,
+    initial_project_settings_content, update_settings_file,
 };
 use std::sync::atomic::{self, AtomicBool};
 use std::{borrow::Cow, path::Path, sync::Arc};
@@ -132,16 +132,6 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &OpenAccountSettings, cx| {
         with_active_or_new_workspace(cx, |_, _, cx| {
             cx.open_url(&zed_urls::account_url(cx));
-        });
-    });
-    cx.on_action(|_: &OpenTasks, cx| {
-        with_active_or_new_workspace(cx, |_, window, cx| {
-            open_settings_file(
-                paths::tasks_file(),
-                || settings::initial_tasks_content().as_ref().into(),
-                window,
-                cx,
-            );
         });
     });
     cx.on_action(|_: &OpenDefaultSettings, cx| {
@@ -512,7 +502,6 @@ fn register_actions(app_state: Arc<AppState>, workspace: &mut Workspace, _: &mut
             );
         })
         .register_action(open_project_settings_file)
-        .register_action(open_project_tasks_file)
         .register_action(
             |workspace: &mut Workspace,
              _: &project_panel::ToggleFocus,
@@ -930,21 +919,6 @@ fn open_project_settings_file(
         workspace,
         local_settings_file_relative_path(),
         initial_project_settings_content(),
-        window,
-        cx,
-    )
-}
-
-fn open_project_tasks_file(
-    workspace: &mut Workspace,
-    _: &OpenProjectTasks,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) {
-    open_local_file(
-        workspace,
-        local_tasks_file_relative_path(),
-        initial_tasks_content(),
         window,
         cx,
     )

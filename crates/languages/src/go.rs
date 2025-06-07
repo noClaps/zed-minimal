@@ -1,8 +1,7 @@
 use anyhow::{Context as _, Result};
 use async_trait::async_trait;
-use collections::HashMap;
 use futures::StreamExt;
-use gpui::{App, AsyncApp, Task};
+use gpui::{AsyncApp, Task};
 use http_client::github::latest_github_release;
 pub use language::*;
 use lsp::{LanguageServerBinary, LanguageServerName};
@@ -12,7 +11,6 @@ use serde_json::json;
 use smol::fs;
 use std::{
     any::Any,
-    borrow::Cow,
     ffi::{OsStr, OsString},
     ops::Range,
     path::PathBuf,
@@ -23,7 +21,6 @@ use std::{
         atomic::{AtomicBool, Ordering::SeqCst},
     },
 };
-use task::{TaskTemplate, TaskTemplates, TaskVariables, VariableName};
 use util::{ResultExt, fs::remove_matching, maybe};
 
 fn server_binary_arguments() -> Vec<OsString> {
@@ -39,10 +36,6 @@ impl GoLspAdapter {
 
 static VERSION_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\d+\.\d+\.\d+").expect("Failed to create VERSION_REGEX"));
-
-static GO_ESCAPE_SUBTEST_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"[.*+?^${}()|\[\]\\]"#).expect("Failed to create GO_ESCAPE_SUBTEST_NAME_REGEX")
-});
 
 const BINARY: &str = "gopls";
 
@@ -426,219 +419,4 @@ fn adjust_runs(
         range.end += delta;
     }
     runs
-}
-
-pub(crate) struct GoContextProvider;
-
-const GO_PACKAGE_TASK_VARIABLE: VariableName = VariableName::Custom(Cow::Borrowed("GO_PACKAGE"));
-const GO_MODULE_ROOT_TASK_VARIABLE: VariableName =
-    VariableName::Custom(Cow::Borrowed("GO_MODULE_ROOT"));
-const GO_SUBTEST_NAME_TASK_VARIABLE: VariableName =
-    VariableName::Custom(Cow::Borrowed("GO_SUBTEST_NAME"));
-
-impl ContextProvider for GoContextProvider {
-    fn build_context(
-        &self,
-        variables: &TaskVariables,
-        location: ContextLocation<'_>,
-        _: Option<HashMap<String, String>>,
-        _: Arc<dyn LanguageToolchainStore>,
-        cx: &mut gpui::App,
-    ) -> Task<Result<TaskVariables>> {
-        let local_abs_path = location
-            .file_location
-            .buffer
-            .read(cx)
-            .file()
-            .and_then(|file| Some(file.as_local()?.abs_path(cx)));
-
-        let go_package_variable = local_abs_path
-            .as_deref()
-            .and_then(|local_abs_path| local_abs_path.parent())
-            .map(|buffer_dir| {
-                // Prefer the relative form `./my-nested-package/is-here` over
-                // absolute path, because it's more readable in the modal, but
-                // the absolute path also works.
-                let package_name = variables
-                    .get(&VariableName::WorktreeRoot)
-                    .and_then(|worktree_abs_path| buffer_dir.strip_prefix(worktree_abs_path).ok())
-                    .map(|relative_pkg_dir| {
-                        if relative_pkg_dir.as_os_str().is_empty() {
-                            ".".into()
-                        } else {
-                            format!("./{}", relative_pkg_dir.to_string_lossy())
-                        }
-                    })
-                    .unwrap_or_else(|| format!("{}", buffer_dir.to_string_lossy()));
-
-                (GO_PACKAGE_TASK_VARIABLE.clone(), package_name.to_string())
-            });
-
-        let go_module_root_variable = local_abs_path
-            .as_deref()
-            .and_then(|local_abs_path| local_abs_path.parent())
-            .map(|buffer_dir| {
-                // Walk dirtree up until getting the first go.mod file
-                let module_dir = buffer_dir
-                    .ancestors()
-                    .find(|dir| dir.join("go.mod").is_file())
-                    .map(|dir| dir.to_string_lossy().to_string())
-                    .unwrap_or_else(|| ".".to_string());
-
-                (GO_MODULE_ROOT_TASK_VARIABLE.clone(), module_dir)
-            });
-
-        let _subtest_name = variables.get(&VariableName::Custom(Cow::Borrowed("_subtest_name")));
-
-        let go_subtest_variable = extract_subtest_name(_subtest_name.unwrap_or(""))
-            .map(|subtest_name| (GO_SUBTEST_NAME_TASK_VARIABLE.clone(), subtest_name));
-
-        Task::ready(Ok(TaskVariables::from_iter(
-            [
-                go_package_variable,
-                go_subtest_variable,
-                go_module_root_variable,
-            ]
-            .into_iter()
-            .flatten(),
-        )))
-    }
-
-    fn associated_tasks(
-        &self,
-        _: Option<Arc<dyn language::File>>,
-        _: &App,
-    ) -> Option<TaskTemplates> {
-        let package_cwd = if GO_PACKAGE_TASK_VARIABLE.template_value() == "." {
-            None
-        } else {
-            Some("$ZED_DIRNAME".to_string())
-        };
-        let module_cwd = Some(GO_MODULE_ROOT_TASK_VARIABLE.template_value());
-
-        Some(TaskTemplates(vec![
-            TaskTemplate {
-                label: format!(
-                    "go test {} -run {}",
-                    GO_PACKAGE_TASK_VARIABLE.template_value(),
-                    VariableName::Symbol.template_value(),
-                ),
-                command: "go".into(),
-                args: vec![
-                    "test".into(),
-                    "-run".into(),
-                    format!("\\^{}\\$", VariableName::Symbol.template_value(),),
-                ],
-                tags: vec!["go-test".to_owned()],
-                cwd: package_cwd.clone(),
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: format!("go test {}", GO_PACKAGE_TASK_VARIABLE.template_value()),
-                command: "go".into(),
-                args: vec!["test".into()],
-                cwd: package_cwd.clone(),
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: "go test ./...".into(),
-                command: "go".into(),
-                args: vec!["test".into(), "./...".into()],
-                cwd: module_cwd.clone(),
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: format!(
-                    "go test {} -v -run {}/{}",
-                    GO_PACKAGE_TASK_VARIABLE.template_value(),
-                    VariableName::Symbol.template_value(),
-                    GO_SUBTEST_NAME_TASK_VARIABLE.template_value(),
-                ),
-                command: "go".into(),
-                args: vec![
-                    "test".into(),
-                    "-v".into(),
-                    "-run".into(),
-                    format!(
-                        "\\^{}\\$/\\^{}\\$",
-                        VariableName::Symbol.template_value(),
-                        GO_SUBTEST_NAME_TASK_VARIABLE.template_value(),
-                    ),
-                ],
-                cwd: package_cwd.clone(),
-                tags: vec!["go-subtest".to_owned()],
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: format!(
-                    "go test {} -bench {}",
-                    GO_PACKAGE_TASK_VARIABLE.template_value(),
-                    VariableName::Symbol.template_value()
-                ),
-                command: "go".into(),
-                args: vec![
-                    "test".into(),
-                    "-benchmem".into(),
-                    "-run='^$'".into(),
-                    "-bench".into(),
-                    format!("\\^{}\\$", VariableName::Symbol.template_value()),
-                ],
-                cwd: package_cwd.clone(),
-                tags: vec!["go-benchmark".to_owned()],
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: format!(
-                    "go test {} -fuzz=Fuzz -run {}",
-                    GO_PACKAGE_TASK_VARIABLE.template_value(),
-                    VariableName::Symbol.template_value(),
-                ),
-                command: "go".into(),
-                args: vec![
-                    "test".into(),
-                    "-fuzz=Fuzz".into(),
-                    "-run".into(),
-                    format!("\\^{}\\$", VariableName::Symbol.template_value(),),
-                ],
-                tags: vec!["go-fuzz".to_owned()],
-                cwd: package_cwd.clone(),
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: format!("go run {}", GO_PACKAGE_TASK_VARIABLE.template_value(),),
-                command: "go".into(),
-                args: vec!["run".into(), ".".into()],
-                cwd: package_cwd.clone(),
-                tags: vec!["go-main".to_owned()],
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: format!("go generate {}", GO_PACKAGE_TASK_VARIABLE.template_value()),
-                command: "go".into(),
-                args: vec!["generate".into()],
-                cwd: package_cwd.clone(),
-                tags: vec!["go-generate".to_owned()],
-                ..TaskTemplate::default()
-            },
-            TaskTemplate {
-                label: "go generate ./...".into(),
-                command: "go".into(),
-                args: vec!["generate".into(), "./...".into()],
-                cwd: module_cwd.clone(),
-                ..TaskTemplate::default()
-            },
-        ]))
-    }
-}
-
-fn extract_subtest_name(input: &str) -> Option<String> {
-    let replaced_spaces = input.trim_matches('"').replace(' ', "_");
-
-    Some(
-        GO_ESCAPE_SUBTEST_NAME_REGEX
-            .replace_all(&replaced_spaces, |caps: &regex::Captures| {
-                format!("\\{}", &caps[0])
-            })
-            .to_string(),
-    )
 }

@@ -4,7 +4,6 @@ use crate::{
     language_settings::{
         AllLanguageSettingsContent, LanguageSettingsContent, all_language_settings,
     },
-    task_context::ContextProvider,
     with_parser,
 };
 use anyhow::{Context as _, Result, anyhow};
@@ -229,7 +228,6 @@ struct BinaryStatusSender {
 pub struct LoadedLanguage {
     pub config: LanguageConfig,
     pub queries: LanguageQueries,
-    pub context_provider: Option<Arc<dyn ContextProvider>>,
     pub toolchain_provider: Option<Arc<dyn ToolchainLister>>,
 }
 
@@ -808,12 +806,10 @@ impl LanguageRegistry {
                                 let grammar = Some(this.get_or_load_grammar(grammar).await?);
 
                                 Language::new_with_id(id, loaded_language.config, grammar)
-                                    .with_context_provider(loaded_language.context_provider)
                                     .with_toolchain_lister(loaded_language.toolchain_provider)
                                     .with_queries(loaded_language.queries)
                             } else {
                                 Ok(Language::new_with_id(id, loaded_language.config, None)
-                                    .with_context_provider(loaded_language.context_provider)
                                     .with_toolchain_lister(loaded_language.toolchain_provider))
                             }
                         }

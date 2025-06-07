@@ -5,7 +5,7 @@ use fs::Fs;
 use futures::{FutureExt, StreamExt, channel::mpsc, future::LocalBoxFuture};
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task, UpdateGlobal};
 
-use paths::{EDITORCONFIG_NAME, local_settings_file_relative_path, task_file_name};
+use paths::{EDITORCONFIG_NAME, local_settings_file_relative_path};
 use schemars::{JsonSchema, r#gen::SchemaGenerator, schema::RootSchema};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -217,7 +217,6 @@ impl FromStr for Editorconfig {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LocalSettingsKind {
     Settings,
-    Tasks,
     Editorconfig,
 }
 
@@ -649,12 +648,6 @@ impl SettingsStore {
                 .map(|content| content.trim())
                 .filter(|content| !content.is_empty()),
         ) {
-            (LocalSettingsKind::Tasks, _) => {
-                return Err(InvalidSettingsError::Tasks {
-                    message: "Attempted to submit tasks into the settings store".to_string(),
-                    path: directory_path.join(task_file_name()),
-                });
-            }
             (LocalSettingsKind::Settings, None) => {
                 zed_settings_changed = self
                     .raw_local_settings
@@ -1056,7 +1049,6 @@ pub enum InvalidSettingsError {
     ServerSettings { message: String },
     DefaultSettings { message: String },
     Editorconfig { path: PathBuf, message: String },
-    Tasks { path: PathBuf, message: String },
     Debug { path: PathBuf, message: String },
 }
 
@@ -1067,7 +1059,6 @@ impl std::fmt::Display for InvalidSettingsError {
             | InvalidSettingsError::UserSettings { message }
             | InvalidSettingsError::ServerSettings { message }
             | InvalidSettingsError::DefaultSettings { message }
-            | InvalidSettingsError::Tasks { message, .. }
             | InvalidSettingsError::Editorconfig { message, .. }
             | InvalidSettingsError::Debug { message, .. } => {
                 write!(f, "{message}")

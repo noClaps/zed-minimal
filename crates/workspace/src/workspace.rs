@@ -8,7 +8,6 @@ pub mod pane_group;
 mod persistence;
 pub mod searchable;
 mod status_bar;
-pub mod tasks;
 mod theme_preview;
 mod toast_layer;
 mod toolbar;
@@ -91,7 +90,6 @@ use std::{
     sync::{Arc, LazyLock, Weak, atomic::AtomicUsize},
     time::Duration,
 };
-use task::SpawnInTerminal;
 use theme::{ActiveTheme, SystemAppearance, ThemeSettings};
 pub use toolbar::{Toolbar, ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView};
 pub use ui;
@@ -126,12 +124,7 @@ static ZED_WINDOW_POSITION: LazyLock<Option<Point<Pixels>>> = LazyLock::new(|| {
 });
 
 pub trait TerminalProvider {
-    fn spawn(
-        &self,
-        task: SpawnInTerminal,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Task<Option<Result<ExitStatus>>>;
+    fn spawn(&self, window: &mut Window, cx: &mut App) -> Task<Option<Result<ExitStatus>>>;
 }
 
 actions!(
