@@ -11,70 +11,12 @@ use db::sqlez::{
 use gpui::{AsyncWindowContext, Entity, WeakEntity};
 use itertools::Itertools as _;
 use project::Project;
-use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
 use util::{ResultExt, paths::SanitizedPath};
 use uuid::Uuid;
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SerializedSshProject {
-    pub host: String,
-    pub port: Option<u16>,
-    pub paths: Vec<String>,
-    pub user: Option<String>,
-}
-
-impl SerializedSshProject {
-    pub fn ssh_urls(&self) -> Vec<PathBuf> {
-        self.paths
-            .iter()
-            .map(|path| {
-                let mut result = String::new();
-                if let Some(user) = &self.user {
-                    result.push_str(user);
-                    result.push('@');
-                }
-                result.push_str(&self.host);
-                if let Some(port) = &self.port {
-                    result.push(':');
-                    result.push_str(&port.to_string());
-                }
-                result.push_str(path);
-                PathBuf::from(result)
-            })
-            .collect()
-    }
-}
-
-impl StaticColumnCount for SerializedSshProject {
-    fn column_count() -> usize {
-        5
-    }
-}
-
-impl Column for SerializedSshProject {
-    fn column(statement: &mut Statement, start_index: i32) -> Result<(Self, i32)> {
-        let host = statement.column_text(start_index + 1)?.to_string();
-        let (port, _) = Option::<u16>::column(statement, start_index + 2)?;
-        let raw_paths = statement.column_text(start_index + 3)?.to_string();
-        let paths: Vec<String> = serde_json::from_str(&raw_paths)?;
-
-        let (user, _) = Option::<String>::column(statement, start_index + 4)?;
-
-        Ok((
-            Self {
-                host,
-                port,
-                paths,
-                user,
-            },
-            start_index + 5,
-        ))
-    }
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LocalPaths(Arc<Vec<PathBuf>>);
@@ -156,7 +98,6 @@ impl Column for LocalPathsOrder {
 #[derive(Debug, PartialEq, Clone)]
 pub enum SerializedWorkspaceLocation {
     Local(LocalPaths, LocalPathsOrder),
-    Ssh(SerializedSshProject),
 }
 
 impl SerializedWorkspaceLocation {
@@ -233,7 +174,6 @@ impl SerializedWorkspaceLocation {
                     )
                 }
             }
-            SerializedWorkspaceLocation::Ssh(ssh_project) => Arc::new(ssh_project.ssh_urls()),
         }
     }
 }

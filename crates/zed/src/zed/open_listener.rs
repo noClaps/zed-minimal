@@ -45,11 +45,6 @@ impl OpenRequest {
                 this.parse_file_path(file)
             } else if let Some(file) = url.strip_prefix("zed://file") {
                 this.parse_file_path(file)
-            } else if let Some(file) = url.strip_prefix("zed://ssh") {
-                let ssh_url = "ssh:/".to_string() + file;
-                this.parse_ssh_file_path(&ssh_url)?
-            } else if url.starts_with("ssh://") {
-                this.parse_ssh_file_path(&url)?
             } else if let Some(request_path) = parse_zed_link(&url, cx) {
                 this.parse_request_path(request_path).log_err();
             } else {
@@ -64,16 +59,6 @@ impl OpenRequest {
         if let Some(decoded) = urlencoding::decode(file).log_err() {
             self.open_paths.push(decoded.into_owned())
         }
-    }
-
-    fn parse_ssh_file_path(&mut self, file: &str) -> Result<()> {
-        let url = url::Url::parse(file)?;
-        anyhow::ensure!(
-            self.open_paths.is_empty(),
-            "cannot open both local and ssh paths"
-        );
-        self.parse_file_path(url.path());
-        Ok(())
     }
 
     fn parse_request_path(&mut self, request_path: &str) -> Result<()> {
@@ -327,9 +312,6 @@ async fn open_workspaces(
                     if workspace_failed_to_open {
                         errored = true
                     }
-                }
-                SerializedWorkspaceLocation::Ssh(_) => {
-                    errored = false;
                 }
             }
         }

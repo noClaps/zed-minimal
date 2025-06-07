@@ -73,9 +73,6 @@ pub struct EditorEvent {
     pub operation: String,
     /// The extension of the file that was opened or saved
     pub file_extension: Option<String>,
-    /// Whether the client is opening/saving a local file or a remote file via SSH
-    #[serde(default)]
-    pub is_via_ssh: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -131,9 +128,6 @@ pub struct ActionEvent {
 pub struct EditEvent {
     pub duration: i64,
     pub environment: String,
-    /// Whether the edits occurred locally or remotely via SSH
-    #[serde(default)]
-    pub is_via_ssh: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

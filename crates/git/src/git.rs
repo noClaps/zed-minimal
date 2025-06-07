@@ -1,12 +1,10 @@
 pub mod blame;
 pub mod commit;
 mod hosting_provider;
-mod remote;
 pub mod repository;
 pub mod status;
 
 pub use crate::hosting_provider::*;
-pub use crate::remote::*;
 use anyhow::{Context as _, Result};
 pub use git2 as libgit;
 use gpui::action_with_deprecated_aliases;

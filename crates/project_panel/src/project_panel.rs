@@ -514,7 +514,6 @@ impl ProjectPanel {
                             let file_path = entry.path.clone();
                             let worktree_id = worktree.read(cx).id();
                             let entry_id = entry.id;
-                            let is_via_ssh = false;
 
                             workspace
                                 .open_path_preview(
@@ -530,11 +529,8 @@ impl ProjectPanel {
                                 )
                                 .detach_and_prompt_err("Failed to open file", window, cx, move |e, _, _| {
                                     match e.error_code() {
-                                        ErrorCode::Disconnected => if is_via_ssh {
-                                            Some("Disconnected from SSH host".to_string())
-                                        } else {
-                                            Some("Disconnected from remote project".to_string())
-                                        },
+                                        ErrorCode::Disconnected =>
+                                            Some("Disconnected from remote project".to_string()),
                                         ErrorCode::UnsharedItem => Some(format!(
                                             "{} is not shared by the host. This could be because it has been marked as `private`",
                                             file_path.display()

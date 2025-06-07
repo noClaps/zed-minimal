@@ -156,11 +156,6 @@ impl PickerDelegate for KernelPickerDelegate {
                 "Python Env",
                 Some(truncate_path(&kernelspec.path(), 42)),
             ),
-            KernelSpecification::Remote(_) => (
-                kernelspec.name(),
-                "Remote",
-                Some(truncate_path(&kernelspec.path(), 42)),
-            ),
         };
 
         Some(

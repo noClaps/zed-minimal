@@ -110,7 +110,6 @@ pub struct ExtensionStore {
     pub wasm_host: Arc<WasmHost>,
     pub wasm_extensions: Vec<(Arc<ExtensionManifest>, WasmExtension)>,
     pub tasks: Vec<Task<()>>,
-    pub ssh_registered_tx: UnboundedSender<()>,
 }
 
 #[derive(Clone, Copy)]
@@ -230,7 +229,6 @@ impl ExtensionStore {
         let index_path = extensions_dir.join("index.json");
 
         let (reload_tx, mut reload_rx) = unbounded();
-        let (connection_registered_tx, mut connection_registered_rx) = unbounded();
         let mut this = Self {
             proxy: extension_host_proxy.clone(),
             extension_index: Default::default(),
@@ -254,8 +252,6 @@ impl ExtensionStore {
             telemetry,
             reload_tx,
             tasks: Vec::new(),
-
-            ssh_registered_tx: connection_registered_tx,
         };
 
         // The extensions store maintains an index file, which contains a complete
@@ -329,12 +325,6 @@ impl ExtensionStore {
                                     .await;
                                 index_changed = false;
                             }
-                        }
-                        _ = connection_registered_rx.next() => {
-                            debounce_timer = cx
-                                .background_executor()
-                                .timer(RELOAD_DEBOUNCE_DURATION)
-                                .fuse();
                         }
                         extension_id = reload_rx.next() => {
                             let Some(extension_id) = extension_id else { break; };
@@ -1484,10 +1474,6 @@ impl ExtensionStore {
         );
 
         Ok(())
-    }
-
-    pub fn register_ssh_client(&mut self) {
-        self.ssh_registered_tx.unbounded_send(()).ok();
     }
 }
 

@@ -1,5 +1,4 @@
 use crate::components::KernelListItem;
-use crate::kernels::RemoteRunningKernel;
 use crate::setup_editor_session_actions;
 use crate::{
     KernelStatus,
@@ -253,13 +252,6 @@ impl Session {
                 entity_id,
                 working_directory,
                 self.fs.clone(),
-                session_view,
-                window,
-                cx,
-            ),
-            KernelSpecification::Remote(remote_kernel_specification) => RemoteRunningKernel::new(
-                remote_kernel_specification,
-                working_directory,
                 session_view,
                 window,
                 cx,

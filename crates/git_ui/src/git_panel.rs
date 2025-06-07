@@ -1,16 +1,13 @@
-use crate::askpass_modal::AskPassModal;
 use crate::commit_modal::CommitModal;
 use crate::commit_tooltip::CommitTooltip;
 use crate::commit_view::CommitView;
 use crate::git_panel_settings::StatusStyle;
 use crate::project_diff::{self, Diff, ProjectDiff};
-use crate::remote_output::{self, RemoteAction, SuccessMessage};
 use crate::{branch_picker, picker_prompt, render_remote_button};
 use crate::{
     git_panel_settings::GitPanelSettings, git_status_icon, repository_selector::RepositorySelector,
 };
 use anyhow::Context as _;
-use askpass::AskPassDelegate;
 use db::kvp::KEY_VALUE_STORE;
 use editor::{
     Editor, EditorElement, EditorMode, EditorSettings, MultiBuffer, ShowScrollbar,
@@ -18,8 +15,8 @@ use editor::{
 };
 use git::blame::ParsedCommitMessage;
 use git::repository::{
-    Branch, CommitDetails, CommitOptions, CommitSummary, FetchOptions, PushOptions, Remote,
-    RemoteCommandOutput, ResetMode, Upstream, UpstreamTracking, UpstreamTrackingStatus,
+    Branch, CommitDetails, CommitOptions, CommitSummary, ResetMode, Upstream, UpstreamTracking,
+    UpstreamTrackingStatus,
 };
 use git::status::StageStatus;
 use git::{Amend, ToggleStaged, repository::RepoPath, status::FileStatus};
@@ -1761,93 +1758,6 @@ impl GitPanel {
         }));
     }
 
-    fn get_fetch_options(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Task<Option<FetchOptions>> {
-        let repo = self.active_repository.clone();
-        let workspace = self.workspace.clone();
-
-        cx.spawn_in(window, async move |_, cx| {
-            let repo = repo?;
-            let remotes = repo
-                .update(cx, |repo, _| repo.get_remotes(None))
-                .ok()?
-                .await
-                .ok()?
-                .log_err()?;
-
-            let mut remotes: Vec<_> = remotes.into_iter().map(FetchOptions::Remote).collect();
-            if remotes.len() > 1 {
-                remotes.push(FetchOptions::All);
-            }
-            let selection = cx
-                .update(|window, cx| {
-                    picker_prompt::prompt(
-                        "Pick which remote to fetch",
-                        remotes.iter().map(|r| r.name()).collect(),
-                        workspace,
-                        window,
-                        cx,
-                    )
-                })
-                .ok()?
-                .await?;
-            remotes.get(selection).cloned()
-        })
-    }
-
-    pub(crate) fn fetch(
-        &mut self,
-        is_fetch_all: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(repo) = self.active_repository.clone() else {
-            return;
-        };
-        telemetry::event!("Git Fetched");
-        let askpass = self.askpass_delegate("git fetch", window, cx);
-        let this = cx.weak_entity();
-
-        let fetch_options = if is_fetch_all {
-            Task::ready(Some(FetchOptions::All))
-        } else {
-            self.get_fetch_options(window, cx)
-        };
-
-        window
-            .spawn(cx, async move |cx| {
-                let Some(fetch_options) = fetch_options.await else {
-                    return Ok(());
-                };
-                let fetch = repo.update(cx, |repo, cx| {
-                    repo.fetch(fetch_options.clone(), askpass, cx)
-                })?;
-
-                let remote_message = fetch.await?;
-                this.update(cx, |this, cx| {
-                    let action = match fetch_options {
-                        FetchOptions::All => RemoteAction::Fetch(None),
-                        FetchOptions::Remote(remote) => RemoteAction::Fetch(Some(remote)),
-                    };
-                    match remote_message {
-                        Ok(remote_message) => this.show_remote_output(action, remote_message, cx),
-                        Err(e) => {
-                            log::error!("Error while fetching {:?}", e);
-                            this.show_error_toast(action.name(), e, cx)
-                        }
-                    }
-
-                    anyhow::Ok(())
-                })
-                .ok();
-                anyhow::Ok(())
-            })
-            .detach_and_log_err(cx);
-    }
-
     pub(crate) fn git_init(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let worktrees = self
             .project
@@ -1928,204 +1838,6 @@ impl GitPanel {
             .ok();
         })
         .detach();
-    }
-
-    pub(crate) fn pull(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(repo) = self.active_repository.clone() else {
-            return;
-        };
-        let Some(branch) = repo.read(cx).branch.as_ref() else {
-            return;
-        };
-        telemetry::event!("Git Pulled");
-        let branch = branch.clone();
-        let remote = self.get_remote(false, window, cx);
-        cx.spawn_in(window, async move |this, cx| {
-            let remote = match remote.await {
-                Ok(Some(remote)) => remote,
-                Ok(None) => {
-                    return Ok(());
-                }
-                Err(e) => {
-                    log::error!("Failed to get current remote: {}", e);
-                    this.update(cx, |this, cx| this.show_error_toast("pull", e, cx))
-                        .ok();
-                    return Ok(());
-                }
-            };
-
-            let askpass = this.update_in(cx, |this, window, cx| {
-                this.askpass_delegate(format!("git pull {}", remote.name), window, cx)
-            })?;
-
-            let pull = repo.update(cx, |repo, cx| {
-                repo.pull(
-                    branch.name().to_owned().into(),
-                    remote.name.clone(),
-                    askpass,
-                    cx,
-                )
-            })?;
-
-            let remote_message = pull.await?;
-
-            let action = RemoteAction::Pull(remote);
-            this.update(cx, |this, cx| match remote_message {
-                Ok(remote_message) => this.show_remote_output(action, remote_message, cx),
-                Err(e) => {
-                    log::error!("Error while pulling {:?}", e);
-                    this.show_error_toast(action.name(), e, cx)
-                }
-            })
-            .ok();
-
-            anyhow::Ok(())
-        })
-        .detach_and_log_err(cx);
-    }
-
-    pub(crate) fn push(
-        &mut self,
-        force_push: bool,
-        select_remote: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(repo) = self.active_repository.clone() else {
-            return;
-        };
-        let Some(branch) = repo.read(cx).branch.as_ref() else {
-            return;
-        };
-        telemetry::event!("Git Pushed");
-        let branch = branch.clone();
-
-        let options = if force_push {
-            Some(PushOptions::Force)
-        } else {
-            match branch.upstream {
-                Some(Upstream {
-                    tracking: UpstreamTracking::Gone,
-                    ..
-                })
-                | None => Some(PushOptions::SetUpstream),
-                _ => None,
-            }
-        };
-        let remote = self.get_remote(select_remote, window, cx);
-
-        cx.spawn_in(window, async move |this, cx| {
-            let remote = match remote.await {
-                Ok(Some(remote)) => remote,
-                Ok(None) => {
-                    return Ok(());
-                }
-                Err(e) => {
-                    log::error!("Failed to get current remote: {}", e);
-                    this.update(cx, |this, cx| this.show_error_toast("push", e, cx))
-                        .ok();
-                    return Ok(());
-                }
-            };
-
-            let askpass_delegate = this.update_in(cx, |this, window, cx| {
-                this.askpass_delegate(format!("git push {}", remote.name), window, cx)
-            })?;
-
-            let push = repo.update(cx, |repo, cx| {
-                repo.push(
-                    branch.name().to_owned().into(),
-                    remote.name.clone(),
-                    options,
-                    askpass_delegate,
-                    cx,
-                )
-            })?;
-
-            let remote_output = push.await?;
-
-            let action = RemoteAction::Push(branch.name().to_owned().into(), remote);
-            this.update(cx, |this, cx| match remote_output {
-                Ok(remote_message) => this.show_remote_output(action, remote_message, cx),
-                Err(e) => {
-                    log::error!("Error while pushing {:?}", e);
-                    this.show_error_toast(action.name(), e, cx)
-                }
-            })?;
-
-            anyhow::Ok(())
-        })
-        .detach_and_log_err(cx);
-    }
-
-    fn askpass_delegate(
-        &self,
-        operation: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AskPassDelegate {
-        let this = cx.weak_entity();
-        let operation = operation.into();
-        let window = window.window_handle();
-        AskPassDelegate::new(&mut cx.to_async(), move |prompt, tx, cx| {
-            window
-                .update(cx, |_, window, cx| {
-                    this.update(cx, |this, cx| {
-                        this.workspace.update(cx, |workspace, cx| {
-                            workspace.toggle_modal(window, cx, |window, cx| {
-                                AskPassModal::new(operation.clone(), prompt.into(), tx, window, cx)
-                            });
-                        })
-                    })
-                })
-                .ok();
-        })
-    }
-
-    fn get_remote(
-        &mut self,
-        always_select: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl Future<Output = anyhow::Result<Option<Remote>>> + use<> {
-        let repo = self.active_repository.clone();
-        let workspace = self.workspace.clone();
-        let mut cx = window.to_async(cx);
-
-        async move {
-            let repo = repo.context("No active repository")?;
-            let current_remotes: Vec<Remote> = repo
-                .update(&mut cx, |repo, _| {
-                    let current_branch = if always_select {
-                        None
-                    } else {
-                        let current_branch = repo.branch.as_ref().context("No active branch")?;
-                        Some(current_branch.name().to_string())
-                    };
-                    anyhow::Ok(repo.get_remotes(current_branch))
-                })??
-                .await??;
-
-            let current_remotes: Vec<_> = current_remotes
-                .into_iter()
-                .map(|remotes| remotes.name)
-                .collect();
-            let selection = cx
-                .update(|window, cx| {
-                    picker_prompt::prompt(
-                        "Pick which remote to push to",
-                        current_remotes.clone(),
-                        workspace,
-                        window,
-                        cx,
-                    )
-                })?
-                .await;
-
-            Ok(selection.map(|selection| Remote {
-                name: current_remotes[selection].clone(),
-            }))
-        }
     }
 
     fn potential_co_authors(&self) -> Vec<(String, String)> {
@@ -2496,41 +2208,6 @@ impl GitPanel {
                 workspace.toggle_status_toast(toast, cx)
             });
         }
-    }
-
-    fn show_remote_output(&self, action: RemoteAction, info: RemoteCommandOutput, cx: &mut App) {
-        let Some(workspace) = self.workspace.upgrade() else {
-            return;
-        };
-
-        workspace.update(cx, |workspace, cx| {
-            let SuccessMessage { message, style } = remote_output::format_output(&action, info);
-            let workspace_weak = cx.weak_entity();
-            let operation = action.name();
-
-            let status_toast = StatusToast::new(message, cx, move |this, _cx| {
-                use remote_output::SuccessStyle::*;
-                match style {
-                    Toast { .. } => this,
-                    ToastWithLog { output } => this
-                        .icon(ToastIcon::new(IconName::GitBranchSmall).color(Color::Muted))
-                        .action("View Log", move |window, cx| {
-                            let output = output.clone();
-                            let output =
-                                format!("stdout:\n{}\nstderr:\n{}", output.stdout, output.stderr);
-                            workspace_weak
-                                .update(cx, move |workspace, cx| {
-                                    Self::open_output(operation, workspace, &output, window, cx)
-                                })
-                                .ok();
-                        }),
-                    PushPrLink { link } => this
-                        .icon(ToastIcon::new(IconName::GitBranchSmall).color(Color::Muted))
-                        .action("Open Pull Request", move |_, cx| cx.open_url(&link)),
-                }
-            });
-            workspace.toggle_status_toast(status_toast, cx)
-        });
     }
 
     fn open_output(

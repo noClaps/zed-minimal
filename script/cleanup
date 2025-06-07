@@ -1,0 +1,6 @@
+#!/bin/sh
+
+rm -rf "$HOME/Library/Logs/ZedMin"
+rm -rf "$HOME/Library/Application Support/ZedMin"
+rm -rf "$HOME/Library/Caches/ZedMin"
+rm -rf "$HOME/.config/zed-min"

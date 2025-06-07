@@ -16,7 +16,6 @@ use project_diff::ProjectDiff;
 use ui::prelude::*;
 use workspace::Workspace;
 
-mod askpass_modal;
 pub mod branch_picker;
 mod commit_modal;
 pub mod commit_tooltip;
@@ -27,7 +26,6 @@ mod git_panel_settings;
 pub mod onboarding;
 pub mod picker_prompt;
 pub mod project_diff;
-pub(crate) mod remote_output;
 pub mod repository_selector;
 
 actions!(git, [ResetOnboarding]);
@@ -49,54 +47,6 @@ pub fn init(cx: &mut App) {
         repository_selector::register(workspace);
         branch_picker::register(workspace);
 
-        workspace.register_action(|workspace, _: &git::Fetch, window, cx| {
-            let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| {
-                panel.fetch(true, window, cx);
-            });
-        });
-        workspace.register_action(|workspace, _: &git::FetchFrom, window, cx| {
-            let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| {
-                panel.fetch(false, window, cx);
-            });
-        });
-        workspace.register_action(|workspace, _: &git::Push, window, cx| {
-            let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| {
-                panel.push(false, false, window, cx);
-            });
-        });
-        workspace.register_action(|workspace, _: &git::PushTo, window, cx| {
-            let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| {
-                panel.push(false, true, window, cx);
-            });
-        });
-        workspace.register_action(|workspace, _: &git::ForcePush, window, cx| {
-            let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| {
-                panel.push(true, false, window, cx);
-            });
-        });
-        workspace.register_action(|workspace, _: &git::Pull, window, cx| {
-            let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
-                return;
-            };
-            panel.update(cx, |panel, cx| {
-                panel.pull(window, cx);
-            });
-        });
         workspace.register_action(|workspace, action: &git::StageAll, window, cx| {
             let Some(panel) = workspace.panel::<git_panel::GitPanel>(cx) else {
                 return;

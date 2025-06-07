@@ -16672,7 +16672,7 @@ impl Editor {
                     telemetry
                 };
                 refresh_linked_ranges(self, window, cx);
-                telemetry.log_edit_event("editor", false);
+                telemetry.log_edit_event("editor");
             }
             multi_buffer::Event::ExcerptsAdded {
                 buffer,
@@ -17188,12 +17188,7 @@ impl Editor {
 
         let edit_predictions_provider = all_language_settings(file, cx).edit_predictions.provider;
 
-        telemetry::event!(
-            event_type,
-            file_extension,
-            edit_predictions_provider,
-            is_via_ssh = false,
-        );
+        telemetry::event!(event_type, file_extension, edit_predictions_provider,);
     }
 
     /// Copy the highlighted chunks to the clipboard as JSON. The format is an array of lines,

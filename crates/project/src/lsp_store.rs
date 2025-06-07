@@ -73,7 +73,6 @@ use sha2::{Digest, Sha256};
 use smol::channel::Sender;
 use snippet::Snippet;
 use std::{
-    any::Any,
     borrow::Cow,
     cell::RefCell,
     cmp::{Ordering, Reverse},
@@ -2804,7 +2803,7 @@ pub struct FormattableBuffer {
 }
 
 pub(crate) enum LspStoreMode {
-    Local(LocalLspStore), // ssh host and collab host
+    Local(LocalLspStore),
 }
 
 impl LspStoreMode {
@@ -6018,17 +6017,6 @@ impl LspStore {
         envelope: TypedEnvelope<proto::MultiLspQuery>,
         mut cx: AsyncApp,
     ) -> Result<proto::MultiLspQueryResponse> {
-        let response_from_ssh = this.read_with(&mut cx, |this, _| {
-            let (upstream_client, project_id) = this.upstream_client()?;
-            let mut payload = envelope.payload.clone();
-            payload.project_id = project_id;
-
-            Some(upstream_client.request(payload))
-        })?;
-        if let Some(response_from_ssh) = response_from_ssh {
-            return response_from_ssh.await;
-        }
-
         let sender_id = envelope.original_sender_id().unwrap_or_default();
         let buffer_id = BufferId::new(envelope.payload.buffer_id)?;
         let version = deserialize_version(&envelope.payload.version);
@@ -9212,78 +9200,6 @@ fn glob_literal_prefix(glob: &Path) -> PathBuf {
             _ => true,
         })
         .collect()
-}
-
-pub struct SshLspAdapter {
-    name: LanguageServerName,
-    binary: LanguageServerBinary,
-    initialization_options: Option<String>,
-}
-
-impl SshLspAdapter {
-    pub fn new(
-        name: LanguageServerName,
-        binary: LanguageServerBinary,
-        initialization_options: Option<String>,
-    ) -> Self {
-        Self {
-            name,
-            binary,
-            initialization_options,
-        }
-    }
-}
-
-#[async_trait(?Send)]
-impl LspAdapter for SshLspAdapter {
-    fn name(&self) -> LanguageServerName {
-        self.name.clone()
-    }
-
-    async fn initialization_options(
-        self: Arc<Self>,
-        _: &dyn Fs,
-        _: &Arc<dyn LspAdapterDelegate>,
-    ) -> Result<Option<serde_json::Value>> {
-        let Some(options) = &self.initialization_options else {
-            return Ok(None);
-        };
-        let result = serde_json::from_str(options)?;
-        Ok(result)
-    }
-
-    async fn check_if_user_installed(
-        &self,
-        _: &dyn LspAdapterDelegate,
-        _: Arc<dyn LanguageToolchainStore>,
-        _: &AsyncApp,
-    ) -> Option<LanguageServerBinary> {
-        Some(self.binary.clone())
-    }
-
-    async fn cached_server_binary(
-        &self,
-        _: PathBuf,
-        _: &dyn LspAdapterDelegate,
-    ) -> Option<LanguageServerBinary> {
-        None
-    }
-
-    async fn fetch_latest_server_version(
-        &self,
-        _: &dyn LspAdapterDelegate,
-    ) -> Result<Box<dyn 'static + Send + Any>> {
-        anyhow::bail!("SshLspAdapter does not support fetch_latest_server_version")
-    }
-
-    async fn fetch_server_binary(
-        &self,
-        _: Box<dyn 'static + Send + Any>,
-        _: PathBuf,
-        _: &dyn LspAdapterDelegate,
-    ) -> Result<LanguageServerBinary> {
-        anyhow::bail!("SshLspAdapter does not support fetch_server_binary")
-    }
 }
 
 pub fn language_server_settings<'a>(

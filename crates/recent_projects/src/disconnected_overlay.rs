@@ -43,11 +43,7 @@ impl DisconnectedOverlay {
             workspace.project(),
             window,
             |workspace, _, event, window, cx| {
-                if !matches!(
-                    event,
-                    project::Event::DisconnectedFromHost
-                        | project::Event::DisconnectedFromSshRemote
-                ) {
+                if !matches!(event, project::Event::DisconnectedFromHost) {
                     return;
                 }
 

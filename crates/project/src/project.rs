@@ -251,7 +251,6 @@ pub enum Event {
     },
     RemoteIdChanged(Option<u64>),
     DisconnectedFromHost,
-    DisconnectedFromSshRemote,
     Closed,
     DeletedEntry(WorktreeId, ProjectEntryId),
     CollaboratorUpdated {
@@ -2288,10 +2287,6 @@ impl Project {
         self.lsp_store.update(cx, |lsp_store, cx| {
             lsp_store.open_buffer_for_symbol(symbol, cx)
         })
-    }
-
-    pub fn open_server_settings(&mut self) -> Task<Result<Entity<Buffer>>> {
-        return Task::ready(Err(anyhow!("not an ssh project")));
     }
 
     pub fn open_local_buffer_via_lsp(

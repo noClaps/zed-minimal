@@ -10,9 +10,7 @@ use gpui::{App, Entity, Task, Window};
 use language::LanguageName;
 pub use native_kernel::*;
 
-mod remote_kernels;
 use project::{Project, ProjectPath, WorktreeId};
-pub use remote_kernels::*;
 
 use anyhow::Result;
 use jupyter_protocol::JupyterKernelspec;
@@ -23,7 +21,6 @@ pub type JupyterMessageChannel = stream::SelectAll<Receiver<JupyterMessage>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KernelSpecification {
-    Remote(RemoteKernelSpecification),
     Jupyter(LocalKernelSpecification),
     PythonEnv(LocalKernelSpecification),
 }
@@ -33,7 +30,6 @@ impl KernelSpecification {
         match self {
             Self::Jupyter(spec) => spec.name.clone().into(),
             Self::PythonEnv(spec) => spec.name.clone().into(),
-            Self::Remote(spec) => spec.name.clone().into(),
         }
     }
 
@@ -41,7 +37,6 @@ impl KernelSpecification {
         match self {
             Self::Jupyter(_) => "Jupyter".into(),
             Self::PythonEnv(_) => "Python Environment".into(),
-            Self::Remote(_) => "Remote".into(),
         }
     }
 
@@ -49,7 +44,6 @@ impl KernelSpecification {
         SharedString::from(match self {
             Self::Jupyter(spec) => spec.path.to_string_lossy().to_string(),
             Self::PythonEnv(spec) => spec.path.to_string_lossy().to_string(),
-            Self::Remote(spec) => spec.url.to_string(),
         })
     }
 
@@ -57,7 +51,6 @@ impl KernelSpecification {
         SharedString::from(match self {
             Self::Jupyter(spec) => spec.kernelspec.language.clone(),
             Self::PythonEnv(spec) => spec.kernelspec.language.clone(),
-            Self::Remote(spec) => spec.kernelspec.language.clone(),
         })
     }
 
@@ -65,7 +58,6 @@ impl KernelSpecification {
         let lang_name = match self {
             Self::Jupyter(spec) => spec.kernelspec.language.clone(),
             Self::PythonEnv(spec) => spec.kernelspec.language.clone(),
-            Self::Remote(spec) => spec.kernelspec.language.clone(),
         };
 
         file_icons::FileIcons::get(cx)

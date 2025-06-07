@@ -324,7 +324,6 @@ impl TerminalBuilder {
         cursor_shape: CursorShape,
         alternate_scroll: AlternateScroll,
         max_scroll_history_lines: Option<usize>,
-        is_ssh_terminal: bool,
         window: AnyWindowHandle,
         cx: &App,
     ) -> Result<TerminalBuilder> {
@@ -452,7 +451,6 @@ impl TerminalBuilder {
             // hovered_word: false,
             hyperlink_regex_searches: RegexSearches::new(),
             vi_mode_enabled: false,
-            is_ssh_terminal,
             python_venv_directory,
         };
 
@@ -609,7 +607,6 @@ pub struct Terminal {
     selection_phase: SelectionPhase,
     hyperlink_regex_searches: RegexSearches,
     vi_mode_enabled: bool,
-    is_ssh_terminal: bool,
 }
 
 impl Terminal {
@@ -1566,14 +1563,7 @@ impl Terminal {
     }
 
     pub fn working_directory(&self) -> Option<PathBuf> {
-        if self.is_ssh_terminal {
-            // We can't yet reliably detect the working directory of a shell on the
-            // SSH host. Until we can do that, it doesn't make sense to display
-            // the working directory on the client and persist that.
-            None
-        } else {
-            self.client_side_working_directory()
-        }
+        self.client_side_working_directory()
     }
 
     /// Returns the working directory of the process that's connected to the PTY.

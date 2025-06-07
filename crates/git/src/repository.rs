@@ -1717,10 +1717,7 @@ async fn run_git_command(
         })
     } else {
         let ask_pass = AskPassSession::new(executor, ask_pass).await?;
-        command
-            .env("GIT_ASKPASS", ask_pass.script_path())
-            .env("SSH_ASKPASS", ask_pass.script_path())
-            .env("SSH_ASKPASS_REQUIRE", "force");
+        command.env("GIT_ASKPASS", ask_pass.script_path());
         let git_process = command.spawn()?;
 
         run_askpass_command(ask_pass, git_process).await

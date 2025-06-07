@@ -414,8 +414,6 @@ pub struct SettingsObserver {
 /// SettingsObserver observers changes to .zed/{settings, task}.json files in local worktrees
 /// (or the equivalent protobuf messages from upstream) and updates local settings
 /// and sends notifications downstream.
-/// In ssh mode it also monitors ~/.config/zed/{settings, task}.json and sends the content
-/// upstream.
 impl SettingsObserver {
     pub fn init(client: &AnyProtoClient) {
         client.add_entity_message_handler(Self::handle_update_worktree_settings);

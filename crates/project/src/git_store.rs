@@ -140,9 +140,6 @@ enum GitStoreState {
         project_environment: Entity<ProjectEnvironment>,
         fs: Arc<dyn Fs>,
     },
-    Ssh {
-        downstream: Option<(AnyProtoClient, ProjectId)>,
-    },
     Remote {
         upstream_client: AnyProtoClient,
         upstream_project_id: ProjectId,
@@ -364,19 +361,6 @@ impl GitStore {
         )
     }
 
-    pub fn ssh(
-        worktree_store: &Entity<WorktreeStore>,
-        buffer_store: Entity<BufferStore>,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        Self::new(
-            worktree_store.clone(),
-            buffer_store,
-            GitStoreState::Ssh { downstream: None },
-            cx,
-        )
-    }
-
     fn new(
         worktree_store: Entity<WorktreeStore>,
         buffer_store: Entity<BufferStore>,
@@ -437,18 +421,6 @@ impl GitStore {
 
     pub fn shared(&mut self, project_id: u64, client: AnyProtoClient, cx: &mut Context<Self>) {
         match &mut self.state {
-            GitStoreState::Ssh {
-                downstream: downstream_client,
-                ..
-            } => {
-                for repo in self.repositories.values() {
-                    let update = repo.read(cx).snapshot.initial_update(project_id);
-                    for update in split_repository_update(update) {
-                        client.send(update).log_err();
-                    }
-                }
-                *downstream_client = Some((client, ProjectId(project_id)));
-            }
             GitStoreState::Local {
                 downstream: downstream_client,
                 ..
@@ -520,12 +492,6 @@ impl GitStore {
     pub fn unshared(&mut self, _cx: &mut Context<Self>) {
         match &mut self.state {
             GitStoreState::Local {
-                downstream: downstream_client,
-                ..
-            } => {
-                downstream_client.take();
-            }
-            GitStoreState::Ssh {
                 downstream: downstream_client,
                 ..
             } => {
@@ -1034,10 +1000,6 @@ impl GitStore {
             } => downstream_client
                 .as_ref()
                 .map(|state| (state.client.clone(), state.project_id)),
-            GitStoreState::Ssh {
-                downstream: downstream_client,
-                ..
-            } => downstream_client.clone(),
             GitStoreState::Remote { .. } => None,
         }
     }
@@ -1048,7 +1010,6 @@ impl GitStore {
             GitStoreState::Remote {
                 upstream_client, ..
             } => Some(upstream_client.clone()),
-            _ => unreachable!(),
         }
     }
 
@@ -1439,7 +1400,6 @@ impl GitStore {
                     Ok(())
                 })
             }
-            _ => unreachable!(),
         }
     }
 
@@ -4067,14 +4027,6 @@ impl Repository {
                 })
                 .await?;
 
-            if let Some(git_hosting_provider_registry) =
-                cx.update(|cx| GitHostingProviderRegistry::try_global(cx))?
-            {
-                git_hosting_providers::register_additional_providers(
-                    git_hosting_provider_registry,
-                    backend.clone(),
-                );
-            }
 
             let state = RepositoryState::Local {
                 backend,

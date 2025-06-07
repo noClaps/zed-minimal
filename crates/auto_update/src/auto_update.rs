@@ -326,9 +326,6 @@ impl AutoUpdater {
         true
     }
 
-    // If you are packaging Zed and need to override the place it downloads SSH remotes from,
-    // you can override this function. You should also update get_remote_server_release_url to return
-    // Ok(None).
     pub async fn download_remote_server_release(
         os: &str,
         arch: &str,

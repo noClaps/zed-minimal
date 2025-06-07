@@ -24,7 +24,7 @@ use crate::WorkspaceId;
 
 use model::{
     GroupId, ItemId, LocalPaths, PaneId, SerializedItem, SerializedPane, SerializedPaneGroup,
-    SerializedSshProject, SerializedWorkspace,
+    SerializedWorkspace,
 };
 
 use self::model::{DockStructure, LocalPathsOrder, SerializedWorkspaceLocation};
@@ -359,19 +359,6 @@ define_connection! {
         ALTER TABLE panes ADD COLUMN pinned_count INTEGER DEFAULT 0;
     ),
     sql!(
-        CREATE TABLE ssh_projects (
-            id INTEGER PRIMARY KEY,
-            host TEXT NOT NULL,
-            port INTEGER,
-            path TEXT NOT NULL,
-            user TEXT
-        );
-        ALTER TABLE workspaces ADD COLUMN ssh_project_id INTEGER REFERENCES ssh_projects(id) ON DELETE CASCADE;
-    ),
-    sql!(
-        ALTER TABLE ssh_projects RENAME COLUMN path TO paths;
-    ),
-    sql!(
         CREATE TABLE toolchains (
             workspace_id INTEGER,
             worktree_id INTEGER,
@@ -547,7 +534,6 @@ impl WorkspaceDb {
 
                         prepared_query(args).context("Updating workspace")?;
                     }
-                    _ => unreachable!()
                 }
 
                 // Save center pane group
@@ -561,48 +547,6 @@ impl WorkspaceDb {
         .await;
     }
 
-    pub(crate) async fn get_or_create_ssh_project(
-        &self,
-        host: String,
-        port: Option<u16>,
-        paths: Vec<String>,
-        user: Option<String>,
-    ) -> Result<SerializedSshProject> {
-        let paths = serde_json::to_string(&paths)?;
-        if let Some(project) = self
-            .get_ssh_project(host.clone(), port, paths.clone(), user.clone())
-            .await?
-        {
-            Ok(project)
-        } else {
-            log::debug!("Inserting SSH project at host {host}");
-            self.insert_ssh_project(host, port, paths, user)
-                .await?
-                .context("failed to insert ssh project")
-        }
-    }
-
-    query! {
-        async fn get_ssh_project(host: String, port: Option<u16>, paths: String, user: Option<String>) -> Result<Option<SerializedSshProject>> {
-            SELECT id, host, port, paths, user
-            FROM ssh_projects
-            WHERE host IS ? AND port IS ? AND paths IS ? AND user IS ?
-            LIMIT 1
-        }
-    }
-
-    query! {
-        async fn insert_ssh_project(host: String, port: Option<u16>, paths: String, user: Option<String>) -> Result<Option<SerializedSshProject>> {
-            INSERT INTO ssh_projects(
-                host,
-                port,
-                paths,
-                user
-            ) VALUES (?1, ?2, ?3, ?4)
-            RETURNING id, host, port, paths, user
-        }
-    }
-
     query! {
         pub async fn next_id() -> Result<WorkspaceId> {
             INSERT INTO workspaces DEFAULT VALUES RETURNING workspace_id
@@ -610,36 +554,20 @@ impl WorkspaceDb {
     }
 
     query! {
-        fn recent_workspaces() -> Result<Vec<(WorkspaceId, LocalPaths, LocalPathsOrder, Option<u64>)>> {
-            SELECT workspace_id, local_paths, local_paths_order, ssh_project_id
+        fn recent_workspaces() -> Result<Vec<(WorkspaceId, LocalPaths, LocalPathsOrder)>> {
+            SELECT workspace_id, local_paths, local_paths_order
             FROM workspaces
             WHERE local_paths IS NOT NULL
-                OR ssh_project_id IS NOT NULL
             ORDER BY timestamp DESC
         }
     }
 
     query! {
-        fn session_workspaces(session_id: String) -> Result<Vec<(LocalPaths, LocalPathsOrder, Option<u64>, Option<u64>)>> {
-            SELECT local_paths, local_paths_order, window_id, ssh_project_id
+        fn session_workspaces(session_id: String) -> Result<Vec<(LocalPaths, LocalPathsOrder, Option<u64>)>> {
+            SELECT local_paths, local_paths_order, window_id
             FROM workspaces
             WHERE session_id = ?1 AND dev_server_project_id IS NULL
             ORDER BY timestamp DESC
-        }
-    }
-
-    query! {
-        fn ssh_projects() -> Result<Vec<SerializedSshProject>> {
-            SELECT id, host, port, paths, user
-            FROM ssh_projects
-        }
-    }
-
-    query! {
-        fn ssh_project(id: u64) -> Result<SerializedSshProject> {
-            SELECT id, host, port, paths, user
-            FROM ssh_projects
-            WHERE id = ?
         }
     }
 
@@ -694,7 +622,7 @@ impl WorkspaceDb {
         let mut result = Vec::new();
         let mut delete_tasks = Vec::new();
 
-        for (id, location, order, _) in self.recent_workspaces()? {
+        for (id, location, order) in self.recent_workspaces()? {
             if location.paths().iter().all(|path| path.exists())
                 && location.paths().iter().any(|path| path.is_dir())
             {
@@ -728,13 +656,8 @@ impl WorkspaceDb {
     ) -> Result<Vec<SerializedWorkspaceLocation>> {
         let mut workspaces = Vec::new();
 
-        for (location, order, window_id, ssh_project_id) in
-            self.session_workspaces(last_session_id.to_owned())?
-        {
-            if let Some(ssh_project_id) = ssh_project_id {
-                let location = SerializedWorkspaceLocation::Ssh(self.ssh_project(ssh_project_id)?);
-                workspaces.push((location, window_id.map(WindowId::from)));
-            } else if location.paths().iter().all(|path| path.exists())
+        for (location, order, window_id) in self.session_workspaces(last_session_id.to_owned())? {
+            if location.paths().iter().all(|path| path.exists())
                 && location.paths().iter().any(|path| path.is_dir())
             {
                 let location = SerializedWorkspaceLocation::Local(location, order);

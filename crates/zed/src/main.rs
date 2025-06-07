@@ -311,7 +311,6 @@ Error: Running Zed as root or via sudo is unsupported.
         <dyn Fs>::set_global(fs.clone(), cx);
 
         GitHostingProviderRegistry::set_global(git_hosting_provider_registry, cx);
-        git_hosting_providers::init(cx);
 
         OpenListener::set_global(cx, open_listener.clone());
 
@@ -672,7 +671,6 @@ async fn restore_or_create_workspace(app_state: Arc<AppState>, cx: &mut AsyncApp
                     })?;
                     task.await?;
                 }
-                _ => unreachable!(),
             }
         }
     } else if matches!(KEY_VALUE_STORE.read_kvp(FIRST_OPEN), Ok(None)) {
@@ -804,7 +802,7 @@ struct Args {
     #[arg(long)]
     system_specs: bool,
 
-    /// Used for SSH/Git password authentication, to remove the need for netcat as a dependency,
+    /// Used for Git password authentication, to remove the need for netcat as a dependency,
     /// by having Zed act like netcat communicating over a Unix socket.
     #[arg(long, hide = true)]
     askpass: Option<String>,
@@ -833,7 +831,6 @@ fn parse_url_arg(arg: &str, cx: &App) -> Result<String> {
         Err(error) => {
             if arg.starts_with("file://")
                 || arg.starts_with("zed-cli://")
-                || arg.starts_with("ssh://")
                 || parse_zed_link(arg, cx).is_some()
             {
                 Ok(arg.into())

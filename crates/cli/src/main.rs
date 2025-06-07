@@ -191,7 +191,6 @@ fn main() -> Result<()> {
             || path.starts_with("http://")
             || path.starts_with("https://")
             || path.starts_with("file://")
-            || path.starts_with("ssh://")
         {
             urls.push(path.to_string());
         } else if path == "-" && args.paths_with_position.len() == 1 {
@@ -208,11 +207,6 @@ fn main() -> Result<()> {
             paths.push(parse_path_with_position(path)?)
         }
     }
-
-    anyhow::ensure!(
-        args.dev_server_token.is_none(),
-        "Dev servers were removed in v0.157.x please upgrade to SSH remoting: https://zed.dev/docs/remote-development"
-    );
 
     let sender: JoinHandle<anyhow::Result<()>> = thread::spawn({
         let exit_status = exit_status.clone();

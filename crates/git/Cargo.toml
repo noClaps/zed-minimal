@@ -23,7 +23,6 @@ gpui.workspace = true
 http_client.workspace = true
 log.workspace = true
 parking_lot.workspace = true
-regex.workspace = true
 rope.workspace = true
 schemars.workspace = true
 serde.workspace = true

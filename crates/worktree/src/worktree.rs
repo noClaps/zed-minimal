@@ -2109,8 +2109,6 @@ impl RemoteWorktree {
         cx.spawn(async move |this, cx| {
             let mut update = initial_update;
             'outer: loop {
-                // SSH projects use a special project ID of 0, and we need to
-                // remap it to the correct one here.
                 update.project_id = project_id;
 
                 for chunk in split_worktree_update(update) {

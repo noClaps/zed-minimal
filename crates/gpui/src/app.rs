@@ -130,17 +130,6 @@ impl Application {
         ))
     }
 
-    /// Build an app in headless mode. This prevents opening windows,
-    /// but makes it possible to run an application in an context like
-    /// SSH, where GUI applications are not allowed.
-    pub fn headless() -> Self {
-        Self(App::new_app(
-            current_platform(true),
-            Arc::new(()),
-            Arc::new(NullHttpClient),
-        ))
-    }
-
     /// Assign
     pub fn with_assets(self, asset_source: impl AssetSource) -> Self {
         let mut context_lock = self.0.borrow_mut();

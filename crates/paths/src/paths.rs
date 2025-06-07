@@ -23,11 +23,6 @@ static CURRENT_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// On macOS, this is `~/.config/zed`.
 static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-/// Returns the relative path to the zed_server directory on the ssh host.
-pub fn remote_server_dir_relative() -> &'static Path {
-    Path::new(".zed_min_server")
-}
-
 /// Sets a custom directory for all user data, overriding the default data directory.
 /// This function must be called before any other path operations that depend on the data directory.
 /// The directory will be created if it doesn't exist.
@@ -92,12 +87,6 @@ pub fn temp_dir() -> &'static PathBuf {
 pub fn logs_dir() -> &'static PathBuf {
     static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
     LOGS_DIR.get_or_init(|| home_dir().join("Library/Logs/ZedMin"))
-}
-
-/// Returns the path to the ZedMin server directory on this SSH host.
-pub fn remote_server_state_dir() -> &'static PathBuf {
-    static REMOTE_SERVER_STATE: OnceLock<PathBuf> = OnceLock::new();
-    REMOTE_SERVER_STATE.get_or_init(|| data_dir().join("server_state"))
 }
 
 /// Returns the path to the `ZedMin.log` file.
@@ -231,12 +220,4 @@ pub fn local_settings_file_relative_path() -> &'static Path {
 /// .zed/debug.json
 pub fn local_debug_file_relative_path() -> &'static Path {
     Path::new(".zed-min/debug.json")
-}
-
-pub fn user_ssh_config_file() -> PathBuf {
-    home_dir().join(".ssh/config")
-}
-
-pub fn global_ssh_config_file() -> &'static Path {
-    Path::new("/etc/ssh/ssh_config")
 }

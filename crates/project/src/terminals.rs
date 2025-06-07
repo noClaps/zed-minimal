@@ -1,17 +1,14 @@
 use crate::{Project, ProjectPath};
 use anyhow::Result;
-use collections::HashMap;
 use gpui::{AnyWindowHandle, App, AppContext as _, Context, Entity, Task, WeakEntity};
-use itertools::Itertools;
 use language::LanguageName;
 use settings::{Settings, SettingsLocation};
 use std::{
-    borrow::Cow,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use terminal::{
-    DEFAULT_REMOTE_SHELL, ShellBuilder, Terminal, TerminalBuilder,
+    ShellBuilder, Terminal, TerminalBuilder,
     terminal_settings::{self, TerminalSettings, VenvSettings},
 };
 
@@ -25,20 +22,6 @@ pub struct Terminals {
 pub enum TerminalKind {
     /// Run a shell at the given path (or $HOME if None)
     Shell(Option<PathBuf>),
-}
-
-/// SshCommand describes how to connect to a remote server
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SshCommand {
-    pub arguments: Vec<String>,
-}
-
-impl SshCommand {
-    pub fn add_port_forwarding(&mut self, local_port: u16, host: String, remote_port: u16) {
-        self.arguments.push("-L".to_string());
-        self.arguments
-            .push(format!("{}:{}:{}", local_port, host, remote_port));
-    }
 }
 
 impl Project {
@@ -60,10 +43,6 @@ impl Project {
         } else {
             None
         }
-    }
-
-    pub fn ssh_details(&self) -> Option<(String, SshCommand)> {
-        return None;
     }
 
     pub fn create_terminal(
@@ -122,10 +101,9 @@ impl Project {
 
     pub fn exec_in_shell(&self, command: String, cx: &App) -> std::process::Command {
         let path = self.first_project_directory(cx);
-        let ssh_details = self.ssh_details();
         let settings = self.terminal_settings(&path, cx).clone();
 
-        let builder = ShellBuilder::new(ssh_details.is_none(), &settings.shell);
+        let builder = ShellBuilder::new(true, &settings.shell);
         let (command, args) = builder.build(command, &Vec::new());
 
         let mut env = self
@@ -135,29 +113,13 @@ impl Project {
             .unwrap_or_default();
         env.extend(settings.env.clone());
 
-        match &self.ssh_details() {
-            Some((_, ssh_command)) => {
-                let (command, args) = wrap_for_ssh(
-                    ssh_command,
-                    Some((&command, &args)),
-                    path.as_deref(),
-                    env,
-                    None,
-                );
-                let mut command = std::process::Command::new(command);
-                command.args(args);
-                command
-            }
-            None => {
-                let mut command = std::process::Command::new(command);
-                command.args(args);
-                command.envs(env);
-                if let Some(path) = path {
-                    command.current_dir(path);
-                }
-                command
-            }
+        let mut command = std::process::Command::new(command);
+        command.args(args);
+        command.envs(env);
+        if let Some(path) = path {
+            command.current_dir(path);
         }
+        command
     }
 
     pub fn create_terminal_with_venv(
@@ -171,7 +133,6 @@ impl Project {
         let path: Option<Arc<Path>> = match &kind {
             TerminalKind::Shell(path) => path.as_ref().map(|path| Arc::from(path.as_ref())),
         };
-        let ssh_details = this.ssh_details();
 
         let mut settings_location = None;
         if let Some(path) = path.as_ref() {
@@ -194,11 +155,7 @@ impl Project {
         // precedence.
         env.extend(settings.env.clone());
 
-        let local_path = if ssh_details.is_none() {
-            path.clone()
-        } else {
-            None
-        };
+        let local_path = path.clone();
 
         let mut python_venv_activate_command = None;
 
@@ -220,7 +177,6 @@ impl Project {
             settings.cursor_shape.unwrap_or_default(),
             settings.alternate_scroll,
             settings.max_scroll_history_lines,
-            ssh_details.is_some(),
             window,
             cx,
         )
@@ -401,64 +357,4 @@ impl Project {
     pub fn local_terminal_handles(&self) -> &Vec<WeakEntity<terminal::Terminal>> {
         &self.terminals.local_handles
     }
-}
-
-pub fn wrap_for_ssh(
-    ssh_command: &SshCommand,
-    command: Option<(&String, &Vec<String>)>,
-    path: Option<&Path>,
-    env: HashMap<String, String>,
-    venv_directory: Option<&Path>,
-) -> (String, Vec<String>) {
-    let to_run = if let Some((command, args)) = command {
-        // DEFAULT_REMOTE_SHELL is '"${SHELL:-sh}"' so must not be escaped
-        let command: Option<Cow<str>> = if command == DEFAULT_REMOTE_SHELL {
-            Some(command.into())
-        } else {
-            shlex::try_quote(command).ok()
-        };
-        let args = args.iter().filter_map(|arg| shlex::try_quote(arg).ok());
-        command.into_iter().chain(args).join(" ")
-    } else {
-        "exec ${SHELL:-sh} -l".to_string()
-    };
-
-    let mut env_changes = String::new();
-    for (k, v) in env.iter() {
-        if let Some((k, v)) = shlex::try_quote(k).ok().zip(shlex::try_quote(v).ok()) {
-            env_changes.push_str(&format!("{}={} ", k, v));
-        }
-    }
-    if let Some(venv_directory) = venv_directory {
-        if let Ok(str) = shlex::try_quote(venv_directory.to_string_lossy().as_ref()) {
-            env_changes.push_str(&format!("PATH={}:$PATH ", str));
-        }
-    }
-
-    let commands = if let Some(path) = path {
-        let path_string = path.to_string_lossy().to_string();
-        // shlex will wrap the command in single quotes (''), disabling ~ expansion,
-        // replace ith with something that works
-        let tilde_prefix = "~/";
-        if path.starts_with(tilde_prefix) {
-            let trimmed_path = path_string
-                .trim_start_matches("/")
-                .trim_start_matches("~")
-                .trim_start_matches("/");
-
-            format!("cd \"$HOME/{trimmed_path}\"; {env_changes} {to_run}")
-        } else {
-            format!("cd {path:?}; {env_changes} {to_run}")
-        }
-    } else {
-        format!("cd; {env_changes} {to_run}")
-    };
-    let shell_invocation = format!("sh -c {}", shlex::try_quote(&commands).unwrap());
-
-    let program = "ssh".to_string();
-    let mut args = ssh_command.arguments.clone();
-
-    args.push("-t".to_string());
-    args.push(shell_invocation);
-    (program, args)
 }

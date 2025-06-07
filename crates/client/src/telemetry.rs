@@ -258,7 +258,7 @@ impl Telemetry {
         drop(state);
     }
 
-    pub fn log_edit_event(self: &Arc<Self>, environment: &'static str, is_via_ssh: bool) {
+    pub fn log_edit_event(self: &Arc<Self>, environment: &'static str) {
         let mut state = self.state.lock();
         let period_data = state.event_coalescer.log_event(environment);
         drop(state);
@@ -273,7 +273,6 @@ impl Telemetry {
                 "Editor Edited",
                 duration = duration,
                 environment = environment,
-                is_via_ssh = is_via_ssh
             );
         }
     }

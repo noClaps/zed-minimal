@@ -2839,7 +2839,6 @@ dependencies = [
  "http_client",
  "log",
  "parking_lot",
- "regex",
  "rope",
  "schemars",
  "serde",
@@ -2867,30 +2866,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "git_hosting_providers"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "git",
- "gpui",
- "http_client",
- "regex",
- "schemars",
- "serde",
- "serde_json",
- "settings",
- "url",
- "util",
-]
-
-[[package]]
 name = "git_ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "askpass",
  "buffer_diff",
  "chrono",
  "collections",
@@ -2904,7 +2883,6 @@ dependencies = [
  "gpui",
  "itertools 0.14.0",
  "language",
- "linkify",
  "log",
  "markdown",
  "menu",
@@ -3833,22 +3811,6 @@ dependencies = [
  "futures",
  "serde",
  "serde_json",
- "uuid",
-]
-
-[[package]]
-name = "jupyter-websocket-client"
-version = "0.9.0"
-source = "git+https://github.com/ConradIrwin/runtimed?rev=7130c804216b6914355d15d0b91ea91f6babd734#7130c804216b6914355d15d0b91ea91f6babd734"
-dependencies = [
- "anyhow",
- "async-trait",
- "async-tungstenite",
- "futures",
- "jupyter-protocol",
- "serde",
- "serde_json",
- "url",
  "uuid",
 ]
 
@@ -5767,7 +5729,6 @@ dependencies = [
  "futures",
  "fuzzy",
  "git",
- "git_hosting_providers",
  "globset",
  "gpui",
  "http_client",
@@ -6180,22 +6141,14 @@ dependencies = [
 name = "recent_projects"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "editor",
- "futures",
  "fuzzy",
  "gpui",
- "markdown",
  "menu",
  "ordered-float",
- "paths",
  "picker",
  "project",
- "schemars",
  "serde",
- "settings",
  "smol",
- "theme",
  "ui",
  "util",
  "workspace",
@@ -6322,7 +6275,6 @@ dependencies = [
  "alacritty_terminal",
  "anyhow",
  "async-dispatcher",
- "async-tungstenite",
  "base64",
  "client",
  "collections",
@@ -6332,10 +6284,8 @@ dependencies = [
  "file_icons",
  "futures",
  "gpui",
- "http_client",
  "image",
  "jupyter-protocol",
- "jupyter-websocket-client",
  "language",
  "log",
  "markdown_preview",
@@ -10346,7 +10296,6 @@ dependencies = [
  "fs",
  "futures",
  "git",
- "git_hosting_providers",
  "git_ui",
  "go_to_line",
  "gpui",

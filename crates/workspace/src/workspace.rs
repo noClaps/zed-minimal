@@ -54,10 +54,7 @@ use notifications::{
 };
 pub use pane::*;
 pub use pane_group::*;
-use persistence::{
-    DB, SerializedWindowBounds,
-    model::{SerializedSshProject, SerializedWorkspace},
-};
+use persistence::{DB, SerializedWindowBounds, model::SerializedWorkspace};
 pub use persistence::{
     DB as WORKSPACE_DB, WorkspaceDb, delete_unloaded_items,
     model::{ItemId, LocalPaths, SerializedWorkspaceLocation},
@@ -859,7 +856,6 @@ pub struct Workspace {
     on_prompt_for_open_path: Option<PromptForOpenPath>,
     terminal_provider: Option<Box<dyn TerminalProvider>>,
     serializable_items_tx: UnboundedSender<Box<dyn SerializableItemHandle>>,
-    serialized_ssh_project: Option<SerializedSshProject>,
     _items_serializer: Task<Result<()>>,
     session_id: Option<String>,
 }
@@ -919,10 +915,6 @@ impl Workspace {
                     for leader_id in leaders_to_unfollow {
                         this.unfollow(leader_id, window, cx);
                     }
-                }
-
-                project::Event::DisconnectedFromSshRemote => {
-                    this.update_window_edited(window);
                 }
 
                 project::Event::Closed => {
@@ -1166,7 +1158,6 @@ impl Workspace {
             serializable_items_tx,
             _items_serializer,
             session_id: Some(session_id),
-            serialized_ssh_project: None,
         }
     }
 
@@ -1212,7 +1203,6 @@ impl Workspace {
                     SerializedWorkspaceLocation::Local(_, order) => {
                         Some((loc.sorted_paths(), order.order()))
                     }
-                    _ => None,
                 });
 
             if let Some((paths, order)) = workspace_location {
@@ -1708,14 +1698,6 @@ impl Workspace {
 
     pub fn set_terminal_provider(&mut self, provider: impl TerminalProvider + 'static) {
         self.terminal_provider = Some(Box::new(provider));
-    }
-
-    pub fn serialized_ssh_project(&self) -> Option<SerializedSshProject> {
-        self.serialized_ssh_project.clone()
-    }
-
-    pub fn set_serialized_ssh_project(&mut self, serialized_ssh_project: SerializedSshProject) {
-        self.serialized_ssh_project = Some(serialized_ssh_project);
     }
 
     pub fn prompt_for_open_path(
@@ -4509,9 +4491,7 @@ impl Workspace {
     }
 
     fn serialize_workspace_location(&self, cx: &App) -> Option<SerializedWorkspaceLocation> {
-        if let Some(ssh_project) = &self.serialized_ssh_project {
-            Some(SerializedWorkspaceLocation::Ssh(ssh_project.clone()))
-        } else if let Some(local_paths) = self.local_paths(cx) {
+        if let Some(local_paths) = self.local_paths(cx) {
             if !local_paths.is_empty() {
                 Some(SerializedWorkspaceLocation::from_local_paths(local_paths))
             } else {
