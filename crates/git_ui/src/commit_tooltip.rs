@@ -1,21 +1,19 @@
 use crate::commit_view::CommitView;
 use editor::hover_markdown_style;
-use futures::Future;
 use git::blame::BlameEntry;
+use git::blame::ParsedCommitMessage;
 use git::repository::CommitSummary;
-use git::{GitRemote, blame::ParsedCommitMessage};
 use gpui::{
-    App, Asset, ClipboardItem, Element, Entity, MouseButton, ParentElement, Render, ScrollHandle,
+    ClipboardItem, Element, Entity, MouseButton, ParentElement, Render, ScrollHandle,
     StatefulInteractiveElement, WeakEntity, prelude::*,
 };
 use markdown::{Markdown, MarkdownElement};
 use project::git_store::Repository;
 use settings::Settings;
-use std::hash::Hash;
 use theme::ThemeSettings;
 use time::{OffsetDateTime, UtcOffset};
 use time_format::format_local_timestamp;
-use ui::{Avatar, Divider, IconButtonShape, prelude::*, tooltip_container};
+use ui::{Divider, IconButtonShape, prelude::*, tooltip_container};
 use workspace::Workspace;
 
 #[derive(Clone, Debug)]
@@ -25,79 +23,6 @@ pub struct CommitDetails {
     pub author_email: SharedString,
     pub commit_time: OffsetDateTime,
     pub message: Option<ParsedCommitMessage>,
-}
-
-pub struct CommitAvatar<'a> {
-    commit: &'a CommitDetails,
-}
-
-impl<'a> CommitAvatar<'a> {
-    pub fn new(details: &'a CommitDetails) -> Self {
-        Self { commit: details }
-    }
-}
-
-impl<'a> CommitAvatar<'a> {
-    pub fn render(&'a self, window: &mut Window, cx: &mut App) -> Option<impl IntoElement + use<>> {
-        let remote = self
-            .commit
-            .message
-            .as_ref()
-            .and_then(|details| details.remote.clone())
-            .filter(|remote| remote.host_supports_avatars())?;
-
-        let avatar_url = CommitAvatarAsset::new(remote, self.commit.sha.clone());
-
-        let element = match window.use_asset::<CommitAvatarAsset>(&avatar_url, cx) {
-            // Loading or no avatar found
-            None | Some(None) => Icon::new(IconName::Person)
-                .color(Color::Muted)
-                .into_element()
-                .into_any(),
-            // Found
-            Some(Some(url)) => Avatar::new(url.to_string()).into_element().into_any(),
-        };
-        Some(element)
-    }
-}
-
-#[derive(Clone, Debug)]
-struct CommitAvatarAsset {
-    sha: SharedString,
-    remote: GitRemote,
-}
-
-impl Hash for CommitAvatarAsset {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.sha.hash(state);
-        self.remote.host.name().hash(state);
-    }
-}
-
-impl CommitAvatarAsset {
-    fn new(remote: GitRemote, sha: SharedString) -> Self {
-        Self { remote, sha }
-    }
-}
-
-impl Asset for CommitAvatarAsset {
-    type Source = Self;
-    type Output = Option<SharedString>;
-
-    fn load(
-        source: Self::Source,
-        cx: &mut App,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
-        let client = cx.http_client();
-
-        async move {
-            source
-                .remote
-                .avatar_url(source.sha, client)
-                .await
-                .map(|url| SharedString::from(url.to_string()))
-        }
-    }
 }
 
 pub struct CommitTooltip {
@@ -169,8 +94,6 @@ impl CommitTooltip {
 
 impl Render for CommitTooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let avatar = CommitAvatar::new(&self.commit).render(window, cx);
-
         let author = self.commit.author_name.clone();
 
         let author_email = self.commit.author_email.clone();
@@ -246,7 +169,6 @@ impl Render for CommitTooltip {
                                 .gap_x_2()
                                 .overflow_x_hidden()
                                 .flex_wrap()
-                                .children(avatar)
                                 .child(author)
                                 .when(!author_email.is_empty(), |this| {
                                     this.child(

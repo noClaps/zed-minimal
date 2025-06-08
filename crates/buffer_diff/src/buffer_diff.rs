@@ -263,14 +263,7 @@ impl BufferDiffSnapshot {
     }
 
     pub fn base_texts_eq(&self, other: &Self) -> bool {
-        if self.inner.base_text_exists != other.inner.base_text_exists {
-            return false;
-        }
-        let left = &self.inner.base_text;
-        let right = &other.inner.base_text;
-        let (old_id, old_empty) = (left.remote_id(), left.is_empty());
-        let (new_id, new_empty) = (right.remote_id(), right.is_empty());
-        new_id == old_id || (new_empty && old_empty)
+        self.inner.base_text_exists == other.inner.base_text_exists
     }
 }
 
@@ -834,7 +827,6 @@ fn process_patch_hunk(
 impl std::fmt::Debug for BufferDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BufferChangeSet")
-            .field("buffer_id", &self.buffer_id)
             .field("snapshot", &self.inner)
             .finish()
     }

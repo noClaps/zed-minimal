@@ -269,8 +269,6 @@ trait ImageStoreImpl {
     fn as_local(&self) -> Option<Entity<LocalImageStore>>;
 }
 
-struct RemoteImageStore {}
-
 struct LocalImageStore {
     local_image_ids_by_path: HashMap<ProjectPath, ImageId>,
     local_image_ids_by_entry_id: HashMap<ProjectEntryId, ImageId>,
@@ -310,19 +308,6 @@ impl ImageStore {
                     _subscription: subscription,
                 }
             })),
-            opened_images: Default::default(),
-            loading_images_by_path: Default::default(),
-            worktree_store,
-        }
-    }
-
-    pub fn remote(
-        worktree_store: Entity<WorktreeStore>,
-        _remote_id: u64,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        Self {
-            state: Box::new(cx.new(|_| RemoteImageStore {})),
             opened_images: Default::default(),
             loading_images_by_path: Default::default(),
             worktree_store,
@@ -529,15 +514,11 @@ impl ImageStoreImpl for Entity<LocalImageStore> {
 
 impl LocalImageStore {
     fn subscribe_to_worktree(&mut self, worktree: &Entity<Worktree>, cx: &mut Context<Self>) {
-        cx.subscribe(worktree, |this, worktree, event, cx| {
-            if worktree.read(cx).is_local() {
-                match event {
-                    worktree::Event::UpdatedEntries(changes) => {
-                        this.local_worktree_entries_changed(&worktree, changes, cx);
-                    }
-                    _ => {}
-                }
+        cx.subscribe(worktree, |this, worktree, event, cx| match event {
+            worktree::Event::UpdatedEntries(changes) => {
+                this.local_worktree_entries_changed(&worktree, changes, cx);
             }
+            _ => {}
         })
         .detach();
     }
@@ -699,31 +680,4 @@ fn create_gpui_image(content: Vec<u8>) -> anyhow::Result<Arc<gpui::Image>> {
         },
         content,
     )))
-}
-
-impl ImageStoreImpl for Entity<RemoteImageStore> {
-    fn open_image(
-        &self,
-        _path: Arc<Path>,
-        _worktree: Entity<Worktree>,
-        _cx: &mut Context<ImageStore>,
-    ) -> Task<Result<Entity<ImageItem>>> {
-        Task::ready(Err(anyhow::anyhow!(
-            "Opening images from remote is not supported"
-        )))
-    }
-
-    fn reload_images(
-        &self,
-        _images: HashSet<Entity<ImageItem>>,
-        _cx: &mut Context<ImageStore>,
-    ) -> Task<Result<()>> {
-        Task::ready(Err(anyhow::anyhow!(
-            "Reloading images from remote is not supported"
-        )))
-    }
-
-    fn as_local(&self) -> Option<Entity<LocalImageStore>> {
-        None
-    }
 }

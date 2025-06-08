@@ -380,12 +380,6 @@ pub enum Subscription {
 impl Drop for Subscription {
     fn drop(&mut self) {
         match self {
-            Subscription::Entity { client, id } => {
-                if let Some(client) = client.upgrade() {
-                    let mut state = client.handler_set.lock();
-                    let _ = state.entities_by_type_and_remote_id.remove(id);
-                }
-            }
             Subscription::Message { client, id } => {
                 if let Some(client) = client.upgrade() {
                     let mut state = client.handler_set.lock();
@@ -393,6 +387,7 @@ impl Drop for Subscription {
                     let _ = state.message_handlers.remove(id);
                 }
             }
+            _ => unreachable!(),
         }
     }
 }

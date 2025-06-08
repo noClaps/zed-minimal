@@ -1,8 +1,6 @@
 use crate::{
     LocationLink,
-    lsp_command::{
-        LspCommand, location_links_from_lsp, location_links_from_proto, location_links_to_proto,
-    },
+    lsp_command::{LspCommand, location_links_from_lsp, location_links_to_proto},
     lsp_store::LspStore,
     make_lsp_text_document_position, make_text_document_identifier,
 };
@@ -129,19 +127,6 @@ impl LspCommand for ExpandMacro {
         }
     }
 
-    async fn response_from_proto(
-        self,
-        message: proto::LspExtExpandMacroResponse,
-        _: Entity<LspStore>,
-        _: Entity<Buffer>,
-        _: AsyncApp,
-    ) -> anyhow::Result<ExpandedMacro> {
-        Ok(ExpandedMacro {
-            name: message.name,
-            expansion: message.expansion,
-        })
-    }
-
     fn buffer_id_from_proto(message: &proto::LspExtExpandMacro) -> Result<BufferId> {
         BufferId::new(message.buffer_id)
     }
@@ -259,19 +244,6 @@ impl LspCommand for OpenDocs {
         }
     }
 
-    async fn response_from_proto(
-        self,
-        message: proto::LspExtOpenDocsResponse,
-        _: Entity<LspStore>,
-        _: Entity<Buffer>,
-        _: AsyncApp,
-    ) -> anyhow::Result<DocsUrls> {
-        Ok(DocsUrls {
-            web: message.web,
-            local: message.local,
-        })
-    }
-
     fn buffer_id_from_proto(message: &proto::LspExtOpenDocs) -> Result<BufferId> {
         BufferId::new(message.buffer_id)
     }
@@ -373,16 +345,6 @@ impl LspCommand for SwitchSourceHeader {
         }
     }
 
-    async fn response_from_proto(
-        self,
-        message: proto::LspExtSwitchSourceHeaderResponse,
-        _: Entity<LspStore>,
-        _: Entity<Buffer>,
-        _: AsyncApp,
-    ) -> anyhow::Result<SwitchSourceHeaderResult> {
-        Ok(SwitchSourceHeaderResult(message.target_file))
-    }
-
     fn buffer_id_from_proto(message: &proto::LspExtSwitchSourceHeader) -> Result<BufferId> {
         BufferId::new(message.buffer_id)
     }
@@ -461,16 +423,6 @@ impl LspCommand for GoToParentModule {
         proto::LspExtGoToParentModuleResponse {
             links: location_links_to_proto(links, lsp_store, peer_id, cx),
         }
-    }
-
-    async fn response_from_proto(
-        self,
-        message: proto::LspExtGoToParentModuleResponse,
-        lsp_store: Entity<LspStore>,
-        _: Entity<Buffer>,
-        cx: AsyncApp,
-    ) -> anyhow::Result<Vec<LocationLink>> {
-        location_links_from_proto(message.links, lsp_store, cx).await
     }
 
     fn buffer_id_from_proto(message: &proto::LspExtGoToParentModule) -> Result<BufferId> {

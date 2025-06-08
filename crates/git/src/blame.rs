@@ -1,5 +1,5 @@
+use crate::Oid;
 use crate::commit::get_messages;
-use crate::{GitRemote, Oid};
 use anyhow::{Context as _, Result};
 use collections::{HashMap, HashSet};
 use futures::AsyncWriteExt;
@@ -26,7 +26,6 @@ pub struct ParsedCommitMessage {
     pub message: SharedString,
     pub permalink: Option<url::Url>,
     pub pull_request: Option<crate::hosting_provider::PullRequest>,
-    pub remote: Option<GitRemote>,
 }
 
 impl Blame {

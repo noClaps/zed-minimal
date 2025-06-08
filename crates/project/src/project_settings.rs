@@ -395,7 +395,6 @@ impl Settings for ProjectSettings {
 
 pub enum SettingsObserverMode {
     Local(Arc<dyn Fs>),
-    Remote,
 }
 
 #[derive(Clone, Debug, PartialEq)]

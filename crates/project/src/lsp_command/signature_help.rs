@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{FontStyle, FontWeight, HighlightStyle};
-use rpc::proto::{self, documentation};
+use rpc::proto;
 
 #[derive(Debug)]
 pub struct SignatureHelp {
@@ -140,66 +140,5 @@ fn lsp_to_proto_documentation(documentation: lsp::Documentation) -> proto::Docum
                 })
             }
         }),
-    }
-}
-
-pub fn proto_to_lsp_signature(proto_help: proto::SignatureHelp) -> lsp::SignatureHelp {
-    lsp::SignatureHelp {
-        signatures: proto_help
-            .signatures
-            .into_iter()
-            .map(|signature| lsp::SignatureInformation {
-                label: signature.label,
-                documentation: signature.documentation.and_then(proto_to_lsp_documentation),
-                parameters: Some(
-                    signature
-                        .parameters
-                        .into_iter()
-                        .filter_map(|parameter_info| {
-                            Some(lsp::ParameterInformation {
-                                label: match parameter_info.label? {
-                                    proto::parameter_information::Label::Simple(string) => {
-                                        lsp::ParameterLabel::Simple(string)
-                                    }
-                                    proto::parameter_information::Label::LabelOffsets(offsets) => {
-                                        lsp::ParameterLabel::LabelOffsets([
-                                            offsets.start,
-                                            offsets.end,
-                                        ])
-                                    }
-                                },
-                                documentation: parameter_info
-                                    .documentation
-                                    .and_then(proto_to_lsp_documentation),
-                            })
-                        })
-                        .collect(),
-                ),
-                active_parameter: signature.active_parameter,
-            })
-            .collect(),
-        active_signature: proto_help.active_signature,
-        active_parameter: proto_help.active_parameter,
-    }
-}
-
-fn proto_to_lsp_documentation(documentation: proto::Documentation) -> Option<lsp::Documentation> {
-    {
-        Some(match documentation.content? {
-            documentation::Content::Value(string) => lsp::Documentation::String(string),
-            documentation::Content::MarkupContent(markup) => {
-                lsp::Documentation::MarkupContent(if markup.is_markdown {
-                    lsp::MarkupContent {
-                        kind: lsp::MarkupKind::Markdown,
-                        value: markup.value,
-                    }
-                } else {
-                    lsp::MarkupContent {
-                        kind: lsp::MarkupKind::PlainText,
-                        value: markup.value,
-                    }
-                })
-            }
-        })
     }
 }

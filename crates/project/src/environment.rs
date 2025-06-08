@@ -91,12 +91,7 @@ impl ProjectEnvironment {
         }
 
         let mut abs_path = worktree.read(cx).abs_path();
-        if !worktree.read(cx).is_local() {
-            log::error!(
-                "attempted to get project environment for a non-local worktree at {abs_path:?}"
-            );
-            return Task::ready(None).shared();
-        } else if worktree.read(cx).is_single_file() {
+        if worktree.read(cx).is_single_file() {
             let Some(parent) = abs_path.parent() else {
                 return Task::ready(None).shared();
             };

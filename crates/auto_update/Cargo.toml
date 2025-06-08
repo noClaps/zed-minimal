@@ -19,7 +19,6 @@ db.workspace = true
 gpui.workspace = true
 http_client.workspace = true
 log.workspace = true
-paths.workspace = true
 release_channel.workspace = true
 schemars.workspace = true
 serde.workspace = true

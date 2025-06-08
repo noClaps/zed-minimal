@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result, anyhow};
 use client::Client;
 use collections::{HashMap, HashSet, hash_map};
 use fs::Fs;
-use futures::{Future, FutureExt as _, StreamExt, channel::oneshot, future::Shared};
+use futures::{Future, FutureExt as _, StreamExt, future::Shared};
 use gpui::{
     App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, Subscription, Task, WeakEntity,
 };
@@ -19,12 +19,12 @@ use language::{
         split_operations,
     },
 };
-use rpc::{AnyProtoClient, ErrorExt as _, TypedEnvelope, proto};
+use rpc::{AnyProtoClient, TypedEnvelope, proto};
 use smol::channel::Receiver;
-use std::{io, path::Path, pin::pin, sync::Arc, time::Instant};
+use std::{io, path::Path, pin::pin, sync::Arc};
 use text::BufferId;
-use util::{ResultExt as _, TryFutureExt, maybe};
-use worktree::{File, PathChange, ProjectEntryId, Worktree, WorktreeId};
+use util::{ResultExt as _, TryFutureExt};
+use worktree::{File, PathChange, ProjectEntryId, Worktree};
 
 /// A set of open buffers.
 pub struct BufferStore {
@@ -46,14 +46,6 @@ struct SharedBuffer {
 
 enum BufferStoreState {
     Local(LocalBufferStore),
-    Remote(RemoteBufferStore),
-}
-
-struct RemoteBufferStore {
-    loading_remote_buffers_by_id: HashMap<BufferId, Entity<Buffer>>,
-    remote_buffer_listeners:
-        HashMap<BufferId, Vec<oneshot::Sender<anyhow::Result<Entity<Buffer>>>>>,
-    worktree_store: Entity<WorktreeStore>,
 }
 
 struct LocalBufferStore {
@@ -85,160 +77,6 @@ pub enum BufferStoreEvent {
 pub struct ProjectTransaction(pub HashMap<Entity<Buffer>, language::Transaction>);
 
 impl EventEmitter<BufferStoreEvent> for BufferStore {}
-
-impl RemoteBufferStore {
-    pub fn wait_for_remote_buffer(
-        &mut self,
-        id: BufferId,
-        cx: &mut Context<BufferStore>,
-    ) -> Task<Result<Entity<Buffer>>> {
-        let (tx, rx) = oneshot::channel();
-        self.remote_buffer_listeners.entry(id).or_default().push(tx);
-
-        cx.spawn(async move |this, cx| {
-            if let Some(buffer) = this
-                .read_with(cx, |buffer_store, _| buffer_store.get(id))
-                .ok()
-                .flatten()
-            {
-                return Ok(buffer);
-            }
-
-            cx.background_spawn(async move { rx.await? }).await
-        })
-    }
-
-    pub fn handle_create_buffer_for_peer(
-        &mut self,
-        envelope: TypedEnvelope<proto::CreateBufferForPeer>,
-        replica_id: u16,
-        capability: Capability,
-        cx: &mut Context<BufferStore>,
-    ) -> Result<Option<Entity<Buffer>>> {
-        match envelope.payload.variant.context("missing variant")? {
-            proto::create_buffer_for_peer::Variant::State(mut state) => {
-                let buffer_id = BufferId::new(state.id)?;
-
-                let buffer_result = maybe!({
-                    let mut buffer_file = None;
-                    if let Some(file) = state.file.take() {
-                        let worktree_id = worktree::WorktreeId::from_proto(file.worktree_id);
-                        let worktree = self
-                            .worktree_store
-                            .read(cx)
-                            .worktree_for_id(worktree_id, cx)
-                            .with_context(|| {
-                                format!("no worktree found for id {}", file.worktree_id)
-                            })?;
-                        buffer_file = Some(Arc::new(File::from_proto(file, worktree.clone(), cx)?)
-                            as Arc<dyn language::File>);
-                    }
-                    Buffer::from_proto(replica_id, capability, state, buffer_file)
-                });
-
-                match buffer_result {
-                    Ok(buffer) => {
-                        let buffer = cx.new(|_| buffer);
-                        self.loading_remote_buffers_by_id.insert(buffer_id, buffer);
-                    }
-                    Err(error) => {
-                        if let Some(listeners) = self.remote_buffer_listeners.remove(&buffer_id) {
-                            for listener in listeners {
-                                listener.send(Err(anyhow!(error.cloned()))).ok();
-                            }
-                        }
-                    }
-                }
-            }
-            proto::create_buffer_for_peer::Variant::Chunk(chunk) => {
-                let buffer_id = BufferId::new(chunk.buffer_id)?;
-                let buffer = self
-                    .loading_remote_buffers_by_id
-                    .get(&buffer_id)
-                    .cloned()
-                    .with_context(|| {
-                        format!(
-                            "received chunk for buffer {} without initial state",
-                            chunk.buffer_id
-                        )
-                    })?;
-
-                let result = maybe!({
-                    let operations = chunk
-                        .operations
-                        .into_iter()
-                        .map(language::proto::deserialize_operation)
-                        .collect::<Result<Vec<_>>>()?;
-                    buffer.update(cx, |buffer, cx| buffer.apply_ops(operations, cx));
-                    anyhow::Ok(())
-                });
-
-                if let Err(error) = result {
-                    self.loading_remote_buffers_by_id.remove(&buffer_id);
-                    if let Some(listeners) = self.remote_buffer_listeners.remove(&buffer_id) {
-                        for listener in listeners {
-                            listener.send(Err(error.cloned())).ok();
-                        }
-                    }
-                } else if chunk.is_last {
-                    self.loading_remote_buffers_by_id.remove(&buffer_id);
-
-                    if let Some(senders) = self.remote_buffer_listeners.remove(&buffer_id) {
-                        for sender in senders {
-                            sender.send(Ok(buffer.clone())).ok();
-                        }
-                    }
-                    return Ok(Some(buffer));
-                }
-            }
-        }
-        return Ok(None);
-    }
-
-    pub fn incomplete_buffer_ids(&self) -> Vec<BufferId> {
-        self.loading_remote_buffers_by_id
-            .keys()
-            .copied()
-            .collect::<Vec<_>>()
-    }
-
-    pub fn deserialize_project_transaction(
-        &self,
-        message: proto::ProjectTransaction,
-        push_to_history: bool,
-        cx: &mut Context<BufferStore>,
-    ) -> Task<Result<ProjectTransaction>> {
-        cx.spawn(async move |this, cx| {
-            let mut project_transaction = ProjectTransaction::default();
-            for (buffer_id, transaction) in message.buffer_ids.into_iter().zip(message.transactions)
-            {
-                let buffer_id = BufferId::new(buffer_id)?;
-                let buffer = this
-                    .update(cx, |this, cx| this.wait_for_remote_buffer(buffer_id, cx))?
-                    .await?;
-                let transaction = language::proto::deserialize_transaction(transaction)?;
-                project_transaction.0.insert(buffer, transaction);
-            }
-
-            for (buffer, transaction) in &project_transaction.0 {
-                buffer
-                    .update(cx, |buffer, _| {
-                        buffer.wait_for_edits(transaction.edit_ids.iter().copied())
-                    })?
-                    .await?;
-
-                if push_to_history {
-                    buffer.update(cx, |buffer, _| {
-                        buffer.push_transaction(transaction.clone(), Instant::now());
-                        buffer.finalize_last_transaction();
-                    })?;
-                }
-            }
-
-            Ok(project_transaction)
-        })
-    }
-}
 
 impl LocalBufferStore {
     fn save_local_buffer(
@@ -305,15 +143,11 @@ impl LocalBufferStore {
         worktree: &Entity<Worktree>,
         cx: &mut Context<BufferStore>,
     ) {
-        cx.subscribe(worktree, |this, worktree, event, cx| {
-            if worktree.read(cx).is_local() {
-                match event {
-                    worktree::Event::UpdatedEntries(changes) => {
-                        Self::local_worktree_entries_changed(this, &worktree, changes, cx);
-                    }
-                    _ => {}
-                }
+        cx.subscribe(worktree, |this, worktree, event, cx| match event {
+            worktree::Event::UpdatedEntries(changes) => {
+                Self::local_worktree_entries_changed(this, &worktree, changes, cx);
             }
+            _ => {}
         })
         .detach();
     }
@@ -624,40 +458,9 @@ impl BufferStore {
         }
     }
 
-    pub fn remote(worktree_store: Entity<WorktreeStore>, _cx: &mut Context<Self>) -> Self {
-        Self {
-            state: BufferStoreState::Remote(RemoteBufferStore {
-                loading_remote_buffers_by_id: Default::default(),
-                remote_buffer_listeners: Default::default(),
-                worktree_store: worktree_store.clone(),
-            }),
-            downstream_client: None,
-            opened_buffers: Default::default(),
-            path_to_buffer_id: Default::default(),
-            loading_buffers: Default::default(),
-            shared_buffers: Default::default(),
-            worktree_store,
-        }
-    }
-
     fn as_local_mut(&mut self) -> Option<&mut LocalBufferStore> {
         match &mut self.state {
             BufferStoreState::Local(state) => Some(state),
-            _ => None,
-        }
-    }
-
-    fn as_remote_mut(&mut self) -> Option<&mut RemoteBufferStore> {
-        match &mut self.state {
-            BufferStoreState::Remote(state) => Some(state),
-            _ => None,
-        }
-    }
-
-    fn as_remote(&self) -> Option<&RemoteBufferStore> {
-        match &self.state {
-            BufferStoreState::Remote(state) => Some(state),
-            _ => None,
         }
     }
 
@@ -688,7 +491,6 @@ impl BufferStore {
                 };
                 let load_buffer = match &self.state {
                     BufferStoreState::Local(this) => this.open_buffer(path, worktree, cx),
-                    _ => unreachable!(),
                 };
 
                 entry
@@ -720,7 +522,6 @@ impl BufferStore {
     pub fn create_buffer(&mut self, cx: &mut Context<Self>) -> Task<Result<Entity<Buffer>>> {
         match &self.state {
             BufferStoreState::Local(this) => this.create_buffer(cx),
-            _ => unreachable!(),
         }
     }
 
@@ -731,7 +532,6 @@ impl BufferStore {
     ) -> Task<Result<()>> {
         match &mut self.state {
             BufferStoreState::Local(this) => this.save_buffer(buffer, cx),
-            _ => unreachable!(),
         }
     }
 
@@ -744,7 +544,6 @@ impl BufferStore {
         let old_file = buffer.read(cx).file().cloned();
         let task = match &self.state {
             BufferStoreState::Local(this) => this.save_buffer_as(buffer.clone(), path, cx),
-            _ => unreachable!(),
         };
         cx.spawn(async move |this, cx| {
             task.await?;
@@ -843,13 +642,10 @@ impl BufferStore {
     }
 
     pub fn get_possibly_incomplete(&self, buffer_id: BufferId) -> Option<Entity<Buffer>> {
-        self.get(buffer_id).or_else(|| {
-            self.as_remote()
-                .and_then(|remote| remote.loading_remote_buffers_by_id.get(&buffer_id).cloned())
-        })
+        self.get(buffer_id)
     }
 
-    pub fn buffer_version_info(&self, cx: &App) -> (Vec<proto::BufferVersion>, Vec<BufferId>) {
+    pub fn buffer_version_info(&self, cx: &App) -> Vec<proto::BufferVersion> {
         let buffers = self
             .buffers()
             .map(|buffer| {
@@ -860,11 +656,7 @@ impl BufferStore {
                 }
             })
             .collect();
-        let incomplete_buffer_ids = self
-            .as_remote()
-            .map(|remote| remote.incomplete_buffer_ids())
-            .unwrap_or_default();
-        (buffers, incomplete_buffer_ids)
+        buffers
     }
 
     pub fn disconnected_from_host(&mut self, cx: &mut App) {
@@ -878,12 +670,6 @@ impl BufferStore {
             buffer.update(cx, |buffer, cx| {
                 buffer.set_capability(Capability::ReadOnly, cx)
             });
-        }
-
-        if let Some(remote) = self.as_remote_mut() {
-            // Wake up all futures currently waiting on a buffer to get opened,
-            // to give them a chance to fail now that we've disconnected.
-            remote.remote_buffer_listeners.clear()
         }
     }
 
@@ -1147,26 +933,6 @@ impl BufferStore {
         Ok(response)
     }
 
-    pub fn handle_create_buffer_for_peer(
-        &mut self,
-        envelope: TypedEnvelope<proto::CreateBufferForPeer>,
-        replica_id: u16,
-        capability: Capability,
-        cx: &mut Context<Self>,
-    ) -> Result<()> {
-        let remote = self
-            .as_remote_mut()
-            .context("buffer store is not a remote")?;
-
-        if let Some(buffer) =
-            remote.handle_create_buffer_for_peer(envelope, replica_id, capability, cx)?
-        {
-            self.add_buffer(buffer, cx)?;
-        }
-
-        Ok(())
-    }
-
     pub async fn handle_update_buffer_file(
         this: Entity<Self>,
         envelope: TypedEnvelope<proto::UpdateBufferFile>,
@@ -1175,34 +941,7 @@ impl BufferStore {
         let buffer_id = envelope.payload.buffer_id;
         let buffer_id = BufferId::new(buffer_id)?;
 
-        this.update(&mut cx, |this, cx| {
-            let payload = envelope.payload.clone();
-            if let Some(buffer) = this.get_possibly_incomplete(buffer_id) {
-                let file = payload.file.context("invalid file")?;
-                let worktree = this
-                    .worktree_store
-                    .read(cx)
-                    .worktree_for_id(WorktreeId::from_proto(file.worktree_id), cx)
-                    .context("no such worktree")?;
-                let file = File::from_proto(file, worktree, cx)?;
-                let old_file = buffer.update(cx, |buffer, cx| {
-                    let old_file = buffer.file().cloned();
-                    let new_path = file.path.clone();
-
-                    buffer.file_updated(Arc::new(file), cx);
-                    if old_file
-                        .as_ref()
-                        .map_or(true, |old| *old.path() != new_path)
-                    {
-                        Some(old_file)
-                    } else {
-                        None
-                    }
-                });
-                if let Some(old_file) = old_file {
-                    cx.emit(BufferStoreEvent::BufferChangedFilePath { buffer, old_file });
-                }
-            }
+        this.update(&mut cx, |this, _| {
             if let Some((downstream_client, project_id)) = this.downstream_client.as_ref() {
                 downstream_client
                     .send(proto::UpdateBufferFile {
@@ -1349,7 +1088,6 @@ impl BufferStore {
         }
         match &self.state {
             BufferStoreState::Local(this) => this.reload_buffers(buffers, push_to_history, cx),
-            _ => unreachable!(),
         }
     }
 
@@ -1491,31 +1229,6 @@ impl BufferStore {
             }
         }
         buffer
-    }
-
-    pub fn deserialize_project_transaction(
-        &mut self,
-        message: proto::ProjectTransaction,
-        push_to_history: bool,
-        cx: &mut Context<Self>,
-    ) -> Task<Result<ProjectTransaction>> {
-        if let Some(this) = self.as_remote_mut() {
-            this.deserialize_project_transaction(message, push_to_history, cx)
-        } else {
-            Task::ready(Err(anyhow!("not a remote buffer store")))
-        }
-    }
-
-    pub fn wait_for_remote_buffer(
-        &mut self,
-        id: BufferId,
-        cx: &mut Context<BufferStore>,
-    ) -> Task<Result<Entity<Buffer>>> {
-        if let Some(this) = self.as_remote_mut() {
-            this.wait_for_remote_buffer(id, cx)
-        } else {
-            Task::ready(Err(anyhow!("not a remote buffer store")))
-        }
     }
 
     pub fn serialize_project_transaction_for_peer(

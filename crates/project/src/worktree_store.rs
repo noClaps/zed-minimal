@@ -24,7 +24,6 @@ use smol::{
     channel::{Receiver, Sender},
     stream::StreamExt,
 };
-use text::ReplicaId;
 use util::{ResultExt, paths::SanitizedPath};
 use worktree::{
     Entry, ProjectEntryId, UpdatedEntriesSet, UpdatedGitRepositoriesSet, Worktree, WorktreeId,
@@ -321,14 +320,9 @@ impl WorktreeStore {
         self.worktrees_reordered = worktrees_reordered;
     }
 
-    fn upstream_client(&self) -> Option<(AnyProtoClient, u64)> {
-        None
-    }
-
     pub fn set_worktrees_from_proto(
         &mut self,
         worktrees: Vec<proto::WorktreeMetadata>,
-        replica_id: ReplicaId,
         cx: &mut Context<Self>,
     ) -> Result<()> {
         let mut old_worktrees_by_id = self
@@ -339,8 +333,6 @@ impl WorktreeStore {
                 Some((worktree.read(cx).id(), worktree))
             })
             .collect::<HashMap<_, _>>();
-
-        let (client, project_id) = self.upstream_client().clone().context("invalid project")?;
 
         for worktree in worktrees {
             if let Some(old_worktree) =
@@ -354,11 +346,6 @@ impl WorktreeStore {
                     WorktreeHandle::Weak(old_worktree.downgrade())
                 };
                 self.worktrees.push(handle);
-            } else {
-                self.add(
-                    &Worktree::remote(project_id, replica_id, worktree, client.clone(), cx),
-                    cx,
-                );
             }
         }
         self.send_project_updates(cx);
@@ -410,18 +397,6 @@ impl WorktreeStore {
         cx.emit(WorktreeStoreEvent::WorktreeOrderChanged);
         cx.notify();
         Ok(())
-    }
-
-    pub fn disconnected_from_host(&mut self, cx: &mut App) {
-        for worktree in &self.worktrees {
-            if let Some(worktree) = worktree.upgrade() {
-                worktree.update(cx, |worktree, _| {
-                    if let Some(worktree) = worktree.as_remote_mut() {
-                        worktree.disconnected_from_host();
-                    }
-                });
-            }
-        }
     }
 
     pub fn send_project_updates(&mut self, cx: &mut Context<Self>) {

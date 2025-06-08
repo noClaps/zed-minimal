@@ -892,10 +892,6 @@ impl Workspace {
     ) -> Self {
         cx.subscribe_in(&project, window, move |this, _, event, window, cx| {
             match event {
-                project::Event::RemoteIdChanged(_) => {
-                    this.update_window_title(window, cx);
-                }
-
                 project::Event::CollaboratorLeft(peer_id) => {
                     this.collaborator_left(*peer_id, window, cx);
                 }

@@ -18,7 +18,7 @@ use workspace::{
     CloseIntent, HistoryManager, ModalView, SerializedWorkspaceLocation, WORKSPACE_DB, Workspace,
     WorkspaceId, with_active_or_new_workspace,
 };
-use zed_actions::{OpenRecent, OpenRemote};
+use zed_actions::OpenRecent;
 
 pub fn init(cx: &mut App) {
     cx.on_action(|open_recent: &OpenRecent, cx| {
@@ -412,27 +412,6 @@ impl PickerDelegate for RecentProjectsDelegate {
                 .justify_end()
                 .border_t_1()
                 .border_color(cx.theme().colors().border_variant)
-                .child(
-                    Button::new("remote", "Open Remote Folder")
-                        .key_binding(KeyBinding::for_action(
-                            &OpenRemote {
-                                from_existing_connection: false,
-                                create_new_window: false,
-                            },
-                            window,
-                            cx,
-                        ))
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(
-                                OpenRemote {
-                                    from_existing_connection: false,
-                                    create_new_window: false,
-                                }
-                                .boxed_clone(),
-                                cx,
-                            )
-                        }),
-                )
                 .child(
                     Button::new("local", "Open Local Folder")
                         .key_binding(KeyBinding::for_action(&workspace::Open, window, cx))

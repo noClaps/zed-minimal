@@ -57,13 +57,6 @@ pub fn app_menus() -> Vec<Menu> {
                         create_new_window: false,
                     },
                 ),
-                MenuItem::action(
-                    "Open Remote...",
-                    zed_actions::OpenRemote {
-                        create_new_window: false,
-                        from_existing_connection: false,
-                    },
-                ),
                 MenuItem::separator(),
                 MenuItem::action("Add Folder to Project…", workspace::AddFolderToProject),
                 MenuItem::separator(),

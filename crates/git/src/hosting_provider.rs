@@ -14,41 +14,6 @@ pub struct PullRequest {
     pub url: Url,
 }
 
-#[derive(Clone)]
-pub struct GitRemote {
-    pub host: Arc<dyn GitHostingProvider + Send + Sync + 'static>,
-    pub owner: String,
-    pub repo: String,
-}
-
-impl std::fmt::Debug for GitRemote {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GitRemote")
-            .field("host", &self.host.name())
-            .field("owner", &self.owner)
-            .field("repo", &self.repo)
-            .finish()
-    }
-}
-
-impl GitRemote {
-    pub fn host_supports_avatars(&self) -> bool {
-        self.host.supports_avatars()
-    }
-
-    pub async fn avatar_url(
-        &self,
-        commit: SharedString,
-        client: Arc<dyn HttpClient>,
-    ) -> Option<Url> {
-        self.host
-            .commit_author_avatar_url(&self.owner, &self.repo, commit, client)
-            .await
-            .ok()
-            .flatten()
-    }
-}
-
 pub struct BuildCommitPermalinkParams<'a> {
     pub sha: &'a str,
 }
@@ -69,14 +34,10 @@ pub trait GitHostingProvider {
     fn base_url(&self) -> Url;
 
     /// Returns a permalink to a Git commit on this hosting provider.
-    fn build_commit_permalink(
-        &self,
-        remote: &ParsedGitRemote,
-        params: BuildCommitPermalinkParams,
-    ) -> Url;
+    fn build_commit_permalink(&self, params: BuildCommitPermalinkParams) -> Url;
 
     /// Returns a permalink to a file and/or selection on this hosting provider.
-    fn build_permalink(&self, remote: ParsedGitRemote, params: BuildPermalinkParams) -> Url;
+    fn build_permalink(&self, params: BuildPermalinkParams) -> Url;
 
     /// Returns whether this provider supports avatars.
     fn supports_avatars(&self) -> bool;
@@ -101,13 +62,7 @@ pub trait GitHostingProvider {
     /// Returns a formatted range of line numbers to be placed in a permalink URL.
     fn format_line_numbers(&self, start_line: u32, end_line: u32) -> String;
 
-    fn parse_remote_url(&self, url: &str) -> Option<ParsedGitRemote>;
-
-    fn extract_pull_request(
-        &self,
-        _remote: &ParsedGitRemote,
-        _message: &str,
-    ) -> Option<PullRequest> {
+    fn extract_pull_request(&self, _message: &str) -> Option<PullRequest> {
         None
     }
 
@@ -204,27 +159,4 @@ impl GitHostingProviderRegistry {
     ) {
         self.state.write().default_providers.push(provider);
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ParsedGitRemote {
-    pub owner: Arc<str>,
-    pub repo: Arc<str>,
-}
-
-pub fn parse_git_remote_url(
-    provider_registry: Arc<GitHostingProviderRegistry>,
-    url: &str,
-) -> Option<(
-    Arc<dyn GitHostingProvider + Send + Sync + 'static>,
-    ParsedGitRemote,
-)> {
-    provider_registry
-        .list_hosting_providers()
-        .into_iter()
-        .find_map(|provider| {
-            provider
-                .parse_remote_url(url)
-                .map(|parsed_remote| (provider, parsed_remote))
-        })
 }

@@ -1,5 +1,5 @@
 use crate::{
-    commit_tooltip::{CommitAvatar, CommitDetails, CommitTooltip},
+    commit_tooltip::{CommitDetails, CommitTooltip},
     commit_view::CommitView,
 };
 use editor::{BlameRenderer, Editor, hover_markdown_style};
@@ -176,8 +176,6 @@ impl BlameRenderer for GitBlameRenderer {
             message: details,
         };
 
-        let avatar = CommitAvatar::new(&commit_details).render(window, cx);
-
         let author = commit_details.author_name.clone();
         let author_email = commit_details.author_email.clone();
 
@@ -262,7 +260,6 @@ impl BlameRenderer for GitBlameRenderer {
                                                 .gap_x_2()
                                                 .overflow_x_hidden()
                                                 .flex_wrap()
-                                                .children(avatar)
                                                 .child(author)
                                                 .when(!author_email.is_empty(), |this| {
                                                     this.child(

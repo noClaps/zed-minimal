@@ -41,11 +41,10 @@ mod signature_help;
 pub(crate) use actions::*;
 pub use actions::{AcceptEditPrediction, OpenExcerpts, OpenExcerptsSplit};
 use aho_corasick::AhoCorasick;
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use blink_manager::BlinkManager;
 use buffer_diff::DiffHunkStatus;
 use client::{Collaborator, ParticipantIndex};
-use clock::ReplicaId;
 use collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use convert_case::{Case, Casing};
 use display_map::*;
@@ -142,7 +141,7 @@ use project::{
     project_settings::{GitGutterSetting, ProjectSettings},
 };
 use rand::prelude::*;
-use rpc::{ErrorExt, proto::*};
+use rpc::proto::*;
 use scroll::{Autoscroll, OngoingScroll, ScrollAnchor, ScrollManager, ScrollbarAutoHide};
 use selections_collection::{
     MutableSelectionsCollection, SelectionsCollection, resolve_selections,
@@ -178,10 +177,10 @@ use ui::{
 use util::{RangeExt, ResultExt, TryFutureExt, maybe, post_inc};
 use workspace::{
     CollaboratorId, Item as WorkspaceItem, ItemId, ItemNavHistory, OpenInTerminal, OpenTerminal,
-    RestoreOnStartupBehavior, SERIALIZATION_THROTTLE_TIME, SplitDirection, TabBarSettings, Toast,
-    ViewId, Workspace, WorkspaceId, WorkspaceSettings,
+    RestoreOnStartupBehavior, SERIALIZATION_THROTTLE_TIME, SplitDirection, TabBarSettings, ViewId,
+    Workspace, WorkspaceId, WorkspaceSettings,
     item::{ItemHandle, PreviewTabsSettings},
-    notifications::{DetachAndPromptErr, NotificationId, NotifyTaskExt},
+    notifications::{DetachAndPromptErr, NotifyTaskExt},
     searchable::SearchEvent,
 };
 
@@ -872,7 +871,6 @@ pub struct Editor {
     collaboration_hub: Option<Box<dyn CollaborationHub>>,
     blink_manager: Entity<BlinkManager>,
     show_cursor_names: bool,
-    hovered_cursors: HashMap<HoveredCursor, Task<()>>,
     pub show_local_selections: bool,
     mode: EditorMode,
     show_breadcrumbs: bool,
@@ -1062,17 +1060,6 @@ impl GutterDimensions {
     }
 }
 
-#[derive(Debug)]
-pub struct RemoteSelection {
-    pub replica_id: ReplicaId,
-    pub selection: Selection<Anchor>,
-    pub cursor_shape: CursorShape,
-    pub collaborator_id: CollaboratorId,
-    pub line_mode: bool,
-    pub user_name: Option<SharedString>,
-    pub color: PlayerColor,
-}
-
 #[derive(Clone, Debug)]
 struct SelectionHistoryEntry {
     selections: Arc<[Selection<Anchor>]>,
@@ -1085,12 +1072,6 @@ enum SelectionHistoryMode {
     Normal,
     Undoing,
     Redoing,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct HoveredCursor {
-    replica_id: u16,
-    selection_id: usize,
 }
 
 impl Default for SelectionHistoryMode {
@@ -1758,7 +1739,6 @@ impl Editor {
             gutter_dimensions: GutterDimensions::default(),
             style: None,
             show_cursor_names: false,
-            hovered_cursors: HashMap::default(),
             next_editor_action_id: EditorActionId::default(),
             editor_actions: Rc::default(),
             show_inline_completions_override: None,
@@ -2069,13 +2049,7 @@ impl Editor {
             "Failed to create buffer",
             window,
             cx,
-            |e, _, _| match e.error_code() {
-                ErrorCode::RemoteUpgradeRequired => Some(format!(
-                "The remote instance of Zed does not support this yet. It must be upgraded to {}",
-                e.error_tag("required").unwrap_or("the latest version")
-            )),
-                _ => None,
-            },
+            |_, _, _| None,
         );
     }
 
@@ -2139,15 +2113,7 @@ impl Editor {
             })?;
             anyhow::Ok(())
         })
-        .detach_and_prompt_err("Failed to create buffer", window, cx, |e, _, _| {
-            match e.error_code() {
-                ErrorCode::RemoteUpgradeRequired => Some(format!(
-                "The remote instance of Zed does not support this yet. It must be upgraded to {}",
-                e.error_tag("required").unwrap_or("the latest version")
-            )),
-                _ => None,
-            }
-        });
+        .detach_and_prompt_err("Failed to create buffer", window, cx, |_, _, _| None);
     }
 
     pub fn leader_id(&self) -> Option<CollaboratorId> {
@@ -5204,6 +5170,9 @@ impl Editor {
             multibuffer_anchor.start.to_offset(&snapshot)
                 ..multibuffer_anchor.end.to_offset(&snapshot)
         };
+        if newest_anchor.head().buffer_id != Some(buffer.remote_id()) {
+            return None;
+        }
         if newest_anchor.head().buffer_id != Some(buffer.remote_id()) {
             return None;
         }
@@ -15848,83 +15817,6 @@ impl Editor {
         snapshot.line_len(buffer_row) == 0
     }
 
-    fn get_permalink_to_line(&self, cx: &mut Context<Self>) -> Task<Result<url::Url>> {
-        let buffer_and_selection = maybe!({
-            let selection = self.selections.newest::<Point>(cx);
-            let selection_range = selection.range();
-
-            let multi_buffer = self.buffer().read(cx);
-            let multi_buffer_snapshot = multi_buffer.snapshot(cx);
-            let buffer_ranges = multi_buffer_snapshot.range_to_buffer_ranges(selection_range);
-
-            let (buffer, range, _) = if selection.reversed {
-                buffer_ranges.first()
-            } else {
-                buffer_ranges.last()
-            }?;
-
-            let selection = text::ToPoint::to_point(&range.start, &buffer).row
-                ..text::ToPoint::to_point(&range.end, &buffer).row;
-            Some((
-                multi_buffer.buffer(buffer.remote_id()).unwrap().clone(),
-                selection,
-            ))
-        });
-
-        let Some((buffer, selection)) = buffer_and_selection else {
-            return Task::ready(Err(anyhow!("failed to determine buffer and selection")));
-        };
-
-        let Some(project) = self.project.as_ref() else {
-            return Task::ready(Err(anyhow!("editor does not have project")));
-        };
-
-        project.update(cx, |project, cx| {
-            project.get_permalink_to_line(&buffer, selection, cx)
-        })
-    }
-
-    pub fn copy_permalink_to_line(
-        &mut self,
-        _: &CopyPermalinkToLine,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let permalink_task = self.get_permalink_to_line(cx);
-        let workspace = self.workspace();
-
-        cx.spawn_in(window, async move |_, cx| match permalink_task.await {
-            Ok(permalink) => {
-                cx.update(|_, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(permalink.to_string()));
-                })
-                .ok();
-            }
-            Err(err) => {
-                let message = format!("Failed to copy permalink: {err}");
-
-                anyhow::Result::<()>::Err(err).log_err();
-
-                if let Some(workspace) = workspace {
-                    workspace
-                        .update_in(cx, |workspace, _, cx| {
-                            struct CopyPermalinkToLine;
-
-                            workspace.show_toast(
-                                Toast::new(
-                                    NotificationId::unique::<CopyPermalinkToLine>(),
-                                    message,
-                                ),
-                                cx,
-                            )
-                        })
-                        .ok();
-                }
-            }
-        })
-        .detach();
-    }
-
     pub fn copy_file_location(
         &mut self,
         _: &CopyFileLocation,
@@ -15937,47 +15829,6 @@ impl Editor {
                 cx.write_to_clipboard(ClipboardItem::new_string(format!("{path}:{selection}")));
             }
         }
-    }
-
-    pub fn open_permalink_to_line(
-        &mut self,
-        _: &OpenPermalinkToLine,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let permalink_task = self.get_permalink_to_line(cx);
-        let workspace = self.workspace();
-
-        cx.spawn_in(window, async move |_, cx| match permalink_task.await {
-            Ok(permalink) => {
-                cx.update(|_, cx| {
-                    cx.open_url(permalink.as_ref());
-                })
-                .ok();
-            }
-            Err(err) => {
-                let message = format!("Failed to open permalink: {err}");
-
-                anyhow::Result::<()>::Err(err).log_err();
-
-                if let Some(workspace) = workspace {
-                    workspace
-                        .update(cx, |workspace, cx| {
-                            struct OpenPermalinkToLine;
-
-                            workspace.show_toast(
-                                Toast::new(
-                                    NotificationId::unique::<OpenPermalinkToLine>(),
-                                    message,
-                                ),
-                                cx,
-                            )
-                        })
-                        .ok();
-                }
-            }
-        })
-        .detach();
     }
 
     pub fn insert_uuid_v4(
@@ -18797,41 +18648,6 @@ fn ending_row(next_selection: &Selection<Point>, display_map: &DisplaySnapshot) 
 }
 
 impl EditorSnapshot {
-    pub fn remote_selections_in_range<'a>(
-        &'a self,
-        range: &'a Range<Anchor>,
-        collaboration_hub: &dyn CollaborationHub,
-        cx: &'a App,
-    ) -> impl 'a + Iterator<Item = RemoteSelection> {
-        let participant_names = collaboration_hub.user_names(cx);
-        let participant_indices = collaboration_hub.user_participant_indices(cx);
-        let collaborators_by_peer_id = collaboration_hub.collaborators(cx);
-        let collaborators_by_replica_id = collaborators_by_peer_id
-            .values()
-            .map(|collaborator| (collaborator.replica_id, collaborator))
-            .collect::<HashMap<_, _>>();
-        self.buffer_snapshot
-            .selections_in_range(range, false)
-            .filter_map(move |(replica_id, line_mode, cursor_shape, selection)| {
-                let collaborator = collaborators_by_replica_id.get(&replica_id)?;
-                let participant_index = participant_indices.get(&collaborator.user_id).copied();
-                let user_name = participant_names.get(&collaborator.user_id).cloned();
-                Some(RemoteSelection {
-                    replica_id,
-                    selection,
-                    cursor_shape,
-                    line_mode,
-                    collaborator_id: CollaboratorId::PeerId(collaborator.peer_id),
-                    user_name,
-                    color: if let Some(index) = participant_index {
-                        cx.theme().players().color_for_participant(index.0)
-                    } else {
-                        cx.theme().players().absent()
-                    },
-                })
-            })
-    }
-
     pub fn hunks_for_ranges(
         &self,
         ranges: impl IntoIterator<Item = Range<Point>>,

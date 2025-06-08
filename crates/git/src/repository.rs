@@ -4,7 +4,7 @@ use crate::{Oid, SHORT_SHA_LENGTH};
 use anyhow::{Context as _, Result, anyhow, bail};
 use collections::HashMap;
 use futures::future::BoxFuture;
-use futures::{AsyncWriteExt, FutureExt as _, select_biased};
+use futures::{AsyncWriteExt, FutureExt as _};
 use git2::BranchType;
 use gpui::{AppContext as _, AsyncApp, BackgroundExecutor, SharedString};
 use parking_lot::Mutex;
@@ -55,12 +55,6 @@ impl Branch {
         self.ref_name.starts_with("refs/remotes/")
     }
 
-    pub fn tracking_status(&self) -> Option<UpstreamTrackingStatus> {
-        self.upstream
-            .as_ref()
-            .and_then(|upstream| upstream.tracking.status())
-    }
-
     pub fn priority_key(&self) -> (bool, Option<i64>) {
         (
             self.is_head,
@@ -74,7 +68,6 @@ impl Branch {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Upstream {
     pub ref_name: SharedString,
-    pub tracking: UpstreamTracking,
 }
 
 impl Upstream {
@@ -96,45 +89,6 @@ impl Upstream {
 #[derive(Clone, Copy, Default)]
 pub struct CommitOptions {
     pub amend: bool,
-}
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum UpstreamTracking {
-    /// Remote ref not present in local repository.
-    Gone,
-    /// Remote ref present in local repository (fetched from remote).
-    Tracked(UpstreamTrackingStatus),
-}
-
-impl From<UpstreamTrackingStatus> for UpstreamTracking {
-    fn from(status: UpstreamTrackingStatus) -> Self {
-        UpstreamTracking::Tracked(status)
-    }
-}
-
-impl UpstreamTracking {
-    pub fn is_gone(&self) -> bool {
-        matches!(self, UpstreamTracking::Gone)
-    }
-
-    pub fn status(&self) -> Option<UpstreamTrackingStatus> {
-        match self {
-            UpstreamTracking::Gone => None,
-            UpstreamTracking::Tracked(status) => Some(*status),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RemoteCommandOutput {
-    pub stdout: String,
-    pub stderr: String,
-}
-
-impl RemoteCommandOutput {
-    pub fn is_empty(&self) -> bool {
-        self.stdout.is_empty() && self.stderr.is_empty()
-    }
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -179,11 +133,6 @@ impl CommitDetails {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Remote {
-    pub name: SharedString,
-}
-
 pub enum ResetMode {
     /// Reset the branch pointer, leave index and worktree unchanged (this will make it look like things that were
     /// committed are now staged).
@@ -196,38 +145,11 @@ pub enum ResetMode {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum FetchOptions {
     All,
-    Remote(Remote),
-}
-
-impl FetchOptions {
-    pub fn to_proto(&self) -> Option<String> {
-        match self {
-            FetchOptions::All => None,
-            FetchOptions::Remote(remote) => Some(remote.clone().name.into()),
-        }
-    }
-
-    pub fn from_proto(remote_name: Option<String>) -> Self {
-        match remote_name {
-            Some(name) => FetchOptions::Remote(Remote { name: name.into() }),
-            None => FetchOptions::All,
-        }
-    }
-
-    pub fn name(&self) -> SharedString {
-        match self {
-            Self::All => "Fetch all remotes".into(),
-            Self::Remote(remote) => remote.name.clone(),
-        }
-    }
 }
 
 impl std::fmt::Display for FetchOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FetchOptions::All => write!(f, "--all"),
-            FetchOptions::Remote(remote) => write!(f, "{}", remote.name),
-        }
+        write!(f, "--all")
     }
 }
 
@@ -393,41 +315,6 @@ pub trait GitRepository: Send + Sync {
         options: CommitOptions,
         env: Arc<HashMap<String, String>>,
     ) -> BoxFuture<Result<()>>;
-
-    fn push(
-        &self,
-        branch_name: String,
-        upstream_name: String,
-        options: Option<PushOptions>,
-        askpass: AskPassDelegate,
-        env: Arc<HashMap<String, String>>,
-        // This method takes an AsyncApp to ensure it's invoked on the main thread,
-        // otherwise git-credentials-manager won't work.
-        cx: AsyncApp,
-    ) -> BoxFuture<Result<RemoteCommandOutput>>;
-
-    fn pull(
-        &self,
-        branch_name: String,
-        upstream_name: String,
-        askpass: AskPassDelegate,
-        env: Arc<HashMap<String, String>>,
-        // This method takes an AsyncApp to ensure it's invoked on the main thread,
-        // otherwise git-credentials-manager won't work.
-        cx: AsyncApp,
-    ) -> BoxFuture<Result<RemoteCommandOutput>>;
-
-    fn fetch(
-        &self,
-        fetch_options: FetchOptions,
-        askpass: AskPassDelegate,
-        env: Arc<HashMap<String, String>>,
-        // This method takes an AsyncApp to ensure it's invoked on the main thread,
-        // otherwise git-credentials-manager won't work.
-        cx: AsyncApp,
-    ) -> BoxFuture<Result<RemoteCommandOutput>>;
-
-    fn get_remotes(&self, branch_name: Option<String>) -> BoxFuture<Result<Vec<Remote>>>;
 
     /// returns a list of remote branches that contain HEAD
     fn check_for_pushed_commit(&self) -> BoxFuture<Result<Vec<SharedString>>>;
@@ -993,14 +880,6 @@ impl GitRepository for RealGitRepository {
                 let repo = repo.lock();
                 let branch = if let Ok(branch) = repo.find_branch(&name, BranchType::Local) {
                     branch
-                } else if let Ok(revision) = repo.find_branch(&name, BranchType::Remote) {
-                    let (_, branch_name) =
-                        name.split_once("/").context("Unexpected branch format")?;
-                    let revision = revision.get();
-                    let branch_commit = revision.peel_to_commit()?;
-                    let mut branch = repo.branch(&branch_name, &branch_commit, false)?;
-                    branch.set_upstream(Some(&name))?;
-                    branch
                 } else {
                     anyhow::bail!("Branch not found");
                 };
@@ -1170,135 +1049,6 @@ impl GitRepository for RealGitRepository {
                     String::from_utf8_lossy(&output.stderr)
                 );
                 Ok(())
-            })
-            .boxed()
-    }
-
-    fn push(
-        &self,
-        branch_name: String,
-        remote_name: String,
-        options: Option<PushOptions>,
-        ask_pass: AskPassDelegate,
-        env: Arc<HashMap<String, String>>,
-        cx: AsyncApp,
-    ) -> BoxFuture<Result<RemoteCommandOutput>> {
-        let working_directory = self.working_directory();
-        let executor = cx.background_executor().clone();
-        async move {
-            let working_directory = working_directory?;
-            let mut command = new_smol_command("git");
-            command
-                .envs(env.iter())
-                .current_dir(&working_directory)
-                .args(["push"])
-                .args(options.map(|option| match option {
-                    PushOptions::SetUpstream => "--set-upstream",
-                    PushOptions::Force => "--force-with-lease",
-                }))
-                .arg(remote_name)
-                .arg(format!("{}:{}", branch_name, branch_name))
-                .stdin(smol::process::Stdio::null())
-                .stdout(smol::process::Stdio::piped())
-                .stderr(smol::process::Stdio::piped());
-
-            run_git_command(env, ask_pass, command, &executor).await
-        }
-        .boxed()
-    }
-
-    fn pull(
-        &self,
-        branch_name: String,
-        remote_name: String,
-        ask_pass: AskPassDelegate,
-        env: Arc<HashMap<String, String>>,
-        cx: AsyncApp,
-    ) -> BoxFuture<Result<RemoteCommandOutput>> {
-        let working_directory = self.working_directory();
-        let executor = cx.background_executor().clone();
-        async move {
-            let mut command = new_smol_command("git");
-            command
-                .envs(env.iter())
-                .current_dir(&working_directory?)
-                .args(["pull"])
-                .arg(remote_name)
-                .arg(branch_name)
-                .stdout(smol::process::Stdio::piped())
-                .stderr(smol::process::Stdio::piped());
-
-            run_git_command(env, ask_pass, command, &executor).await
-        }
-        .boxed()
-    }
-
-    fn fetch(
-        &self,
-        fetch_options: FetchOptions,
-        ask_pass: AskPassDelegate,
-        env: Arc<HashMap<String, String>>,
-        cx: AsyncApp,
-    ) -> BoxFuture<Result<RemoteCommandOutput>> {
-        let working_directory = self.working_directory();
-        let remote_name = format!("{}", fetch_options);
-        let executor = cx.background_executor().clone();
-        async move {
-            let mut command = new_smol_command("git");
-            command
-                .envs(env.iter())
-                .current_dir(&working_directory?)
-                .args(["fetch", &remote_name])
-                .stdout(smol::process::Stdio::piped())
-                .stderr(smol::process::Stdio::piped());
-
-            run_git_command(env, ask_pass, command, &executor).await
-        }
-        .boxed()
-    }
-
-    fn get_remotes(&self, branch_name: Option<String>) -> BoxFuture<Result<Vec<Remote>>> {
-        let working_directory = self.working_directory();
-        let git_binary_path = self.git_binary_path.clone();
-        self.executor
-            .spawn(async move {
-                let working_directory = working_directory?;
-                if let Some(branch_name) = branch_name {
-                    let output = new_smol_command(&git_binary_path)
-                        .current_dir(&working_directory)
-                        .args(["config", "--get"])
-                        .arg(format!("branch.{}.remote", branch_name))
-                        .output()
-                        .await?;
-
-                    if output.status.success() {
-                        let remote_name = String::from_utf8_lossy(&output.stdout);
-
-                        return Ok(vec![Remote {
-                            name: remote_name.trim().to_string().into(),
-                        }]);
-                    }
-                }
-
-                let output = new_smol_command(&git_binary_path)
-                    .current_dir(&working_directory)
-                    .args(["remote"])
-                    .output()
-                    .await?;
-
-                anyhow::ensure!(
-                    output.status.success(),
-                    "Failed to get remotes:\n{}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let remote_names = String::from_utf8_lossy(&output.stdout)
-                    .split('\n')
-                    .filter(|name| !name.is_empty())
-                    .map(|name| Remote {
-                        name: name.trim().to_string().into(),
-                    })
-                    .collect();
-                Ok(remote_names)
             })
             .boxed()
     }
@@ -1697,63 +1447,6 @@ struct GitBinaryCommandError {
     status: ExitStatus,
 }
 
-async fn run_git_command(
-    env: Arc<HashMap<String, String>>,
-    ask_pass: AskPassDelegate,
-    mut command: smol::process::Command,
-    executor: &BackgroundExecutor,
-) -> Result<RemoteCommandOutput> {
-    if env.contains_key("GIT_ASKPASS") {
-        let git_process = command.spawn()?;
-        let output = git_process.output().await?;
-        anyhow::ensure!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Ok(RemoteCommandOutput {
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        })
-    } else {
-        let ask_pass = AskPassSession::new(executor, ask_pass).await?;
-        command.env("GIT_ASKPASS", ask_pass.script_path());
-        let git_process = command.spawn()?;
-
-        run_askpass_command(ask_pass, git_process).await
-    }
-}
-
-async fn run_askpass_command(
-    mut ask_pass: AskPassSession,
-    git_process: smol::process::Child,
-) -> anyhow::Result<RemoteCommandOutput> {
-    select_biased! {
-        result = ask_pass.run().fuse() => {
-            match result {
-                AskPassResult::CancelledByUser => {
-                    Err(anyhow!(REMOTE_CANCELLED_BY_USER))?
-                }
-                AskPassResult::Timedout => {
-                    Err(anyhow!("Connecting to host timed out"))?
-                }
-            }
-        }
-        output = git_process.output().fuse() => {
-            let output = output?;
-            anyhow::ensure!(
-                output.status.success(),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            Ok(RemoteCommandOutput {
-                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            })
-        }
-    }
-}
-
 pub static WORK_DIRECTORY_REPO_PATH: LazyLock<RepoPath> =
     LazyLock::new(|| RepoPath(Path::new("").into()));
 
@@ -1860,7 +1553,6 @@ fn parse_branch_input(input: &str) -> Result<Vec<Branch>> {
         let parent_sha: SharedString = fields.next().context("no parent")?.to_string().into();
         let ref_name = fields.next().context("no refname")?.to_string().into();
         let upstream_name = fields.next().context("no upstream")?.to_string();
-        let upstream_tracking = parse_upstream_track(fields.next().context("no upstream:track")?)?;
         let commiterdate = fields.next().context("no committerdate")?.parse::<i64>()?;
         let subject: SharedString = fields
             .next()
@@ -1882,42 +1574,12 @@ fn parse_branch_input(input: &str) -> Result<Vec<Branch>> {
             } else {
                 Some(Upstream {
                     ref_name: upstream_name.into(),
-                    tracking: upstream_tracking,
                 })
             },
         })
     }
 
     Ok(branches)
-}
-
-fn parse_upstream_track(upstream_track: &str) -> Result<UpstreamTracking> {
-    if upstream_track == "" {
-        return Ok(UpstreamTracking::Tracked(UpstreamTrackingStatus {
-            ahead: 0,
-            behind: 0,
-        }));
-    }
-
-    let upstream_track = upstream_track.strip_prefix("[").context("missing [")?;
-    let upstream_track = upstream_track.strip_suffix("]").context("missing [")?;
-    let mut ahead: u32 = 0;
-    let mut behind: u32 = 0;
-    for component in upstream_track.split(", ") {
-        if component == "gone" {
-            return Ok(UpstreamTracking::Gone);
-        }
-        if let Some(ahead_num) = component.strip_prefix("ahead ") {
-            ahead = ahead_num.parse::<u32>()?;
-        }
-        if let Some(behind_num) = component.strip_prefix("behind ") {
-            behind = behind_num.parse::<u32>()?;
-        }
-    }
-    Ok(UpstreamTracking::Tracked(UpstreamTrackingStatus {
-        ahead,
-        behind,
-    }))
 }
 
 fn check_path_to_repo_path_errors(relative_file_path: &Path) -> Result<()> {

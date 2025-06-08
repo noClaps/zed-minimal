@@ -2,9 +2,8 @@ use crate::Editor;
 use anyhow::Result;
 use collections::HashMap;
 use git::{
-    GitHostingProviderRegistry, GitRemote, Oid,
+    Oid,
     blame::{Blame, BlameEntry, ParsedCommitMessage},
-    parse_git_remote_url,
 };
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, Hsla, ScrollHandle, Subscription, Task,
@@ -449,27 +448,19 @@ impl GitBlame {
         let blame = self.project.update(cx, |project, cx| {
             project.blame_buffer(&self.buffer, None, cx)
         });
-        let provider_registry = GitHostingProviderRegistry::default_global(cx);
 
         self.task = cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn({
                     let snapshot = snapshot.clone();
                     async move {
-                        let Some(Blame {
-                            entries,
-                            messages,
-                            remote_url,
-                        }) = blame.await?
-                        else {
+                        let Some(Blame { entries, .. }) = blame.await? else {
                             return Ok(None);
                         };
 
                         let entries = build_blame_entry_sum_tree(entries, snapshot.max_point().row);
-                        let commit_details =
-                            parse_commit_messages(messages, remote_url, provider_registry).await;
 
-                        anyhow::Ok(Some((entries, commit_details)))
+                        anyhow::Ok(Some(entries))
                     }
                 })
                 .await;
@@ -478,11 +469,10 @@ impl GitBlame {
                 Ok(None) => {
                     // Nothing to do, e.g. no repository found
                 }
-                Ok(Some((entries, commit_details))) => {
+                Ok(Some(entries)) => {
                     this.buffer_edits = buffer_edits;
                     this.buffer_snapshot = snapshot;
                     this.entries = entries;
-                    this.commit_details = commit_details;
                     this.generated = true;
                     cx.notify();
                 }
@@ -554,53 +544,4 @@ fn build_blame_entry_sum_tree(entries: Vec<BlameEntry>, max_row: u32) -> SumTree
     }
 
     entries
-}
-
-async fn parse_commit_messages(
-    messages: impl IntoIterator<Item = (Oid, String)>,
-    remote_url: Option<String>,
-    provider_registry: Arc<GitHostingProviderRegistry>,
-) -> HashMap<Oid, ParsedCommitMessage> {
-    let mut commit_details = HashMap::default();
-
-    let parsed_remote_url = remote_url
-        .as_deref()
-        .and_then(|remote_url| parse_git_remote_url(provider_registry, remote_url));
-
-    for (oid, message) in messages {
-        let permalink = if let Some((provider, git_remote)) = parsed_remote_url.as_ref() {
-            Some(provider.build_commit_permalink(
-                git_remote,
-                git::BuildCommitPermalinkParams {
-                    sha: oid.to_string().as_str(),
-                },
-            ))
-        } else {
-            None
-        };
-
-        let remote = parsed_remote_url
-            .as_ref()
-            .map(|(provider, remote)| GitRemote {
-                host: provider.clone(),
-                owner: remote.owner.to_string(),
-                repo: remote.repo.to_string(),
-            });
-
-        let pull_request = parsed_remote_url
-            .as_ref()
-            .and_then(|(provider, remote)| provider.extract_pull_request(remote, &message));
-
-        commit_details.insert(
-            oid,
-            ParsedCommitMessage {
-                message: message.into(),
-                permalink,
-                remote,
-                pull_request,
-            },
-        );
-    }
-
-    commit_details
 }

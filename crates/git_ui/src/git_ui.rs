@@ -6,7 +6,7 @@ use commit_modal::CommitModal;
 use editor::Editor;
 mod blame_ui;
 use git::{
-    repository::{Branch, Upstream, UpstreamTracking, UpstreamTrackingStatus},
+    repository::{Branch, Upstream},
     status::{FileStatus, StatusCode, UnmergedStatus, UnmergedStatusCode},
 };
 use git_panel_settings::GitPanelSettings;
@@ -98,35 +98,11 @@ fn render_remote_button(
     id: impl Into<SharedString>,
     branch: &Branch,
     keybinding_target: Option<FocusHandle>,
-    show_fetch_button: bool,
 ) -> Option<impl IntoElement> {
     let id = id.into();
     let upstream = branch.upstream.as_ref();
     match upstream {
-        Some(Upstream {
-            tracking: UpstreamTracking::Tracked(UpstreamTrackingStatus { ahead, behind }),
-            ..
-        }) => match (*ahead, *behind) {
-            (0, 0) if show_fetch_button => {
-                Some(remote_button::render_fetch_button(keybinding_target, id))
-            }
-            (0, 0) => None,
-            (ahead, 0) => Some(remote_button::render_push_button(
-                keybinding_target.clone(),
-                id,
-                ahead,
-            )),
-            (ahead, behind) => Some(remote_button::render_pull_button(
-                keybinding_target.clone(),
-                id,
-                ahead,
-                behind,
-            )),
-        },
-        Some(Upstream {
-            tracking: UpstreamTracking::Gone,
-            ..
-        }) => Some(remote_button::render_republish_button(
+        Some(Upstream { .. }) => Some(remote_button::render_republish_button(
             keybinding_target,
             id,
         )),
@@ -141,90 +117,6 @@ mod remote_button {
         IconSize, IntoElement, Label, LabelCommon, LabelSize, LineHeightStyle, ParentElement,
         PopoverMenu, SharedString, SplitButton, Styled, Tooltip, Window, div, h_flex, rems,
     };
-
-    pub fn render_fetch_button(
-        keybinding_target: Option<FocusHandle>,
-        id: SharedString,
-    ) -> SplitButton {
-        split_button(
-            id,
-            "Fetch",
-            0,
-            0,
-            Some(IconName::ArrowCircle),
-            keybinding_target.clone(),
-            move |_, window, cx| {
-                window.dispatch_action(Box::new(git::Fetch), cx);
-            },
-            move |window, cx| {
-                git_action_tooltip(
-                    "Fetch updates from remote",
-                    &git::Fetch,
-                    "git fetch",
-                    keybinding_target.clone(),
-                    window,
-                    cx,
-                )
-            },
-        )
-    }
-
-    pub fn render_push_button(
-        keybinding_target: Option<FocusHandle>,
-        id: SharedString,
-        ahead: u32,
-    ) -> SplitButton {
-        split_button(
-            id,
-            "Push",
-            ahead as usize,
-            0,
-            None,
-            keybinding_target.clone(),
-            move |_, window, cx| {
-                window.dispatch_action(Box::new(git::Push), cx);
-            },
-            move |window, cx| {
-                git_action_tooltip(
-                    "Push committed changes to remote",
-                    &git::Push,
-                    "git push",
-                    keybinding_target.clone(),
-                    window,
-                    cx,
-                )
-            },
-        )
-    }
-
-    pub fn render_pull_button(
-        keybinding_target: Option<FocusHandle>,
-        id: SharedString,
-        ahead: u32,
-        behind: u32,
-    ) -> SplitButton {
-        split_button(
-            id,
-            "Pull",
-            ahead as usize,
-            behind as usize,
-            None,
-            keybinding_target.clone(),
-            move |_, window, cx| {
-                window.dispatch_action(Box::new(git::Pull), cx);
-            },
-            move |window, cx| {
-                git_action_tooltip(
-                    "Pull",
-                    &git::Pull,
-                    "git pull",
-                    keybinding_target.clone(),
-                    window,
-                    cx,
-                )
-            },
-        )
-    }
 
     pub fn render_publish_button(
         keybinding_target: Option<FocusHandle>,

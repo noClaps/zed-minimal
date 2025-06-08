@@ -580,7 +580,6 @@ dependencies = [
  "gpui",
  "http_client",
  "log",
- "paths",
  "release_channel",
  "schemars",
  "serde",
@@ -5759,7 +5758,6 @@ dependencies = [
  "tempfile",
  "terminal",
  "text",
- "toml",
  "url",
  "util",
  "which 6.0.3",
@@ -10169,7 +10167,6 @@ name = "worktree"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clock",
  "collections",
  "fs",
  "futures",

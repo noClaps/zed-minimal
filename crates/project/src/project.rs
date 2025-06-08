@@ -51,9 +51,9 @@ use gpui::{
 };
 use itertools::Itertools;
 use language::{
-    Buffer, BufferEvent, Capability, CodeLabel, DiagnosticSourceKind, Language, LanguageName,
-    LanguageRegistry, PointUtf16, ToOffset, ToPointUtf16, Toolchain, ToolchainList, Transaction,
-    Unclipped, language_settings::InlayHintKind,
+    Buffer, BufferEvent, CodeLabel, DiagnosticSourceKind, Language, LanguageName, LanguageRegistry,
+    PointUtf16, ToOffset, ToPointUtf16, Toolchain, ToolchainList, Transaction, Unclipped,
+    language_settings::InlayHintKind,
 };
 use lsp::{
     CompletionContext, CompletionItemKind, DocumentHighlightKind, InsertTextMode, LanguageServerId,
@@ -63,7 +63,6 @@ use lsp_command::*;
 use lsp_store::{CompletionDocumentation, LspFormatTarget, OpenLspBufferHandle};
 pub use manifest_tree::ManifestProviders;
 use node_runtime::NodeRuntime;
-use parking_lot::Mutex;
 pub use prettier_store::PrettierStore;
 use project_settings::{ProjectSettings, SettingsObserver, SettingsObserverEvent};
 use rpc::{
@@ -158,7 +157,6 @@ pub struct Project {
     _subscriptions: Vec<gpui::Subscription>,
     buffers_needing_diff: HashSet<WeakEntity<Buffer>>,
     git_diff_debouncer: DebouncedDelay<Self>,
-    remotely_created_models: Arc<Mutex<RemotelyCreatedModels>>,
     terminals: Terminals,
     node: Option<NodeRuntime>,
     search_history: SearchHistory,
@@ -170,33 +168,6 @@ pub struct Project {
     toolchain_store: Option<Entity<ToolchainStore>>,
 }
 
-#[derive(Default)]
-struct RemotelyCreatedModels {
-    worktrees: Vec<Entity<Worktree>>,
-    buffers: Vec<Entity<Buffer>>,
-    retain_count: usize,
-}
-
-struct RemotelyCreatedModelGuard {
-    remote_models: std::sync::Weak<Mutex<RemotelyCreatedModels>>,
-}
-
-impl Drop for RemotelyCreatedModelGuard {
-    fn drop(&mut self) {
-        if let Some(remote_models) = self.remote_models.upgrade() {
-            let mut remote_models = remote_models.lock();
-            assert!(
-                remote_models.retain_count > 0,
-                "RemotelyCreatedModelGuard dropped too many times"
-            );
-            remote_models.retain_count -= 1;
-            if remote_models.retain_count == 0 {
-                remote_models.buffers.clear();
-                remote_models.worktrees.clear();
-            }
-        }
-    }
-}
 /// Message ordered with respect to buffer operations
 #[derive(Debug)]
 enum BufferOrderedMessage {
@@ -249,7 +220,6 @@ pub enum Event {
         path: ProjectPath,
         language_server_id: LanguageServerId,
     },
-    RemoteIdChanged(Option<u64>),
     DisconnectedFromHost,
     Closed,
     DeletedEntry(WorktreeId, ProjectEntryId),
@@ -757,24 +727,20 @@ impl Project {
     }
 
     pub fn init(client: &Arc<Client>, cx: &mut App) {
-        connection_manager::init(client.clone(), cx);
         Self::init_settings(cx);
 
         let client: AnyProtoClient = client.clone().into();
         client.add_entity_message_handler(Self::handle_add_collaborator);
         client.add_entity_message_handler(Self::handle_update_project_collaborator);
         client.add_entity_message_handler(Self::handle_remove_collaborator);
-        client.add_entity_message_handler(Self::handle_update_project);
         client.add_entity_message_handler(Self::handle_unshare_project);
         client.add_entity_request_handler(Self::handle_update_buffer);
-        client.add_entity_message_handler(Self::handle_update_worktree);
         client.add_entity_request_handler(Self::handle_synchronize_buffers);
 
         client.add_entity_request_handler(Self::handle_search_candidate_buffers);
         client.add_entity_request_handler(Self::handle_open_buffer_by_id);
         client.add_entity_request_handler(Self::handle_open_buffer_by_path);
         client.add_entity_request_handler(Self::handle_open_new_buffer);
-        client.add_entity_message_handler(Self::handle_create_buffer_for_peer);
 
         WorktreeStore::init(&client);
         BufferStore::init(&client);
@@ -891,7 +857,6 @@ impl Project {
                 node: Some(node),
                 search_history: Self::new_search_history(),
                 environment,
-                remotely_created_models: Default::default(),
 
                 search_included_history: Self::new_search_history(),
                 search_excluded_history: Self::new_search_history(),
@@ -1327,7 +1292,6 @@ impl Project {
             remote_id: project_id,
         };
 
-        cx.emit(Event::RemoteIdChanged(Some(project_id)));
         Ok(())
     }
 
@@ -1369,7 +1333,6 @@ impl Project {
         });
 
         self.join_project_response_message_id = message_id;
-        self.set_worktrees_from_proto(message.worktrees, cx)?;
         self.set_collaborators_from_proto(message.collaborators, cx)?;
         self.lsp_store.update(cx, |lsp_store, _| {
             lsp_store.set_language_server_statuses_from_proto(message.language_servers)
@@ -1382,7 +1345,6 @@ impl Project {
 
     pub fn unshare(&mut self, cx: &mut Context<Self>) -> Result<()> {
         self.unshare_internal(cx)?;
-        cx.emit(Event::RemoteIdChanged(None));
         Ok(())
     }
 
@@ -1551,13 +1513,6 @@ impl Project {
     }
 
     fn register_buffer(&mut self, buffer: &Entity<Buffer>, cx: &mut Context<Self>) -> Result<()> {
-        {
-            let mut remotely_created_models = self.remotely_created_models.lock();
-            if remotely_created_models.retain_count > 0 {
-                remotely_created_models.buffers.push(buffer.clone())
-            }
-        }
-
         self.request_buffer_diff_recalculation(buffer, cx);
 
         cx.subscribe(buffer, |this, buffer, event, cx| {
@@ -1823,10 +1778,6 @@ impl Project {
         cx: &mut Context<Self>,
     ) {
         match event {
-            WorktreeStoreEvent::WorktreeAdded(worktree) => {
-                self.on_worktree_added(worktree, cx);
-                cx.emit(Event::WorktreeAdded(worktree.read(cx).id()));
-            }
             WorktreeStoreEvent::WorktreeRemoved(_, id) => {
                 cx.emit(Event::WorktreeRemoved(*id));
             }
@@ -1844,13 +1795,6 @@ impl Project {
             // Listen to the GitStore instead.
             WorktreeStoreEvent::WorktreeUpdatedGitRepositories(_, _) => {}
             _ => unreachable!(),
-        }
-    }
-
-    fn on_worktree_added(&mut self, worktree: &Entity<Worktree>, _: &mut Context<Self>) {
-        let mut remotely_created_models = self.remotely_created_models.lock();
-        if remotely_created_models.retain_count > 0 {
-            remotely_created_models.worktrees.push(worktree.clone())
         }
     }
 
@@ -2599,13 +2543,11 @@ impl Project {
         <R::LspRequest as lsp::request::Request>::Result: Send,
         <R::LspRequest as lsp::request::Request>::Params: Send,
     {
-        let guard = self.retain_remotely_created_models(cx);
         let task = self.lsp_store.update(cx, |lsp_store, cx| {
             lsp_store.request_lsp(buffer_handle, server, request, cx)
         });
         cx.spawn(async move |_, _| {
             let result = task.await;
-            drop(guard);
             result
         })
     }
@@ -2951,17 +2893,6 @@ impl Project {
         })
     }
 
-    pub fn get_permalink_to_line(
-        &self,
-        buffer: &Entity<Buffer>,
-        selection: Range<u32>,
-        cx: &mut App,
-    ) -> Task<Result<url::Url>> {
-        self.git_store.update(cx, |git_store, cx| {
-            git_store.get_permalink_to_line(buffer, selection, cx)
-        })
-    }
-
     // RPC message handlers
 
     async fn handle_unshare_project(
@@ -3068,38 +2999,6 @@ impl Project {
         })?
     }
 
-    async fn handle_update_project(
-        this: Entity<Self>,
-        envelope: TypedEnvelope<proto::UpdateProject>,
-        mut cx: AsyncApp,
-    ) -> Result<()> {
-        this.update(&mut cx, |this, cx| {
-            // Don't handle messages that were sent before the response to us joining the project
-            if envelope.message_id > this.join_project_response_message_id {
-                this.set_worktrees_from_proto(envelope.payload.worktrees, cx)?;
-            }
-            Ok(())
-        })?
-    }
-
-    // Collab sends UpdateWorktree protos as messages
-    async fn handle_update_worktree(
-        this: Entity<Self>,
-        envelope: TypedEnvelope<proto::UpdateWorktree>,
-        mut cx: AsyncApp,
-    ) -> Result<()> {
-        this.update(&mut cx, |this, cx| {
-            let worktree_id = WorktreeId::from_proto(envelope.payload.worktree_id);
-            if let Some(worktree) = this.worktree_for_id(worktree_id, cx) {
-                worktree.update(cx, |worktree, _| {
-                    let worktree = worktree.as_remote_mut().unwrap();
-                    worktree.update_from_remote(envelope.payload);
-                });
-            }
-            Ok(())
-        })?
-    }
-
     async fn handle_update_buffer(
         this: Entity<Self>,
         envelope: TypedEnvelope<proto::UpdateBuffer>,
@@ -3107,36 +3006,6 @@ impl Project {
     ) -> Result<proto::Ack> {
         let buffer_store = this.read_with(&cx, |this, _| this.buffer_store.clone())?;
         BufferStore::handle_update_buffer(buffer_store, envelope, cx).await
-    }
-
-    fn retain_remotely_created_models(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> RemotelyCreatedModelGuard {
-        {
-            let mut remotely_create_models = self.remotely_created_models.lock();
-            if remotely_create_models.retain_count == 0 {
-                remotely_create_models.buffers = self.buffer_store.read(cx).buffers().collect();
-                remotely_create_models.worktrees =
-                    self.worktree_store.read(cx).worktrees().collect();
-            }
-            remotely_create_models.retain_count += 1;
-        }
-        RemotelyCreatedModelGuard {
-            remote_models: Arc::downgrade(&self.remotely_created_models),
-        }
-    }
-
-    async fn handle_create_buffer_for_peer(
-        this: Entity<Self>,
-        envelope: TypedEnvelope<proto::CreateBufferForPeer>,
-        mut cx: AsyncApp,
-    ) -> Result<()> {
-        this.update(&mut cx, |this, cx| {
-            this.buffer_store.update(cx, |buffer_store, cx| {
-                buffer_store.handle_create_buffer_for_peer(envelope, 0, Capability::ReadWrite, cx)
-            })
-        })?
     }
 
     async fn handle_synchronize_buffers(
@@ -3273,16 +3142,6 @@ impl Project {
             } else {
                 None
             }
-        })
-    }
-
-    fn set_worktrees_from_proto(
-        &mut self,
-        worktrees: Vec<proto::WorktreeMetadata>,
-        cx: &mut Context<Project>,
-    ) -> Result<()> {
-        self.worktree_store.update(cx, |worktree_store, cx| {
-            worktree_store.set_worktrees_from_proto(worktrees, 0, cx)
         })
     }
 

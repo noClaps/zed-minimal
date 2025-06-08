@@ -2,7 +2,6 @@ use crate::{
     conflict_view::ConflictAddon,
     git_panel::{GitPanel, GitPanelAddon, GitStatusEntry},
     git_panel_settings::GitPanelSettings,
-    remote_button::{render_publish_button, render_push_button},
 };
 use anyhow::Result;
 use buffer_diff::{BufferDiff, DiffHunkSecondaryStatus};
@@ -14,8 +13,7 @@ use editor::{
 };
 use futures::StreamExt;
 use git::{
-    Commit, StageAll, StageAndNext, ToggleStaged, UnstageAll, UnstageAndNext,
-    repository::{Branch, Upstream, UpstreamTracking, UpstreamTrackingStatus},
+    Commit, StageAll, StageAndNext, ToggleStaged, UnstageAll, UnstageAndNext, repository::Branch,
     status::FileStatus,
 };
 use gpui::{
@@ -698,15 +696,6 @@ impl Render for ProjectDiff {
             .justify_center()
             .size_full()
             .when(is_empty, |el| {
-                let remote_button = if let Some(panel) = self
-                    .workspace
-                    .upgrade()
-                    .and_then(|workspace| workspace.read(cx).panel::<GitPanel>(cx))
-                {
-                    panel.update(cx, |panel, cx| panel.render_remote_button(cx))
-                } else {
-                    None
-                };
                 let keybinding_focus_handle = self.focus_handle(cx).clone();
                 el.child(
                     v_flex()
@@ -716,14 +705,6 @@ impl Render for ProjectDiff {
                                 .justify_around()
                                 .child(Label::new("No uncommitted changes")),
                         )
-                        .map(|el| match remote_button {
-                            Some(button) => el.child(h_flex().justify_around().child(button)),
-                            None => el.child(
-                                h_flex()
-                                    .justify_around()
-                                    .child(Label::new("Remote up to date")),
-                            ),
-                        })
                         .child(
                             h_flex().justify_around().mt_1().child(
                                 Button::new("project-diff-close-button", "Close")
@@ -1038,120 +1019,20 @@ pub struct ProjectDiffEmptyState {
 }
 
 impl RenderOnce for ProjectDiffEmptyState {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let status_against_remote = |ahead_by: usize, behind_by: usize| -> bool {
-            match self.current_branch {
-                Some(Branch {
-                    upstream:
-                        Some(Upstream {
-                            tracking:
-                                UpstreamTracking::Tracked(UpstreamTrackingStatus {
-                                    ahead, behind, ..
-                                }),
-                            ..
-                        }),
-                    ..
-                }) if (ahead > 0) == (ahead_by > 0) && (behind > 0) == (behind_by > 0) => true,
-                _ => false,
-            }
-        };
-
-        let change_count = |current_branch: &Branch| -> (usize, usize) {
-            match current_branch {
-                Branch {
-                    upstream:
-                        Some(Upstream {
-                            tracking:
-                                UpstreamTracking::Tracked(UpstreamTrackingStatus {
-                                    ahead, behind, ..
-                                }),
-                            ..
-                        }),
-                    ..
-                } => (*ahead as usize, *behind as usize),
-                _ => (0, 0),
-            }
-        };
-
-        let not_ahead_or_behind = status_against_remote(0, 0);
-        let ahead_of_remote = status_against_remote(1, 0);
-        let branch_not_on_remote = if let Some(branch) = self.current_branch.as_ref() {
-            branch.upstream.is_none()
-        } else {
-            false
-        };
-
-        let has_branch_container = |branch: &Branch| {
-            h_flex()
-                .max_w(px(420.))
-                .bg(cx.theme().colors().text.opacity(0.05))
-                .border_1()
-                .border_color(cx.theme().colors().border)
-                .rounded_sm()
-                .gap_8()
-                .px_6()
-                .py_4()
-                .map(|this| {
-                    if ahead_of_remote {
-                        let ahead_count = change_count(branch).0;
-                        let ahead_string = format!("{} Commits Ahead", ahead_count);
-                        this.child(
-                            v_flex()
-                                .child(Headline::new(ahead_string).size(HeadlineSize::Small))
-                                .child(
-                                    Label::new(format!("Push your changes to {}", branch.name()))
-                                        .color(Color::Muted),
-                                ),
-                        )
-                        .child(div().child(render_push_button(
-                            self.focus_handle,
-                            "push".into(),
-                            ahead_count as u32,
-                        )))
-                    } else if branch_not_on_remote {
-                        this.child(
-                            v_flex()
-                                .child(Headline::new("Publish Branch").size(HeadlineSize::Small))
-                                .child(
-                                    Label::new(format!("Create {} on remote", branch.name()))
-                                        .color(Color::Muted),
-                                ),
-                        )
-                        .child(
-                            div().child(render_publish_button(self.focus_handle, "publish".into())),
-                        )
-                    } else {
-                        this.child(Label::new("Remote status unknown").color(Color::Muted))
-                    }
-                })
-        };
-
-        v_flex().size_full().items_center().justify_center().child(
-            v_flex()
-                .gap_1()
-                .when(self.no_repo, |this| {
-                    // TODO: add git init
-                    this.text_center()
-                        .child(Label::new("No Repository").color(Color::Muted))
-                })
-                .map(|this| {
-                    if not_ahead_or_behind && self.current_branch.is_some() {
-                        this.text_center()
-                            .child(Label::new("No Changes").color(Color::Muted))
-                    } else {
-                        this.when_some(self.current_branch.as_ref(), |this, branch| {
-                            this.child(has_branch_container(&branch))
-                        })
-                    }
-                }),
-        )
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        v_flex()
+            .size_full()
+            .items_center()
+            .justify_center()
+            .child(v_flex().gap_1().when(self.no_repo, |this| {
+                // TODO: add git init
+                this.text_center()
+                    .child(Label::new("No Repository").color(Color::Muted))
+            }))
     }
 }
 
 mod preview {
-    use git::repository::{
-        Branch, CommitSummary, Upstream, UpstreamTracking, UpstreamTrackingStatus,
-    };
     use ui::prelude::*;
 
     use super::ProjectDiffEmptyState;
@@ -1163,66 +1044,11 @@ mod preview {
         }
 
         fn preview(_window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
-            let unknown_upstream: Option<UpstreamTracking> = None;
-            let ahead_of_upstream: Option<UpstreamTracking> = Some(
-                UpstreamTrackingStatus {
-                    ahead: 2,
-                    behind: 0,
-                }
-                .into(),
-            );
-
-            let not_ahead_or_behind_upstream: Option<UpstreamTracking> = Some(
-                UpstreamTrackingStatus {
-                    ahead: 0,
-                    behind: 0,
-                }
-                .into(),
-            );
-
-            fn branch(upstream: Option<UpstreamTracking>) -> Branch {
-                Branch {
-                    is_head: true,
-                    ref_name: "some-branch".into(),
-                    upstream: upstream.map(|tracking| Upstream {
-                        ref_name: "origin/some-branch".into(),
-                        tracking,
-                    }),
-                    most_recent_commit: Some(CommitSummary {
-                        sha: "abc123".into(),
-                        subject: "Modify stuff".into(),
-                        commit_timestamp: 1710932954,
-                        has_parent: true,
-                    }),
-                }
-            }
-
             let no_repo_state = ProjectDiffEmptyState {
                 no_repo: true,
                 can_push_and_pull: false,
                 focus_handle: None,
                 current_branch: None,
-            };
-
-            let no_changes_state = ProjectDiffEmptyState {
-                no_repo: false,
-                can_push_and_pull: true,
-                focus_handle: None,
-                current_branch: Some(branch(not_ahead_or_behind_upstream)),
-            };
-
-            let ahead_of_upstream_state = ProjectDiffEmptyState {
-                no_repo: false,
-                can_push_and_pull: true,
-                focus_handle: None,
-                current_branch: Some(branch(ahead_of_upstream)),
-            };
-
-            let unknown_upstream_state = ProjectDiffEmptyState {
-                no_repo: false,
-                can_push_and_pull: true,
-                focus_handle: None,
-                current_branch: Some(branch(unknown_upstream)),
             };
 
             let (width, height) = (px(480.), px(320.));
@@ -1231,40 +1057,14 @@ mod preview {
                 v_flex()
                     .gap_6()
                     .children(vec![
-                        example_group(vec![
-                            single_example(
-                                "No Repo",
-                                div()
-                                    .w(width)
-                                    .h(height)
-                                    .child(no_repo_state)
-                                    .into_any_element(),
-                            ),
-                            single_example(
-                                "No Changes",
-                                div()
-                                    .w(width)
-                                    .h(height)
-                                    .child(no_changes_state)
-                                    .into_any_element(),
-                            ),
-                            single_example(
-                                "Unknown Upstream",
-                                div()
-                                    .w(width)
-                                    .h(height)
-                                    .child(unknown_upstream_state)
-                                    .into_any_element(),
-                            ),
-                            single_example(
-                                "Ahead of Remote",
-                                div()
-                                    .w(width)
-                                    .h(height)
-                                    .child(ahead_of_upstream_state)
-                                    .into_any_element(),
-                            ),
-                        ])
+                        example_group(vec![single_example(
+                            "No Repo",
+                            div()
+                                .w(width)
+                                .h(height)
+                                .child(no_repo_state)
+                                .into_any_element(),
+                        )])
                         .vertical(),
                     ])
                     .into_any_element(),

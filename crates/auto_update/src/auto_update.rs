@@ -6,7 +6,6 @@ use gpui::{
     App, AppContext as _, AsyncApp, Context, Entity, Global, SemanticVersion, Task, Window, actions,
 };
 use http_client::{AsyncBody, HttpClient, HttpClientWithUrl};
-use paths::remote_servers_dir;
 use release_channel::{AppCommitSha, ReleaseChannel};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -326,81 +325,6 @@ impl AutoUpdater {
         true
     }
 
-    pub async fn download_remote_server_release(
-        os: &str,
-        arch: &str,
-        release_channel: ReleaseChannel,
-        version: Option<SemanticVersion>,
-        cx: &mut AsyncApp,
-    ) -> Result<PathBuf> {
-        let this = cx.update(|cx| {
-            cx.default_global::<GlobalAutoUpdate>()
-                .0
-                .clone()
-                .context("auto-update not initialized")
-        })??;
-
-        let release = Self::get_release(
-            &this,
-            "zed-remote-server",
-            os,
-            arch,
-            version,
-            Some(release_channel),
-            cx,
-        )
-        .await?;
-
-        let servers_dir = paths::remote_servers_dir();
-        let channel_dir = servers_dir.join(release_channel.dev_name());
-        let platform_dir = channel_dir.join(format!("{}-{}", os, arch));
-        let version_path = platform_dir.join(format!("{}.gz", release.version));
-        smol::fs::create_dir_all(&platform_dir).await.ok();
-
-        let client = this.read_with(cx, |this, _| this.http_client.clone())?;
-
-        if smol::fs::metadata(&version_path).await.is_err() {
-            log::info!(
-                "downloading zed-remote-server {os} {arch} version {}",
-                release.version
-            );
-            download_remote_server_binary(&version_path, release, client, cx).await?;
-        }
-
-        Ok(version_path)
-    }
-
-    pub async fn get_remote_server_release_url(
-        os: &str,
-        arch: &str,
-        release_channel: ReleaseChannel,
-        version: Option<SemanticVersion>,
-        cx: &mut AsyncApp,
-    ) -> Result<Option<(String, String)>> {
-        let this = cx.update(|cx| {
-            cx.default_global::<GlobalAutoUpdate>()
-                .0
-                .clone()
-                .context("auto-update not initialized")
-        })??;
-
-        let release = Self::get_release(
-            &this,
-            "zed-remote-server",
-            os,
-            arch,
-            version,
-            Some(release_channel),
-            cx,
-        )
-        .await?;
-
-        let update_request_body = build_remote_server_update_request_body(cx)?;
-        let body = serde_json::to_string(&update_request_body)?;
-
-        Ok(Some((release.url, body)))
-    }
-
     async fn get_release(
         this: &Entity<Self>,
         asset: &str,
@@ -632,55 +556,6 @@ impl AutoUpdater {
                 .is_some())
         })
     }
-}
-
-async fn download_remote_server_binary(
-    target_path: &PathBuf,
-    release: JsonRelease,
-    client: Arc<HttpClientWithUrl>,
-    cx: &AsyncApp,
-) -> Result<()> {
-    let temp = tempfile::Builder::new().tempfile_in(remote_servers_dir())?;
-    let mut temp_file = File::create(&temp).await?;
-    let update_request_body = build_remote_server_update_request_body(cx)?;
-    let request_body = AsyncBody::from(serde_json::to_string(&update_request_body)?);
-
-    let mut response = client.get(&release.url, request_body, true).await?;
-    anyhow::ensure!(
-        response.status().is_success(),
-        "failed to download remote server release: {:?}",
-        response.status()
-    );
-    smol::io::copy(response.body_mut(), &mut temp_file).await?;
-    smol::fs::rename(&temp, &target_path).await?;
-
-    Ok(())
-}
-
-fn build_remote_server_update_request_body(cx: &AsyncApp) -> Result<UpdateRequestBody> {
-    let (installation_id, release_channel, telemetry_enabled, is_staff) = cx.update(|cx| {
-        let telemetry = Client::global(cx).telemetry().clone();
-        let is_staff = telemetry.is_staff();
-        let installation_id = telemetry.installation_id();
-        let release_channel =
-            ReleaseChannel::try_global(cx).map(|release_channel| release_channel.display_name());
-        let telemetry_enabled = TelemetrySettings::get_global(cx).metrics;
-
-        (
-            installation_id,
-            release_channel,
-            telemetry_enabled,
-            is_staff,
-        )
-    })?;
-
-    Ok(UpdateRequestBody {
-        installation_id,
-        release_channel,
-        telemetry: telemetry_enabled,
-        is_staff,
-        destination: "remote",
-    })
 }
 
 async fn download_release(

@@ -58,7 +58,6 @@ sum_tree.workspace = true
 tempfile.workspace = true
 terminal.workspace = true
 text.workspace = true
-toml.workspace = true
 url.workspace = true
 util.workspace = true
 which.workspace = true
